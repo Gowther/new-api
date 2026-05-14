@@ -32,6 +32,8 @@ const RANGE_OPTIONS = [
   { labelKey: '最近 90 天', days: 90, granularity: 'day' },
 ];
 
+const CUSTOM_RANGE_VALUE = 'custom';
+
 const emptyUsage = {
   summary: {
     total_requests: 0,
@@ -74,7 +76,51 @@ function formatHourRange(timestamp) {
   return `${startText}-${endText}`;
 }
 
-function buildParams(range) {
+function dateTimeLocalFromTimestamp(timestamp) {
+  const date = new Date(timestamp * 1000);
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function parseDateTimeLocal(value) {
+  if (!value) return 0;
+  const timestamp = Math.floor(new Date(value).getTime() / 1000);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function nextHourTimestamp(timestamp) {
+  const hour = timestamp - (timestamp % 3600);
+  return timestamp === hour ? hour : hour + 3600;
+}
+
+function getDefaultCustomRange() {
+  const endTimestamp = nextHourTimestamp(Math.floor(Date.now() / 1000));
+  return {
+    start: dateTimeLocalFromTimestamp(endTimestamp - 24 * 3600),
+    end: dateTimeLocalFromTimestamp(endTimestamp),
+  };
+}
+
+function customRangeGranularity(startTimestamp, endTimestamp) {
+  return endTimestamp - startTimestamp <= 2 * 24 * 3600 ? 'hour' : 'day';
+}
+
+function buildParams(rangeValue, customRange) {
+  if (rangeValue === CUSTOM_RANGE_VALUE) {
+    const startTimestamp = parseDateTimeLocal(customRange.start);
+    const endTimestamp = parseDateTimeLocal(customRange.end);
+
+    if (startTimestamp > 0 && endTimestamp > startTimestamp) {
+      return {
+        start_timestamp: startTimestamp,
+        end_timestamp: endTimestamp - 1,
+        granularity: customRangeGranularity(startTimestamp, endTimestamp),
+        detail_limit: 200,
+      };
+    }
+  }
+
+  const range = RANGE_OPTIONS[Number(rangeValue)] || RANGE_OPTIONS[0];
   const end = Math.floor(Date.now() / 1000);
   return {
     start_timestamp: end - range.days * 24 * 3600,
@@ -255,13 +301,41 @@ function TokenRankList({ items, t }) {
 
 const TokenUsage = () => {
   const { t } = useTranslation();
-  const [rangeIndex, setRangeIndex] = useState('1');
+  const [rangeIndex, setRangeIndex] = useState('0');
+  const [customRange, setCustomRange] = useState(getDefaultCustomRange);
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [usage, setUsage] = useState(emptyUsage);
   const [loading, setLoading] = useState(false);
-  const range = RANGE_OPTIONS[Number(rangeIndex)] || RANGE_OPTIONS[1];
+  const isCustomRange = rangeIndex === CUSTOM_RANGE_VALUE;
 
-  const params = useMemo(() => buildParams(range), [rangeIndex, refreshNonce]);
+  const params = useMemo(
+    () => buildParams(rangeIndex, customRange),
+    [rangeIndex, customRange, refreshNonce],
+  );
+
+  const handleCustomStartChange = (value) => {
+    const startTimestamp = parseDateTimeLocal(value);
+    const endTimestamp = parseDateTimeLocal(customRange.end);
+    setCustomRange({
+      start: value,
+      end:
+        startTimestamp > 0 && endTimestamp <= startTimestamp
+          ? dateTimeLocalFromTimestamp(startTimestamp + 3600)
+          : customRange.end,
+    });
+  };
+
+  const handleCustomEndChange = (value) => {
+    const startTimestamp = parseDateTimeLocal(customRange.start);
+    const endTimestamp = parseDateTimeLocal(value);
+    setCustomRange({
+      start:
+        endTimestamp > 0 && startTimestamp >= endTimestamp
+          ? dateTimeLocalFromTimestamp(endTimestamp - 3600)
+          : customRange.start,
+      end: value,
+    });
+  };
 
   const loadUsage = async () => {
     setLoading(true);
@@ -408,7 +482,36 @@ const TokenUsage = () => {
                 {t(option.labelKey)}
               </Select.Option>
             ))}
+            <Select.Option value={CUSTOM_RANGE_VALUE}>
+              {t('自定义')}
+            </Select.Option>
           </Select>
+          {isCustomRange && (
+            <div className='flex flex-wrap items-center gap-2'>
+              <label className='flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-300'>
+                <span>{t('起始时间')}</span>
+                <input
+                  type='datetime-local'
+                  step={3600}
+                  value={customRange.start}
+                  onChange={(event) =>
+                    handleCustomStartChange(event.target.value)
+                  }
+                  className='h-8 w-[180px] rounded-md border border-gray-200 bg-white px-2 text-sm text-gray-900 outline-none focus:border-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-50'
+                />
+              </label>
+              <label className='flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-300'>
+                <span>{t('结束时间')}</span>
+                <input
+                  type='datetime-local'
+                  step={3600}
+                  value={customRange.end}
+                  onChange={(event) => handleCustomEndChange(event.target.value)}
+                  className='h-8 w-[180px] rounded-md border border-gray-200 bg-white px-2 text-sm text-gray-900 outline-none focus:border-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-50'
+                />
+              </label>
+            </div>
+          )}
           <Button
             theme='outline'
             icon={<RefreshCw size={16} />}

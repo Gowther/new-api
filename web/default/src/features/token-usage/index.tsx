@@ -34,6 +34,7 @@ import { VCHART_OPTION } from '@/lib/vchart'
 import { useTheme } from '@/context/theme-provider'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import {
   Table,
@@ -57,6 +58,13 @@ type RangeOption = {
   days: number
   granularity: 'hour' | 'day'
 }
+
+type CustomRange = {
+  start: string
+  end: string
+}
+
+const CUSTOM_RANGE_VALUE = 'custom'
 
 const RANGE_OPTIONS: RangeOption[] = [
   { labelKey: 'Last 24 hours', days: 1, granularity: 'hour' },
@@ -104,7 +112,54 @@ function formatHourRange(timestamp: number) {
   return `${start.format('YYYY-MM-DD HH:mm')}-${endText}`
 }
 
-function buildParams(range: RangeOption): TokenUsageQueryParams {
+function dateTimeLocalFromTimestamp(timestamp: number) {
+  return dayjs(timestamp * 1000).format('YYYY-MM-DDTHH:mm')
+}
+
+function parseDateTimeLocal(value: string) {
+  const parsed = dayjs(value)
+  return parsed.isValid() ? parsed.unix() : 0
+}
+
+function nextHourTimestamp(timestamp: number) {
+  const hour = timestamp - (timestamp % 3600)
+  return timestamp === hour ? hour : hour + 3600
+}
+
+function getDefaultCustomRange(): CustomRange {
+  const endTimestamp = nextHourTimestamp(Math.floor(Date.now() / 1000))
+  return {
+    start: dateTimeLocalFromTimestamp(endTimestamp - 24 * 3600),
+    end: dateTimeLocalFromTimestamp(endTimestamp),
+  }
+}
+
+function customRangeGranularity(
+  startTimestamp: number,
+  endTimestamp: number
+): 'hour' | 'day' {
+  return endTimestamp - startTimestamp <= 2 * 24 * 3600 ? 'hour' : 'day'
+}
+
+function buildParams(
+  rangeValue: string,
+  customRange: CustomRange
+): TokenUsageQueryParams {
+  if (rangeValue === CUSTOM_RANGE_VALUE) {
+    const startTimestamp = parseDateTimeLocal(customRange.start)
+    const endTimestamp = parseDateTimeLocal(customRange.end)
+
+    if (startTimestamp > 0 && endTimestamp > startTimestamp) {
+      return {
+        start_timestamp: startTimestamp,
+        end_timestamp: endTimestamp - 1,
+        granularity: customRangeGranularity(startTimestamp, endTimestamp),
+        detail_limit: 200,
+      }
+    }
+  }
+
+  const range = RANGE_OPTIONS[Number(rangeValue)] ?? RANGE_OPTIONS[0]
   const end = Math.floor(Date.now() / 1000)
   return {
     start_timestamp: end - range.days * 24 * 3600,
@@ -349,10 +404,38 @@ function UsageDetailsTable({ rows }: { rows: TokenUsageDetailItem[] }) {
 export function TokenUsage() {
   const { t } = useTranslation()
   const { resolvedTheme } = useTheme()
-  const [rangeIndex, setRangeIndex] = useState(1)
+  const [rangeValue, setRangeValue] = useState('0')
+  const [customRange, setCustomRange] = useState(getDefaultCustomRange)
   const [refreshNonce, setRefreshNonce] = useState(0)
-  const range = RANGE_OPTIONS[rangeIndex] ?? RANGE_OPTIONS[1]
-  const params = useMemo(() => buildParams(range), [range, refreshNonce])
+  const isCustomRange = rangeValue === CUSTOM_RANGE_VALUE
+  const params = useMemo(
+    () => buildParams(rangeValue, customRange),
+    [rangeValue, customRange, refreshNonce]
+  )
+
+  const handleCustomStartChange = (value: string) => {
+    const startTimestamp = parseDateTimeLocal(value)
+    const endTimestamp = parseDateTimeLocal(customRange.end)
+    setCustomRange({
+      start: value,
+      end:
+        startTimestamp > 0 && endTimestamp <= startTimestamp
+          ? dateTimeLocalFromTimestamp(startTimestamp + 3600)
+          : customRange.end,
+    })
+  }
+
+  const handleCustomEndChange = (value: string) => {
+    const startTimestamp = parseDateTimeLocal(customRange.start)
+    const endTimestamp = parseDateTimeLocal(value)
+    setCustomRange({
+      start:
+        endTimestamp > 0 && startTimestamp >= endTimestamp
+          ? dateTimeLocalFromTimestamp(endTimestamp - 3600)
+          : customRange.start,
+      end: value,
+    })
+  }
 
   const query = useQuery({
     queryKey: ['token-usage-self', params],
@@ -436,8 +519,8 @@ export function TokenUsage() {
       <SectionPageLayout.Title>{t('API Key Usage')}</SectionPageLayout.Title>
       <SectionPageLayout.Actions>
         <NativeSelect
-          value={String(rangeIndex)}
-          onChange={(event) => setRangeIndex(Number(event.target.value))}
+          value={rangeValue}
+          onChange={(event) => setRangeValue(event.target.value)}
           aria-label={t('Time Range')}
         >
           {RANGE_OPTIONS.map((option, index) => (
@@ -445,7 +528,34 @@ export function TokenUsage() {
               {t(option.labelKey)}
             </option>
           ))}
+          <option value={CUSTOM_RANGE_VALUE}>{t('Custom')}</option>
         </NativeSelect>
+        {isCustomRange && (
+          <div className='flex flex-wrap items-center gap-2'>
+            <label className='text-muted-foreground flex items-center gap-1.5 text-xs font-medium'>
+              <span>{t('Start Time')}</span>
+              <Input
+                type='datetime-local'
+                step={3600}
+                value={customRange.start}
+                onChange={(event) =>
+                  handleCustomStartChange(event.target.value)
+                }
+                className='w-[180px]'
+              />
+            </label>
+            <label className='text-muted-foreground flex items-center gap-1.5 text-xs font-medium'>
+              <span>{t('End Time')}</span>
+              <Input
+                type='datetime-local'
+                step={3600}
+                value={customRange.end}
+                onChange={(event) => handleCustomEndChange(event.target.value)}
+                className='w-[180px]'
+              />
+            </label>
+          </div>
+        )}
         <Button
           type='button'
           variant='outline'

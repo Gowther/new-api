@@ -150,11 +150,11 @@ func RecordTokenUsageData(userId int, username string, params RecordConsumeLogPa
 		DoUpdates: clause.Assignments(map[string]interface{}{
 			"username":          username,
 			"token_name":        params.TokenName,
-			"count":             gorm.Expr("count + ?", 1),
-			"quota":             gorm.Expr("quota + ?", params.Quota),
-			"prompt_tokens":     gorm.Expr("prompt_tokens + ?", params.PromptTokens),
-			"completion_tokens": gorm.Expr("completion_tokens + ?", params.CompletionTokens),
-			"total_tokens":      gorm.Expr("total_tokens + ?", totalTokens),
+			"count":             tokenUsageAddExpr("count", 1),
+			"quota":             tokenUsageAddExpr("quota", params.Quota),
+			"prompt_tokens":     tokenUsageAddExpr("prompt_tokens", params.PromptTokens),
+			"completion_tokens": tokenUsageAddExpr("completion_tokens", params.CompletionTokens),
+			"total_tokens":      tokenUsageAddExpr("total_tokens", totalTokens),
 			"last_used_at":      tokenUsageLastUsedExpr(createdAt),
 		}),
 	}).Create(row).Error
@@ -513,7 +513,18 @@ func tokenUsageTrendBucket(timestamp int64, granularity string) int64 {
 
 func tokenUsageLastUsedExpr(timestamp int64) clause.Expr {
 	if common.UsingMySQL || common.UsingPostgreSQL {
-		return gorm.Expr("GREATEST(last_used_at, ?)", timestamp)
+		return gorm.Expr(fmt.Sprintf("GREATEST(%s, ?)", tokenUsageExistingColumn("last_used_at")), timestamp)
 	}
-	return gorm.Expr("MAX(last_used_at, ?)", timestamp)
+	return gorm.Expr(fmt.Sprintf("MAX(%s, ?)", tokenUsageExistingColumn("last_used_at")), timestamp)
+}
+
+func tokenUsageAddExpr(column string, value interface{}) clause.Expr {
+	return gorm.Expr(fmt.Sprintf("%s + ?", tokenUsageExistingColumn(column)), value)
+}
+
+func tokenUsageExistingColumn(column string) string {
+	if common.UsingPostgreSQL {
+		return fmt.Sprintf(`"token_usage_data"."%s"`, column)
+	}
+	return column
 }

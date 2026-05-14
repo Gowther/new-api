@@ -59,13 +59,19 @@ function formatPercent(value) {
   return `${value >= 10 ? value.toFixed(1) : value.toFixed(2)}%`;
 }
 
-function formatTime(timestamp, withHour = true) {
+function formatHourRange(timestamp) {
   if (!timestamp) return '-';
-  const date = new Date(timestamp * 1000);
+  const start = new Date(timestamp * 1000);
+  const end = new Date((timestamp + 3600) * 1000);
   const pad = (value) => String(value).padStart(2, '0');
-  const datePart = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-  if (!withHour) return datePart;
-  return `${datePart} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const startDatePart = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`;
+  const startText = `${startDatePart} ${pad(start.getHours())}:${pad(start.getMinutes())}`;
+  const endDatePart = `${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}`;
+  const endText =
+    startDatePart === endDatePart
+      ? `${pad(end.getHours())}:${pad(end.getMinutes())}`
+      : `${endDatePart} ${pad(end.getHours())}:${pad(end.getMinutes())}`;
+  return `${startText}-${endText}`;
 }
 
 function buildParams(range) {
@@ -345,9 +351,9 @@ const TokenUsage = () => {
   const columns = useMemo(
     () => [
       {
-        title: t('时间'),
+        title: t('时间段'),
         dataIndex: 'created_at',
-        render: (value) => formatTime(value),
+        render: (value) => formatHourRange(value),
       },
       {
         title: t('API Key'),

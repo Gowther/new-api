@@ -94,9 +94,14 @@ function formatPercent(value: number) {
   return `${value >= 10 ? value.toFixed(1) : value.toFixed(2)}%`
 }
 
-function formatTime(timestamp: number, withHour = true) {
-  const format = withHour ? 'YYYY-MM-DD HH:mm' : 'YYYY-MM-DD'
-  return timestamp > 0 ? dayjs(timestamp * 1000).format(format) : '-'
+function formatHourRange(timestamp: number) {
+  if (timestamp <= 0) return '-'
+  const start = dayjs(timestamp * 1000)
+  const end = start.add(1, 'hour')
+  const endText = start.isSame(end, 'day')
+    ? end.format('HH:mm')
+    : end.format('YYYY-MM-DD HH:mm')
+  return `${start.format('YYYY-MM-DD HH:mm')}-${endText}`
 }
 
 function buildParams(range: RangeOption): TokenUsageQueryParams {
@@ -307,7 +312,7 @@ function UsageDetailsTable({ rows }: { rows: TokenUsageDetailItem[] }) {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>{t('Time')}</TableHead>
+          <TableHead>{t('Time Range')}</TableHead>
           <TableHead>{t('API Key')}</TableHead>
           <TableHead>{t('Model')}</TableHead>
           <TableHead className='text-right'>{t('Requests')}</TableHead>
@@ -319,7 +324,7 @@ function UsageDetailsTable({ rows }: { rows: TokenUsageDetailItem[] }) {
       <TableBody>
         {rows.map((row) => (
           <TableRow key={`${row.created_at}-${row.token_id}-${row.model_name}`}>
-            <TableCell>{formatTime(row.created_at)}</TableCell>
+            <TableCell>{formatHourRange(row.created_at)}</TableCell>
             <TableCell>{row.token_name || `#${row.token_id}`}</TableCell>
             <TableCell>{row.model_name || '-'}</TableCell>
             <TableCell className='text-right'>

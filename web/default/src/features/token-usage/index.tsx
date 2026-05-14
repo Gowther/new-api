@@ -150,9 +150,13 @@ function tokenUsageLabel(item: TokenUsageTokenItem) {
 
 function RankMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className='bg-background/70 min-w-0 rounded-md border px-2 py-1.5'>
-      <div className='text-muted-foreground truncate text-[11px]'>{label}</div>
-      <div className='mt-0.5 truncate text-sm font-medium'>{value}</div>
+    <div className='bg-background min-w-0 rounded-md border px-2.5 py-2 shadow-sm'>
+      <div className='text-foreground/70 truncate text-[11px] font-medium'>
+        {label}
+      </div>
+      <div className='text-foreground mt-0.5 truncate text-sm font-semibold'>
+        {value}
+      </div>
     </div>
   )
 }
@@ -161,15 +165,55 @@ function TokenRankList({ items }: { items: TokenUsageTokenItem[] }) {
   const { t } = useTranslation()
   const max = Math.max(...items.map((item) => item.quota), 1)
   const totalQuota = items.reduce((sum, item) => sum + item.quota, 0)
-  const accentClasses = [
-    'border-l-blue-500',
-    'border-l-emerald-500',
-    'border-l-amber-500',
-    'border-l-rose-500',
-    'border-l-violet-500',
-    'border-l-cyan-500',
-    'border-l-lime-500',
-    'border-l-slate-500',
+  const rankStyles = [
+    {
+      border: 'border-l-blue-500',
+      badge:
+        'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-200',
+      bar: 'bg-blue-500',
+    },
+    {
+      border: 'border-l-emerald-500',
+      badge:
+        'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200',
+      bar: 'bg-emerald-500',
+    },
+    {
+      border: 'border-l-amber-500',
+      badge:
+        'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200',
+      bar: 'bg-amber-500',
+    },
+    {
+      border: 'border-l-rose-500',
+      badge:
+        'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/50 dark:text-rose-200',
+      bar: 'bg-rose-500',
+    },
+    {
+      border: 'border-l-violet-500',
+      badge:
+        'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-200',
+      bar: 'bg-violet-500',
+    },
+    {
+      border: 'border-l-cyan-500',
+      badge:
+        'border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-800 dark:bg-cyan-950/50 dark:text-cyan-200',
+      bar: 'bg-cyan-500',
+    },
+    {
+      border: 'border-l-lime-500',
+      badge:
+        'border-lime-200 bg-lime-50 text-lime-800 dark:border-lime-800 dark:bg-lime-950/50 dark:text-lime-200',
+      bar: 'bg-lime-500',
+    },
+    {
+      border: 'border-l-slate-500',
+      badge:
+        'border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200',
+      bar: 'bg-slate-500',
+    },
   ]
 
   if (items.length === 0) {
@@ -184,35 +228,40 @@ function TokenRankList({ items }: { items: TokenUsageTokenItem[] }) {
     <div className='space-y-3'>
       {items.slice(0, 10).map((item, index) => {
         const share = totalQuota > 0 ? (item.quota / totalQuota) * 100 : 0
+        const style = rankStyles[index % rankStyles.length]
         return (
           <div
             key={item.token_id}
-            className={`bg-muted/30 space-y-2 rounded-md border border-l-4 p-3 ${accentClasses[index % accentClasses.length]}`}
+            className={`bg-background space-y-3 rounded-md border border-l-4 p-3 shadow-sm ${style.border}`}
           >
             <div className='flex items-start justify-between gap-3'>
               <div className='flex min-w-0 items-center gap-2'>
-                <div className='bg-background text-muted-foreground flex size-7 shrink-0 items-center justify-center rounded-md border text-xs font-semibold'>
+                <div
+                  className={`flex size-7 shrink-0 items-center justify-center rounded-md border text-xs font-bold ${style.badge}`}
+                >
                   {index + 1}
                 </div>
                 <div className='min-w-0'>
-                  <div className='truncate text-sm font-semibold'>
+                  <div className='text-foreground truncate text-sm font-bold'>
                     {tokenUsageLabel(item)}
                   </div>
-                  <div className='text-muted-foreground text-xs'>
+                  <div className='text-foreground/70 text-xs font-medium'>
                     {formatPercent(share)} {t('Share')}
                   </div>
                 </div>
               </div>
               <div className='shrink-0 text-right'>
-                <div className='text-sm font-semibold'>
+                <div className='text-foreground text-sm font-bold'>
                   {formatQuotaWithCurrency(item.quota)}
                 </div>
-                <div className='text-muted-foreground text-xs'>{t('Cost')}</div>
+                <div className='text-foreground/70 text-xs font-medium'>
+                  {t('Cost')}
+                </div>
               </div>
             </div>
             <div className='bg-background h-2 overflow-hidden rounded-full border'>
               <div
-                className='bg-primary h-full rounded-full'
+                className={`h-full rounded-full ${style.bar}`}
                 style={{
                   width: `${Math.max((item.quota / max) * 100, 3)}%`,
                 }}

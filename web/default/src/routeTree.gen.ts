@@ -20,6 +20,7 @@ import { Route as PricingIndexRouteImport } from './routes/pricing/index'
 import { Route as AboutIndexRouteImport } from './routes/about/index'
 import { Route as OauthProviderRouteImport } from './routes/oauth/$provider'
 import { Route as ConsoleTopupRouteImport } from './routes/console/topup'
+import { Route as ConsoleTokenUsageRouteImport } from './routes/console/token-usage'
 import { Route as ConsoleLogRouteImport } from './routes/console/log'
 import { Route as AuthenticatedChat2linkRouteImport } from './routes/_authenticated/chat2link'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
@@ -120,6 +121,11 @@ const OauthProviderRoute = OauthProviderRouteImport.update({
 const ConsoleTopupRoute = ConsoleTopupRouteImport.update({
   id: '/console/topup',
   path: '/console/topup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConsoleTokenUsageRoute = ConsoleTokenUsageRouteImport.update({
+  id: '/console/token-usage',
+  path: '/console/token-usage',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ConsoleLogRoute = ConsoleLogRouteImport.update({
@@ -411,6 +417,7 @@ export interface FileRoutesByFullPath {
   '/503': typeof errors503Route
   '/chat2link': typeof AuthenticatedChat2linkRoute
   '/console/log': typeof ConsoleLogRoute
+  '/console/token-usage': typeof ConsoleTokenUsageRoute
   '/console/topup': typeof ConsoleTopupRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/about/': typeof AboutIndexRoute
@@ -469,6 +476,7 @@ export interface FileRoutesByTo {
   '/503': typeof errors503Route
   '/chat2link': typeof AuthenticatedChat2linkRoute
   '/console/log': typeof ConsoleLogRoute
+  '/console/token-usage': typeof ConsoleTokenUsageRoute
   '/console/topup': typeof ConsoleTopupRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/about': typeof AboutIndexRoute
@@ -531,6 +539,7 @@ export interface FileRoutesById {
   '/(errors)/503': typeof errors503Route
   '/_authenticated/chat2link': typeof AuthenticatedChat2linkRoute
   '/console/log': typeof ConsoleLogRoute
+  '/console/token-usage': typeof ConsoleTokenUsageRoute
   '/console/topup': typeof ConsoleTopupRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/about/': typeof AboutIndexRoute
@@ -592,6 +601,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/chat2link'
     | '/console/log'
+    | '/console/token-usage'
     | '/console/topup'
     | '/oauth/$provider'
     | '/about/'
@@ -650,6 +660,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/chat2link'
     | '/console/log'
+    | '/console/token-usage'
     | '/console/topup'
     | '/oauth/$provider'
     | '/about'
@@ -711,6 +722,7 @@ export interface FileRouteTypes {
     | '/(errors)/503'
     | '/_authenticated/chat2link'
     | '/console/log'
+    | '/console/token-usage'
     | '/console/topup'
     | '/oauth/$provider'
     | '/about/'
@@ -765,6 +777,7 @@ export interface RootRouteChildren {
   errors500Route: typeof errors500Route
   errors503Route: typeof errors503Route
   ConsoleLogRoute: typeof ConsoleLogRoute
+  ConsoleTokenUsageRoute: typeof ConsoleTokenUsageRoute
   ConsoleTopupRoute: typeof ConsoleTopupRoute
   OauthProviderRoute: typeof OauthProviderRoute
   AboutIndexRoute: typeof AboutIndexRoute
@@ -851,6 +864,13 @@ declare module '@tanstack/react-router' {
       path: '/console/topup'
       fullPath: '/console/topup'
       preLoaderRoute: typeof ConsoleTopupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/console/token-usage': {
+      id: '/console/token-usage'
+      path: '/console/token-usage'
+      fullPath: '/console/token-usage'
+      preLoaderRoute: typeof ConsoleTokenUsageRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/console/log': {
@@ -1334,6 +1354,7 @@ const rootRouteChildren: RootRouteChildren = {
   errors500Route: errors500Route,
   errors503Route: errors503Route,
   ConsoleLogRoute: ConsoleLogRoute,
+  ConsoleTokenUsageRoute: ConsoleTokenUsageRoute,
   ConsoleTopupRoute: ConsoleTopupRoute,
   OauthProviderRoute: OauthProviderRoute,
   AboutIndexRoute: AboutIndexRoute,

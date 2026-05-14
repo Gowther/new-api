@@ -87,6 +87,11 @@ export function SidebarModulesCard() {
           description: t('API token management'),
         },
         {
+          key: 'token_usage',
+          title: t('API Key Usage'),
+          description: t('API usage records'),
+        },
+        {
           key: 'log',
           title: t('Usage Logs'),
           description: t('API usage records'),

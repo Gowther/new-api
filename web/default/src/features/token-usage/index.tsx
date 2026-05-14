@@ -53,11 +53,18 @@ import type {
   TokenUsageTokenItem,
 } from './types'
 
-type RangeOption = {
-  labelKey: string
-  days: number
-  granularity: 'hour' | 'day'
-}
+type RangeOption =
+  | {
+      labelKey: string
+      mode: 'today'
+      granularity: 'hour'
+    }
+  | {
+      labelKey: string
+      mode: 'relative'
+      days: number
+      granularity: 'hour' | 'day'
+    }
 
 type CustomRange = {
   start: string
@@ -67,10 +74,11 @@ type CustomRange = {
 const CUSTOM_RANGE_VALUE = 'custom'
 
 const RANGE_OPTIONS: RangeOption[] = [
-  { labelKey: 'Last 24 hours', days: 1, granularity: 'hour' },
-  { labelKey: 'Last 7 days', days: 7, granularity: 'day' },
-  { labelKey: 'Last 30 days', days: 30, granularity: 'day' },
-  { labelKey: 'Last 90 days', days: 90, granularity: 'day' },
+  { labelKey: 'Today', mode: 'today', granularity: 'hour' },
+  { labelKey: 'Last 24 hours', mode: 'relative', days: 1, granularity: 'hour' },
+  { labelKey: 'Last 7 days', mode: 'relative', days: 7, granularity: 'day' },
+  { labelKey: 'Last 30 days', mode: 'relative', days: 30, granularity: 'day' },
+  { labelKey: 'Last 90 days', mode: 'relative', days: 90, granularity: 'day' },
 ]
 
 const API_KEY_COLORS = [
@@ -185,6 +193,14 @@ function buildParams(
 
   const range = RANGE_OPTIONS[Number(rangeValue)] ?? RANGE_OPTIONS[0]
   const end = Math.floor(Date.now() / 1000)
+  if (range.mode === 'today') {
+    return {
+      start_timestamp: dayjs().startOf('day').unix(),
+      end_timestamp: end,
+      granularity: range.granularity,
+      detail_limit: 200,
+    }
+  }
   return {
     start_timestamp: end - range.days * 24 * 3600,
     end_timestamp: end,

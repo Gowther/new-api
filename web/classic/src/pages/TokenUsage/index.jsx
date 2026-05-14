@@ -27,10 +27,11 @@ import { CARD_PROPS, CHART_CONFIG } from '../../constants/dashboard.constants';
 import { useActualTheme } from '../../context/Theme';
 
 const RANGE_OPTIONS = [
-  { labelKey: '最近 24 小时', days: 1, granularity: 'hour' },
-  { labelKey: '最近 7 天', days: 7, granularity: 'day' },
-  { labelKey: '最近 30 天', days: 30, granularity: 'day' },
-  { labelKey: '最近 90 天', days: 90, granularity: 'day' },
+  { labelKey: '今天', mode: 'today', granularity: 'hour' },
+  { labelKey: '最近 24 小时', mode: 'relative', days: 1, granularity: 'hour' },
+  { labelKey: '最近 7 天', mode: 'relative', days: 7, granularity: 'day' },
+  { labelKey: '最近 30 天', mode: 'relative', days: 30, granularity: 'day' },
+  { labelKey: '最近 90 天', mode: 'relative', days: 90, granularity: 'day' },
 ];
 
 const CUSTOM_RANGE_VALUE = 'custom';
@@ -141,6 +142,14 @@ function nextHourTimestamp(timestamp) {
   return timestamp === hour ? hour : hour + 3600;
 }
 
+function startOfTodayTimestamp() {
+  const now = new Date();
+  return Math.floor(
+    new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() /
+      1000,
+  );
+}
+
 function getDefaultCustomRange() {
   const endTimestamp = nextHourTimestamp(Math.floor(Date.now() / 1000));
   return {
@@ -170,6 +179,14 @@ function buildParams(rangeValue, customRange) {
 
   const range = RANGE_OPTIONS[Number(rangeValue)] || RANGE_OPTIONS[0];
   const end = Math.floor(Date.now() / 1000);
+  if (range.mode === 'today') {
+    return {
+      start_timestamp: startOfTodayTimestamp(),
+      end_timestamp: end,
+      granularity: range.granularity,
+      detail_limit: 200,
+    };
+  }
   return {
     start_timestamp: end - range.days * 24 * 3600,
     end_timestamp: end,

@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { VChart } from '@visactor/react-vchart'
 import {
@@ -402,6 +402,10 @@ export function TokenUsage() {
   const [customRange, setCustomRange] = useState(getDefaultCustomRange)
   const [refreshNonce, setRefreshNonce] = useState(0)
   const isCustomRange = rangeValue === CUSTOM_RANGE_VALUE
+  const dateTimeInputStyle = useMemo<CSSProperties>(
+    () => ({ colorScheme: resolvedTheme === 'dark' ? 'dark' : 'light' }),
+    [resolvedTheme]
+  )
   const params = useMemo(
     () => buildParams(rangeValue, customRange),
     [rangeValue, customRange, refreshNonce]
@@ -550,7 +554,8 @@ export function TokenUsage() {
                 onChange={(event) =>
                   handleCustomStartChange(event.target.value)
                 }
-                className='w-[180px]'
+                className='bg-background text-foreground w-[180px]'
+                style={dateTimeInputStyle}
               />
             </label>
             <label className='text-muted-foreground flex items-center gap-1.5 text-xs font-medium'>
@@ -560,7 +565,8 @@ export function TokenUsage() {
                 step={3600}
                 value={customRange.end}
                 onChange={(event) => handleCustomEndChange(event.target.value)}
-                className='w-[180px]'
+                className='bg-background text-foreground w-[180px]'
+                style={dateTimeInputStyle}
               />
             </label>
           </div>

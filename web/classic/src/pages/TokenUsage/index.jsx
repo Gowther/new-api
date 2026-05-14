@@ -24,6 +24,7 @@ import { BarChart3, Clock, Key, RefreshCw, Sparkles } from 'lucide-react';
 import { Button, Card, Empty, Select, Spin, Table } from '@douyinfe/semi-ui';
 import { API, renderQuota, showError } from '../../helpers';
 import { CARD_PROPS, CHART_CONFIG } from '../../constants/dashboard.constants';
+import { useActualTheme } from '../../context/Theme';
 
 const RANGE_OPTIONS = [
   { labelKey: '最近 24 小时', days: 1, granularity: 'hour' },
@@ -289,6 +290,7 @@ function TokenRankList({ items, colorByKey, t }) {
 
 const TokenUsage = () => {
   const { t } = useTranslation();
+  const actualTheme = useActualTheme();
   const [rangeIndex, setRangeIndex] = useState('0');
   const [customRange, setCustomRange] = useState(getDefaultCustomRange);
   const [refreshNonce, setRefreshNonce] = useState(0);
@@ -299,6 +301,15 @@ const TokenUsage = () => {
   const params = useMemo(
     () => buildParams(rangeIndex, customRange),
     [rangeIndex, customRange, refreshNonce],
+  );
+  const dateTimeInputStyle = useMemo(
+    () => ({
+      backgroundColor: 'var(--semi-color-bg-1)',
+      borderColor: 'var(--semi-color-border)',
+      color: 'var(--semi-color-text-0)',
+      colorScheme: actualTheme === 'dark' ? 'dark' : 'light',
+    }),
+    [actualTheme],
   );
 
   const handleCustomStartChange = (value) => {
@@ -499,7 +510,8 @@ const TokenUsage = () => {
                   onChange={(event) =>
                     handleCustomStartChange(event.target.value)
                   }
-                  className='h-8 w-[180px] rounded-md border border-gray-200 bg-white px-2 text-sm text-gray-900 outline-none focus:border-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-50'
+                  className='h-8 w-[180px] rounded-md border px-2 text-sm outline-none focus:border-blue-500'
+                  style={dateTimeInputStyle}
                 />
               </label>
               <label className='flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-300'>
@@ -509,7 +521,8 @@ const TokenUsage = () => {
                   step={3600}
                   value={customRange.end}
                   onChange={(event) => handleCustomEndChange(event.target.value)}
-                  className='h-8 w-[180px] rounded-md border border-gray-200 bg-white px-2 text-sm text-gray-900 outline-none focus:border-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-50'
+                  className='h-8 w-[180px] rounded-md border px-2 text-sm outline-none focus:border-blue-500'
+                  style={dateTimeInputStyle}
                 />
               </label>
             </div>

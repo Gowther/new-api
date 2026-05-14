@@ -1,9 +1,13 @@
 package model
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
 
@@ -306,4 +310,60 @@ func TestBackfillTokenUsageDataFromLogsRebuildsRecentWindow(t *testing.T) {
 	require.NoError(t, DB.Where("user_id = ? and token_id = ? and model_name = ? and created_at = ?", 1, 11, "gpt-test", previousHour).First(&row).Error)
 	require.Equal(t, int64(2), row.Count)
 	require.Equal(t, int64(250), row.Quota)
+}
+
+func TestRecordConsumeLogWritesTokenUsageWhenConsumeLogDisabled(t *testing.T) {
+	setupTokenUsageDataTest(t)
+	oldLogConsumeEnabled := common.LogConsumeEnabled
+	common.LogConsumeEnabled = false
+	t.Cleanup(func() {
+		common.LogConsumeEnabled = oldLogConsumeEnabled
+	})
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	ctx.Set("username", "alice")
+
+	RecordConsumeLog(ctx, 1, RecordConsumeLogParams{
+		TokenId:          11,
+		TokenName:        "alice-main",
+		ModelName:        "gpt-test",
+		Quota:            100,
+		PromptTokens:     10,
+		CompletionTokens: 20,
+	})
+
+	require.Eventually(t, func() bool {
+		var row TokenUsageData
+		err := DB.Where("user_id = ? and token_id = ? and model_name = ?", 1, 11, "gpt-test").First(&row).Error
+		return err == nil && row.Count == 1 && row.Quota == 100 && row.TotalTokens == 30
+	}, time.Second, 10*time.Millisecond)
+}
+
+func TestRecordTaskBillingLogWritesTokenUsageForConsume(t *testing.T) {
+	setupTokenUsageDataTest(t)
+	oldLogConsumeEnabled := common.LogConsumeEnabled
+	common.LogConsumeEnabled = true
+	t.Cleanup(func() {
+		common.LogConsumeEnabled = oldLogConsumeEnabled
+	})
+
+	RecordTaskBillingLog(RecordTaskBillingLogParams{
+		UserId:    1,
+		LogType:   LogTypeConsume,
+		Content:   "task delta",
+		ChannelId: 2,
+		ModelName: "task-model",
+		Quota:     250,
+		TokenId:   21,
+		Group:     "default",
+	})
+
+	require.Eventually(t, func() bool {
+		var row TokenUsageData
+		err := DB.Where("user_id = ? and token_id = ? and model_name = ?", 1, 21, "task-model").First(&row).Error
+		return err == nil && row.Count == 1 && row.Quota == 250
+	}, time.Second, 10*time.Millisecond)
 }

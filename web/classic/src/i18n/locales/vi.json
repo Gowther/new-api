@@ -4230,6 +4230,8 @@
     "暂无用量数据": "Không có dữ liệu sử dụng",
     "请求数": "Yêu cầu",
     "提示 Tokens": "Prompt Tokens",
-    "补全 Tokens": "Completion Tokens"
+    "补全 Tokens": "Completion Tokens",
+    "消耗": "Chi phí",
+    "占比": "Tỷ lệ"
   }
 }

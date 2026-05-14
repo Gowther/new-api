@@ -3842,6 +3842,7 @@
     "请求数": "Requests",
     "提示 Tokens": "Prompt Tokens",
     "补全 Tokens": "Completion Tokens",
-    "消耗": "Cost"
+    "消耗": "Cost",
+    "占比": "Share"
   }
 }

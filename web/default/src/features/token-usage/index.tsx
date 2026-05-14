@@ -47,7 +47,6 @@ import { SectionPageLayout } from '@/components/layout'
 import { getTokenUsageSelf } from './api'
 import type {
   TokenUsageDetailItem,
-  TokenUsageModelItem,
   TokenUsageQueryParams,
   TokenUsageSelfResponse,
   TokenUsageTokenItem,
@@ -88,6 +87,11 @@ function formatInteger(value: number) {
   return Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
     value || 0
   )
+}
+
+function formatPercent(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return '0%'
+  return `${value >= 10 ? value.toFixed(1) : value.toFixed(2)}%`
 }
 
 function formatTime(timestamp: number, withHour = true) {
@@ -140,9 +144,33 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
+function tokenUsageLabel(item: TokenUsageTokenItem) {
+  return item.token_name || `#${item.token_id}`
+}
+
+function RankMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className='bg-background/70 min-w-0 rounded-md border px-2 py-1.5'>
+      <div className='text-muted-foreground truncate text-[11px]'>{label}</div>
+      <div className='mt-0.5 truncate text-sm font-medium'>{value}</div>
+    </div>
+  )
+}
+
 function TokenRankList({ items }: { items: TokenUsageTokenItem[] }) {
   const { t } = useTranslation()
-  const max = Math.max(...items.map((item) => item.total_tokens), 1)
+  const max = Math.max(...items.map((item) => item.quota), 1)
+  const totalQuota = items.reduce((sum, item) => sum + item.quota, 0)
+  const accentClasses = [
+    'border-l-blue-500',
+    'border-l-emerald-500',
+    'border-l-amber-500',
+    'border-l-rose-500',
+    'border-l-violet-500',
+    'border-l-cyan-500',
+    'border-l-lime-500',
+    'border-l-slate-500',
+  ]
 
   if (items.length === 0) {
     return (
@@ -154,32 +182,63 @@ function TokenRankList({ items }: { items: TokenUsageTokenItem[] }) {
 
   return (
     <div className='space-y-3'>
-      {items.slice(0, 8).map((item) => (
-        <div key={item.token_id} className='space-y-1.5'>
-          <div className='flex items-center justify-between gap-3 text-sm'>
-            <div className='min-w-0 truncate font-medium'>
-              {item.token_name || `#${item.token_id}`}
+      {items.slice(0, 10).map((item, index) => {
+        const share = totalQuota > 0 ? (item.quota / totalQuota) * 100 : 0
+        return (
+          <div
+            key={item.token_id}
+            className={`bg-muted/30 space-y-2 rounded-md border border-l-4 p-3 ${accentClasses[index % accentClasses.length]}`}
+          >
+            <div className='flex items-start justify-between gap-3'>
+              <div className='flex min-w-0 items-center gap-2'>
+                <div className='bg-background text-muted-foreground flex size-7 shrink-0 items-center justify-center rounded-md border text-xs font-semibold'>
+                  {index + 1}
+                </div>
+                <div className='min-w-0'>
+                  <div className='truncate text-sm font-semibold'>
+                    {tokenUsageLabel(item)}
+                  </div>
+                  <div className='text-muted-foreground text-xs'>
+                    {formatPercent(share)} {t('Share')}
+                  </div>
+                </div>
+              </div>
+              <div className='shrink-0 text-right'>
+                <div className='text-sm font-semibold'>
+                  {formatQuotaWithCurrency(item.quota)}
+                </div>
+                <div className='text-muted-foreground text-xs'>{t('Cost')}</div>
+              </div>
             </div>
-            <div className='text-muted-foreground shrink-0'>
-              {formatInteger(item.total_tokens)}
+            <div className='bg-background h-2 overflow-hidden rounded-full border'>
+              <div
+                className='bg-primary h-full rounded-full'
+                style={{
+                  width: `${Math.max((item.quota / max) * 100, 3)}%`,
+                }}
+              />
+            </div>
+            <div className='grid grid-cols-2 gap-2 sm:grid-cols-4'>
+              <RankMetric
+                label={t('Requests')}
+                value={formatInteger(item.count)}
+              />
+              <RankMetric
+                label={t('Total Tokens')}
+                value={formatInteger(item.total_tokens)}
+              />
+              <RankMetric
+                label={t('Prompt Tokens')}
+                value={formatInteger(item.prompt_tokens)}
+              />
+              <RankMetric
+                label={t('Completion Tokens')}
+                value={formatInteger(item.completion_tokens)}
+              />
             </div>
           </div>
-          <div className='bg-muted h-2 overflow-hidden rounded-full'>
-            <div
-              className='bg-primary h-full rounded-full'
-              style={{
-                width: `${Math.max((item.total_tokens / max) * 100, 3)}%`,
-              }}
-            />
-          </div>
-          <div className='text-muted-foreground flex items-center justify-between gap-2 text-xs'>
-            <span>
-              {formatInteger(item.count)} {t('Requests')}
-            </span>
-            <span>{formatQuotaWithCurrency(item.quota)}</span>
-          </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -249,56 +308,58 @@ export function TokenUsage() {
   const data = query.data?.data ?? emptyTokenUsage()
   const loading = query.isLoading || query.isFetching
 
-  const trendValues = useMemo(
+  const apiKeyValues = useMemo(
     () =>
-      data.trend.map((item) => ({
-        time: formatTime(item.timestamp, params.granularity === 'hour'),
+      data.by_token.map((item: TokenUsageTokenItem) => ({
+        key: tokenUsageLabel(item),
         tokens: item.total_tokens,
         requests: item.count,
         cost: item.quota,
       })),
-    [data.trend, params.granularity]
+    [data.by_token]
   )
 
-  const modelValues = useMemo(
+  const apiKeyShareValues = useMemo(
     () =>
-      data.by_model.slice(0, 10).map((item: TokenUsageModelItem) => ({
-        model: item.model_name || t('Unknown'),
+      data.by_token.map((item: TokenUsageTokenItem) => ({
+        key: tokenUsageLabel(item),
         tokens: item.total_tokens,
         requests: item.count,
       })),
-    [data.by_model, t]
+    [data.by_token]
   )
 
-  const trendSpec = useMemo(
+  const apiKeyBarSpec = useMemo(
     () => ({
-      type: 'area',
-      data: [{ id: 'trend', values: loading ? [] : trendValues }],
-      xField: 'time',
+      type: 'bar',
+      data: [{ id: 'apiKeyUsage', values: loading ? [] : apiKeyValues }],
+      xField: 'key',
       yField: 'tokens',
-      seriesField: 'series',
-      point: { visible: true },
-      area: { style: { fillOpacity: 0.25 } },
+      seriesField: 'key',
       axes: [
-        { orient: 'bottom', label: { autoRotate: true } },
+        {
+          orient: 'bottom',
+          label: { autoRotate: true, autoHide: true, autoLimit: true },
+        },
         { orient: 'left', label: { formatMethod: formatInteger } },
       ],
+      legends: { visible: apiKeyValues.length <= 12, orient: 'bottom' },
       title: loading
         ? undefined
-        : trendValues.length === 0
+        : apiKeyValues.length === 0
           ? { visible: true, text: t('No usage data') }
           : undefined,
       theme: resolvedTheme === 'dark' ? 'dark' : 'light',
       background: 'transparent',
     }),
-    [loading, resolvedTheme, t, trendValues]
+    [apiKeyValues, loading, resolvedTheme, t]
   )
 
-  const modelSpec = useMemo(
+  const apiKeyShareSpec = useMemo(
     () => ({
       type: 'pie',
-      data: [{ id: 'models', values: loading ? [] : modelValues }],
-      categoryField: 'model',
+      data: [{ id: 'apiKeyShare', values: loading ? [] : apiKeyShareValues }],
+      categoryField: 'key',
       valueField: 'tokens',
       outerRadius: 0.82,
       innerRadius: 0.52,
@@ -307,13 +368,13 @@ export function TokenUsage() {
       label: { visible: false },
       title: loading
         ? undefined
-        : modelValues.length === 0
+        : apiKeyShareValues.length === 0
           ? { visible: true, text: t('No usage data') }
           : undefined,
       theme: resolvedTheme === 'dark' ? 'dark' : 'light',
       background: 'transparent',
     }),
-    [loading, modelValues, resolvedTheme, t]
+    [apiKeyShareValues, loading, resolvedTheme, t]
   )
 
   return (
@@ -368,14 +429,14 @@ export function TokenUsage() {
           </div>
 
           <div className='grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.75fr)]'>
-            <Panel title={t('Usage Trend')}>
+            <Panel title={t('API Key Usage')}>
               <div className='h-[320px]'>
-                <VChart spec={trendSpec} option={VCHART_OPTION} />
+                <VChart spec={apiKeyBarSpec} option={VCHART_OPTION} />
               </div>
             </Panel>
-            <Panel title={t('Model Distribution')}>
+            <Panel title={`${t('API Key')} ${t('Share')}`}>
               <div className='h-[320px]'>
-                <VChart spec={modelSpec} option={VCHART_OPTION} />
+                <VChart spec={apiKeyShareSpec} option={VCHART_OPTION} />
               </div>
             </Panel>
           </div>

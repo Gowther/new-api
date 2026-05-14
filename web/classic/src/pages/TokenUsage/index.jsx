@@ -54,6 +54,11 @@ function formatInteger(value) {
   );
 }
 
+function formatPercent(value) {
+  if (!Number.isFinite(value) || value <= 0) return '0%';
+  return `${value >= 10 ? value.toFixed(1) : value.toFixed(2)}%`;
+}
+
 function formatTime(timestamp, withHour = true) {
   if (!timestamp) return '-';
   const date = new Date(timestamp * 1000);
@@ -97,8 +102,32 @@ function Panel({ title, children }) {
   );
 }
 
+function tokenUsageLabel(item) {
+  return item.token_name || `#${item.token_id}`;
+}
+
+function RankMetric({ label, value }) {
+  return (
+    <div className='min-w-0 rounded-md border border-gray-100 bg-white/80 px-2 py-1.5 dark:border-gray-700 dark:bg-gray-900/60'>
+      <div className='truncate text-[11px] text-gray-500'>{label}</div>
+      <div className='mt-0.5 truncate text-sm font-medium'>{value}</div>
+    </div>
+  );
+}
+
 function TokenRankList({ items, t }) {
-  const max = Math.max(...items.map((item) => item.total_tokens), 1);
+  const max = Math.max(...items.map((item) => item.quota), 1);
+  const totalQuota = items.reduce((sum, item) => sum + item.quota, 0);
+  const accentClasses = [
+    'border-l-blue-500',
+    'border-l-emerald-500',
+    'border-l-amber-500',
+    'border-l-rose-500',
+    'border-l-violet-500',
+    'border-l-cyan-500',
+    'border-l-lime-500',
+    'border-l-slate-500',
+  ];
   if (items.length === 0) {
     return (
       <div className='py-10'>
@@ -108,32 +137,63 @@ function TokenRankList({ items, t }) {
   }
   return (
     <div className='space-y-3'>
-      {items.slice(0, 8).map((item) => (
-        <div key={item.token_id} className='space-y-1.5'>
-          <div className='flex items-center justify-between gap-3 text-sm'>
-            <div className='min-w-0 truncate font-medium'>
-              {item.token_name || `#${item.token_id}`}
+      {items.slice(0, 10).map((item, index) => {
+        const share = totalQuota > 0 ? (item.quota / totalQuota) * 100 : 0;
+        return (
+          <div
+            key={item.token_id}
+            className={`space-y-2 rounded-md border border-l-4 bg-gray-50/70 p-3 dark:border-gray-700 dark:bg-gray-900/40 ${accentClasses[index % accentClasses.length]}`}
+          >
+            <div className='flex items-start justify-between gap-3'>
+              <div className='flex min-w-0 items-center gap-2'>
+                <div className='flex h-7 w-7 shrink-0 items-center justify-center rounded-md border bg-white text-xs font-semibold text-gray-500 dark:border-gray-700 dark:bg-gray-900'>
+                  {index + 1}
+                </div>
+                <div className='min-w-0'>
+                  <div className='truncate text-sm font-semibold'>
+                    {tokenUsageLabel(item)}
+                  </div>
+                  <div className='text-xs text-gray-500'>
+                    {formatPercent(share)} {t('占比')}
+                  </div>
+                </div>
+              </div>
+              <div className='shrink-0 text-right'>
+                <div className='text-sm font-semibold'>
+                  {renderQuota(item.quota)}
+                </div>
+                <div className='text-xs text-gray-500'>{t('消耗')}</div>
+              </div>
             </div>
-            <div className='shrink-0 text-gray-500'>
-              {formatInteger(item.total_tokens)}
+            <div className='h-2 overflow-hidden rounded-full border border-gray-100 bg-white dark:border-gray-700 dark:bg-gray-900'>
+              <div
+                className='h-full rounded-full bg-blue-500'
+                style={{
+                  width: `${Math.max((item.quota / max) * 100, 3)}%`,
+                }}
+              />
+            </div>
+            <div className='grid grid-cols-2 gap-2 sm:grid-cols-4'>
+              <RankMetric
+                label={t('请求数')}
+                value={formatInteger(item.count)}
+              />
+              <RankMetric
+                label={t('总 Tokens')}
+                value={formatInteger(item.total_tokens)}
+              />
+              <RankMetric
+                label={t('提示 Tokens')}
+                value={formatInteger(item.prompt_tokens)}
+              />
+              <RankMetric
+                label={t('补全 Tokens')}
+                value={formatInteger(item.completion_tokens)}
+              />
             </div>
           </div>
-          <div className='h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800'>
-            <div
-              className='h-full rounded-full bg-blue-500'
-              style={{
-                width: `${Math.max((item.total_tokens / max) * 100, 3)}%`,
-              }}
-            />
-          </div>
-          <div className='flex items-center justify-between gap-2 text-xs text-gray-500'>
-            <span>
-              {formatInteger(item.count)} {t('请求数')}
-            </span>
-            <span>{renderQuota(item.quota)}</span>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -168,53 +228,56 @@ const TokenUsage = () => {
     loadUsage();
   }, [params]);
 
-  const trendValues = useMemo(
+  const apiKeyValues = useMemo(
     () =>
-      usage.trend.map((item) => ({
-        time: formatTime(item.timestamp, params.granularity === 'hour'),
+      usage.by_token.map((item) => ({
+        key: tokenUsageLabel(item),
         tokens: item.total_tokens,
         requests: item.count,
         cost: item.quota,
       })),
-    [usage.trend, params.granularity],
+    [usage.by_token],
   );
 
-  const modelValues = useMemo(
+  const apiKeyShareValues = useMemo(
     () =>
-      usage.by_model.slice(0, 10).map((item) => ({
-        model: item.model_name || t('未知'),
+      usage.by_token.map((item) => ({
+        key: tokenUsageLabel(item),
         tokens: item.total_tokens,
         requests: item.count,
       })),
-    [usage.by_model, t],
+    [usage.by_token],
   );
 
-  const trendSpec = useMemo(
+  const apiKeyBarSpec = useMemo(
     () => ({
-      type: 'area',
-      data: [{ id: 'trend', values: loading ? [] : trendValues }],
-      xField: 'time',
+      type: 'bar',
+      data: [{ id: 'apiKeyUsage', values: loading ? [] : apiKeyValues }],
+      xField: 'key',
       yField: 'tokens',
-      point: { visible: true },
-      area: { style: { fillOpacity: 0.25 } },
+      seriesField: 'key',
       axes: [
-        { orient: 'bottom', label: { autoRotate: true } },
+        {
+          orient: 'bottom',
+          label: { autoRotate: true, autoHide: true, autoLimit: true },
+        },
         { orient: 'left', label: { formatMethod: formatInteger } },
       ],
+      legends: { visible: apiKeyValues.length <= 12, orient: 'bottom' },
       title:
-        !loading && trendValues.length === 0
+        !loading && apiKeyValues.length === 0
           ? { visible: true, text: t('暂无用量数据') }
           : undefined,
       background: 'transparent',
     }),
-    [loading, trendValues, t],
+    [apiKeyValues, loading, t],
   );
 
-  const modelSpec = useMemo(
+  const apiKeyShareSpec = useMemo(
     () => ({
       type: 'pie',
-      data: [{ id: 'models', values: loading ? [] : modelValues }],
-      categoryField: 'model',
+      data: [{ id: 'apiKeyShare', values: loading ? [] : apiKeyShareValues }],
+      categoryField: 'key',
       valueField: 'tokens',
       outerRadius: 0.82,
       innerRadius: 0.52,
@@ -222,12 +285,12 @@ const TokenUsage = () => {
       legends: { visible: true, orient: 'bottom' },
       label: { visible: false },
       title:
-        !loading && modelValues.length === 0
+        !loading && apiKeyShareValues.length === 0
           ? { visible: true, text: t('暂无用量数据') }
           : undefined,
       background: 'transparent',
     }),
-    [loading, modelValues, t],
+    [apiKeyShareValues, loading, t],
   );
 
   const columns = useMemo(
@@ -328,14 +391,14 @@ const TokenUsage = () => {
           </div>
 
           <div className='grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.75fr)]'>
-            <Panel title={t('用量趋势')}>
+            <Panel title={t('API Key 用量')}>
               <div className='h-80'>
-                <VChart spec={trendSpec} option={CHART_CONFIG} />
+                <VChart spec={apiKeyBarSpec} option={CHART_CONFIG} />
               </div>
             </Panel>
-            <Panel title={t('模型分布')}>
+            <Panel title={`${t('API Key')} ${t('占比')}`}>
               <div className='h-80'>
-                <VChart spec={modelSpec} option={CHART_CONFIG} />
+                <VChart spec={apiKeyShareSpec} option={CHART_CONFIG} />
               </div>
             </Panel>
           </div>

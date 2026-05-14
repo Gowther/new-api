@@ -73,6 +73,21 @@ const RANGE_OPTIONS: RangeOption[] = [
   { labelKey: 'Last 90 days', days: 90, granularity: 'day' },
 ]
 
+const API_KEY_COLORS = [
+  '#2563eb',
+  '#10b981',
+  '#f59e0b',
+  '#e11d48',
+  '#8b5cf6',
+  '#06b6d4',
+  '#84cc16',
+  '#64748b',
+  '#f97316',
+  '#14b8a6',
+  '#d946ef',
+  '#0ea5e9',
+]
+
 function emptyTokenUsage(): TokenUsageSelfResponse {
   return {
     summary: {
@@ -208,6 +223,21 @@ function tokenUsageLabel(item: TokenUsageTokenItem) {
   return item.token_name || `#${item.token_id}`
 }
 
+function apiKeyColor(index: number) {
+  return API_KEY_COLORS[index % API_KEY_COLORS.length]
+}
+
+function buildApiKeyColorScale(values: { key: string; color: string }[]) {
+  return {
+    type: 'ordinal' as const,
+    domain: values.map((item) => item.key),
+    range: values.map((item) => item.color),
+    specified: Object.fromEntries(
+      values.map((item) => [item.key, item.color])
+    ) as Record<string, string>,
+  }
+}
+
 function RankMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className='bg-background min-w-0 rounded-md border px-2.5 py-2 shadow-sm'>
@@ -221,60 +251,16 @@ function RankMetric({ label, value }: { label: string; value: string }) {
   )
 }
 
-function TokenRankList({ items }: { items: TokenUsageTokenItem[] }) {
+function TokenRankList({
+  items,
+  colorByKey,
+}: {
+  items: TokenUsageTokenItem[]
+  colorByKey: Map<string, string>
+}) {
   const { t } = useTranslation()
   const max = Math.max(...items.map((item) => item.quota), 1)
   const totalQuota = items.reduce((sum, item) => sum + item.quota, 0)
-  const rankStyles = [
-    {
-      border: 'border-l-blue-500',
-      badge:
-        'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-200',
-      bar: 'bg-blue-500',
-    },
-    {
-      border: 'border-l-emerald-500',
-      badge:
-        'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200',
-      bar: 'bg-emerald-500',
-    },
-    {
-      border: 'border-l-amber-500',
-      badge:
-        'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200',
-      bar: 'bg-amber-500',
-    },
-    {
-      border: 'border-l-rose-500',
-      badge:
-        'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/50 dark:text-rose-200',
-      bar: 'bg-rose-500',
-    },
-    {
-      border: 'border-l-violet-500',
-      badge:
-        'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-200',
-      bar: 'bg-violet-500',
-    },
-    {
-      border: 'border-l-cyan-500',
-      badge:
-        'border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-800 dark:bg-cyan-950/50 dark:text-cyan-200',
-      bar: 'bg-cyan-500',
-    },
-    {
-      border: 'border-l-lime-500',
-      badge:
-        'border-lime-200 bg-lime-50 text-lime-800 dark:border-lime-800 dark:bg-lime-950/50 dark:text-lime-200',
-      bar: 'bg-lime-500',
-    },
-    {
-      border: 'border-l-slate-500',
-      badge:
-        'border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200',
-      bar: 'bg-slate-500',
-    },
-  ]
 
   if (items.length === 0) {
     return (
@@ -288,22 +274,29 @@ function TokenRankList({ items }: { items: TokenUsageTokenItem[] }) {
     <div className='space-y-3'>
       {items.slice(0, 10).map((item, index) => {
         const share = totalQuota > 0 ? (item.quota / totalQuota) * 100 : 0
-        const style = rankStyles[index % rankStyles.length]
+        const keyLabel = tokenUsageLabel(item)
+        const color = colorByKey.get(keyLabel) ?? apiKeyColor(index)
         return (
           <div
             key={item.token_id}
-            className={`bg-background space-y-3 rounded-md border border-l-4 p-3 shadow-sm ${style.border}`}
+            className='bg-background space-y-3 rounded-md border border-l-4 p-3 shadow-sm'
+            style={{ borderLeftColor: color }}
           >
             <div className='flex items-start justify-between gap-3'>
               <div className='flex min-w-0 items-center gap-2'>
                 <div
-                  className={`flex size-7 shrink-0 items-center justify-center rounded-md border text-xs font-bold ${style.badge}`}
+                  className='flex size-7 shrink-0 items-center justify-center rounded-md border bg-background text-xs font-bold'
+                  style={{ borderColor: color, color }}
                 >
                   {index + 1}
                 </div>
                 <div className='min-w-0'>
-                  <div className='text-foreground truncate text-sm font-bold'>
-                    {tokenUsageLabel(item)}
+                  <div className='text-foreground flex min-w-0 items-center gap-1.5 text-sm font-bold'>
+                    <span
+                      className='size-2.5 shrink-0 rounded-full'
+                      style={{ backgroundColor: color }}
+                    />
+                    <span className='truncate'>{keyLabel}</span>
                   </div>
                   <div className='text-foreground/70 text-xs font-medium'>
                     {formatPercent(share)} {t('Share')}
@@ -321,8 +314,9 @@ function TokenRankList({ items }: { items: TokenUsageTokenItem[] }) {
             </div>
             <div className='bg-background h-2 overflow-hidden rounded-full border'>
               <div
-                className={`h-full rounded-full ${style.bar}`}
+                className='h-full rounded-full'
                 style={{
+                  backgroundColor: color,
                   width: `${Math.max((item.quota / max) * 100, 3)}%`,
                 }}
               />
@@ -447,29 +441,43 @@ export function TokenUsage() {
 
   const apiKeyValues = useMemo(
     () =>
-      data.by_token.map((item: TokenUsageTokenItem) => ({
+      data.by_token.map((item: TokenUsageTokenItem, index) => ({
         key: tokenUsageLabel(item),
         tokens: item.total_tokens,
         requests: item.count,
         cost: item.quota,
+        color: apiKeyColor(index),
       })),
     [data.by_token]
   )
 
   const apiKeyShareValues = useMemo(
     () =>
-      data.by_token.map((item: TokenUsageTokenItem) => ({
+      data.by_token.map((item: TokenUsageTokenItem, index) => ({
         key: tokenUsageLabel(item),
         tokens: item.total_tokens,
         requests: item.count,
+        color: apiKeyColor(index),
       })),
     [data.by_token]
+  )
+
+  const apiKeyColorScale = useMemo(
+    () => buildApiKeyColorScale(apiKeyValues),
+    [apiKeyValues]
+  )
+
+  const apiKeyColorByKey = useMemo(
+    () =>
+      new Map(apiKeyValues.map((item) => [item.key, item.color] as const)),
+    [apiKeyValues]
   )
 
   const apiKeyBarSpec = useMemo(
     () => ({
       type: 'bar',
       data: [{ id: 'apiKeyUsage', values: loading ? [] : apiKeyValues }],
+      color: apiKeyColorScale,
       xField: 'key',
       yField: 'tokens',
       seriesField: 'key',
@@ -489,13 +497,14 @@ export function TokenUsage() {
       theme: resolvedTheme === 'dark' ? 'dark' : 'light',
       background: 'transparent',
     }),
-    [apiKeyValues, loading, resolvedTheme, t]
+    [apiKeyColorScale, apiKeyValues, loading, resolvedTheme, t]
   )
 
   const apiKeyShareSpec = useMemo(
     () => ({
       type: 'pie',
       data: [{ id: 'apiKeyShare', values: loading ? [] : apiKeyShareValues }],
+      color: apiKeyColorScale,
       categoryField: 'key',
       valueField: 'tokens',
       outerRadius: 0.82,
@@ -511,7 +520,7 @@ export function TokenUsage() {
       theme: resolvedTheme === 'dark' ? 'dark' : 'light',
       background: 'transparent',
     }),
-    [apiKeyShareValues, loading, resolvedTheme, t]
+    [apiKeyColorScale, apiKeyShareValues, loading, resolvedTheme, t]
   )
 
   return (
@@ -607,7 +616,10 @@ export function TokenUsage() {
 
           <div className='grid gap-4 xl:grid-cols-[minmax(320px,0.45fr)_minmax(0,1fr)]'>
             <Panel title={t('API Key Ranking')}>
-              <TokenRankList items={data.by_token as TokenUsageTokenItem[]} />
+              <TokenRankList
+                items={data.by_token as TokenUsageTokenItem[]}
+                colorByKey={apiKeyColorByKey}
+              />
             </Panel>
             <Panel title={t('Usage Details')}>
               <UsageDetailsTable rows={data.rows} />

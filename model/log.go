@@ -249,6 +249,13 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 	err := LOG_DB.Create(log).Error
 	if err != nil {
 		logger.LogError(c, "failed to record log: "+err.Error())
+	} else if params.TokenId > 0 {
+		createdAt := log.CreatedAt
+		gopool.Go(func() {
+			if err := RecordTokenUsageData(userId, username, params, createdAt); err != nil {
+				common.SysLog("failed to record token usage data: " + err.Error())
+			}
+		})
 	}
 	if common.DataExportEnabled {
 		gopool.Go(func() {

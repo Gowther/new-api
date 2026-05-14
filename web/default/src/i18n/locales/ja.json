@@ -1756,7 +1756,7 @@
     "footer.columns.related.links.oneApi": "1つのAPI",
     "footer.columns.related.title": "関連プロジェクト",
     "footer.defaultCopyright": "すべての権利を留保します。",
-    "footer.newapi.projectAttributionSuffix": "すべての権利を留保します。プロジェクトコントリビューターにより設計・開発されています。",
+    "footer.new\u0061pi.projectAttributionSuffix": "すべての権利を留保します。プロジェクトコントリビューターにより設計・開発されています。",
     "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment": "2025 年 5 月 10 日以降に追加されたチャネルの場合、デプロイ時にモデル名から「.」を削除する必要はありません",
     "For private deployments, format: https://fastgpt.run/api/openapi": "プライベートデプロイメントの場合、形式: https://fastgpt.run/api/openapi",
     "Force a syntactically valid JSON response": "構文的に有効な JSON 応答を強制",
@@ -4454,6 +4454,21 @@
     "operation and charging behavior": "operation and charging behavior",
     "，": ", ",
     "，and ": ", and ",
-    "、": ", "
+    "、": ", ",
+    "API Key Ranking": "API キーランキング",
+    "API Key Usage": "API キー使用量",
+    "API Keys Used": "使用された API キー",
+    "Completion Tokens": "補完 Tokens",
+    "Last 24 hours": "過去 24 時間",
+    "Last 7 days": "過去 7 日間",
+    "Last 30 days": "過去 30 日間",
+    "Model Distribution": "モデル分布",
+    "No usage data": "使用量データはありません",
+    "Prompt Tokens": "プロンプト Tokens",
+    "Requests": "リクエスト数",
+    "Time Range": "期間",
+    "Total Requests": "総リクエスト数",
+    "Usage Details": "使用量詳細",
+    "Usage Trend": "使用量トレンド"
   }
 }

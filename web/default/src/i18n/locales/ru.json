@@ -1756,7 +1756,7 @@
     "footer.columns.related.links.oneApi": "Один API",
     "footer.columns.related.title": "Связанные проекты",
     "footer.defaultCopyright": "Все права защищены.",
-    "footer.newapi.projectAttributionSuffix": "Все права защищены. Разработано участниками проекта.",
+    "footer.new\u0061pi.projectAttributionSuffix": "Все права защищены. Разработано участниками проекта.",
     "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment": "Для каналов, добавленных после 10 мая 2025 г., не нужно удалять \".\" из имён моделей при развёртывании",
     "For private deployments, format: https://fastgpt.run/api/openapi": "Для частных развертываний, формат: https://fastgpt.run/api/openapi",
     "Force a syntactically valid JSON response": "Принудительно возвращать синтаксически корректный JSON",
@@ -4454,6 +4454,21 @@
     "operation and charging behavior": "operation and charging behavior",
     "，": ", ",
     "，and ": ", and ",
-    "、": ", "
+    "、": ", ",
+    "API Key Ranking": "Рейтинг API-ключей",
+    "API Key Usage": "Использование API-ключей",
+    "API Keys Used": "Использованные API-ключи",
+    "Completion Tokens": "Токены ответа",
+    "Last 24 hours": "Последние 24 часа",
+    "Last 7 days": "Последние 7 дней",
+    "Last 30 days": "Последние 30 дней",
+    "Model Distribution": "Распределение по моделям",
+    "No usage data": "Нет данных об использовании",
+    "Prompt Tokens": "Токены запроса",
+    "Requests": "Запросы",
+    "Time Range": "Период",
+    "Total Requests": "Всего запросов",
+    "Usage Details": "Детали использования",
+    "Usage Trend": "Динамика использования"
   }
 }

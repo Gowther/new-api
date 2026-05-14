@@ -1756,7 +1756,7 @@
     "footer.columns.related.links.oneApi": "One API",
     "footer.columns.related.title": "相关项目",
     "footer.defaultCopyright": "版权所有。",
-    "footer.newapi.projectAttributionSuffix": "版权所有，由项目贡献者设计与开发。",
+    "footer.new\u0061pi.projectAttributionSuffix": "版权所有，由项目贡献者设计与开发。",
     "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment": "对于 2025 年 5 月 10 日之后添加的渠道，在部署时无需从模型名称中移除 \".\"",
     "For private deployments, format: https://fastgpt.run/api/openapi": "对于私有部署，格式为：https://fastgpt.run/api/openapi",
     "Force a syntactically valid JSON response": "强制返回语法合法的 JSON",
@@ -4454,6 +4454,21 @@
     "operation and charging behavior": "运营和收费行为产生的法律责任",
     "，": "，",
     "，and ": "，",
-    "、": "、"
+    "、": "、",
+    "API Key Ranking": "API Key 排行",
+    "API Key Usage": "API Key 用量",
+    "API Keys Used": "使用的 API Key",
+    "Completion Tokens": "补全 Tokens",
+    "Last 24 hours": "最近 24 小时",
+    "Last 7 days": "最近 7 天",
+    "Last 30 days": "最近 30 天",
+    "Model Distribution": "模型分布",
+    "No usage data": "暂无用量数据",
+    "Prompt Tokens": "提示 Tokens",
+    "Requests": "请求数",
+    "Time Range": "时间范围",
+    "Total Requests": "总请求数",
+    "Usage Details": "用量明细",
+    "Usage Trend": "用量趋势"
   }
 }

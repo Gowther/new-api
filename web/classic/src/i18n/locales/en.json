@@ -3824,6 +3824,23 @@
     "并确认自行承担部署": "confirm that I bear legal responsibility arising from deployment",
     "运营和收费行为产生的法律责任": "operation and charging behavior",
     "，": ", ",
-    "、": ", "
+    "、": ", ",
+    "API Key 用量": "API Key Usage",
+    "总请求数": "Total Requests",
+    "总 Tokens": "Total Tokens",
+    "总消耗": "Total Cost",
+    "使用的 API Key": "API Keys Used",
+    "最近 24 小时": "Last 24 hours",
+    "最近 7 天": "Last 7 days",
+    "最近 30 天": "Last 30 days",
+    "用量趋势": "Usage Trend",
+    "模型分布": "Model Distribution",
+    "API Key 排行": "API Key Ranking",
+    "用量明细": "Usage Details",
+    "暂无用量数据": "No usage data",
+    "请求数": "Requests",
+    "提示 Tokens": "Prompt Tokens",
+    "补全 Tokens": "Completion Tokens",
+    "消耗": "Cost"
   }
 }

@@ -63,6 +63,7 @@ const RANGE_OPTIONS: RangeOption[] = [
   { labelKey: 'Last 24 hours', days: 1, granularity: 'hour' },
   { labelKey: 'Last 7 days', days: 7, granularity: 'day' },
   { labelKey: 'Last 30 days', days: 30, granularity: 'day' },
+  { labelKey: 'Last 90 days', days: 90, granularity: 'day' },
 ]
 
 function emptyTokenUsage(): TokenUsageSelfResponse {

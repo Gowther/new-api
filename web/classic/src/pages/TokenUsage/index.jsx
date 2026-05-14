@@ -29,6 +29,7 @@ const RANGE_OPTIONS = [
   { labelKey: '最近 24 小时', days: 1, granularity: 'hour' },
   { labelKey: '最近 7 天', days: 7, granularity: 'day' },
   { labelKey: '最近 30 天', days: 30, granularity: 'day' },
+  { labelKey: '最近 90 天', days: 90, granularity: 'day' },
 ];
 
 const emptyUsage = {

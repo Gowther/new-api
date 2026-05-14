@@ -269,7 +269,7 @@ const TokenUsage = () => {
         title: t('消耗'),
         dataIndex: 'quota',
         align: 'right',
-        render: renderQuota,
+        render: (value) => renderQuota(value),
       },
     ],
     [t],

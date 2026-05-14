@@ -100,6 +100,16 @@ type TokenUsageSelfResponse struct {
 	Rows    []TokenUsageDetailItem `json:"rows"`
 }
 
+const tokenUsageBackfillOptionKey = "TokenUsageBackfill90dCompletedAt"
+const tokenUsageBackfillBatchSize = 1000
+
+type tokenUsageBackfillResult struct {
+	Logs           int
+	Rows           int
+	StartTimestamp int64
+	EndTimestamp   int64
+}
+
 func RecordTokenUsageData(userId int, username string, params RecordConsumeLogParams, createdAt int64) error {
 	if userId <= 0 || params.TokenId <= 0 {
 		return nil
@@ -148,6 +158,183 @@ func RecordTokenUsageData(userId int, username string, params RecordConsumeLogPa
 			"last_used_at":      tokenUsageLastUsedExpr(createdAt),
 		}),
 	}).Create(row).Error
+}
+
+func BackfillRecentTokenUsageDataFromLogsIfNeeded(days int) error {
+	if !common.IsMasterNode {
+		return nil
+	}
+	if tokenUsageBackfillCompleted() {
+		return nil
+	}
+	if days <= 0 {
+		days = 90
+	}
+
+	common.SysLog(fmt.Sprintf("token usage data backfill started, range=%d days", days))
+	result, err := backfillTokenUsageDataFromLogs(days, common.GetTimestamp())
+	if err != nil {
+		return err
+	}
+	if err := UpdateOption(tokenUsageBackfillOptionKey, fmt.Sprintf("%d", common.GetTimestamp())); err != nil {
+		return err
+	}
+	common.SysLog(fmt.Sprintf(
+		"token usage data backfill completed, logs=%d rows=%d start=%d end=%d",
+		result.Logs,
+		result.Rows,
+		result.StartTimestamp,
+		result.EndTimestamp,
+	))
+	return nil
+}
+
+func tokenUsageBackfillCompleted() bool {
+	common.OptionMapRWMutex.RLock()
+	defer common.OptionMapRWMutex.RUnlock()
+	if common.OptionMap == nil {
+		return false
+	}
+	return common.OptionMap[tokenUsageBackfillOptionKey] != ""
+}
+
+type tokenUsageAggregateKey struct {
+	UserID    int
+	TokenID   int
+	ModelName string
+	CreatedAt int64
+}
+
+func backfillTokenUsageDataFromLogs(days int, now int64) (*tokenUsageBackfillResult, error) {
+	if DB == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+	if LOG_DB == nil {
+		return nil, fmt.Errorf("log database not initialized")
+	}
+	if days <= 0 {
+		return nil, fmt.Errorf("days must be greater than 0")
+	}
+
+	endExclusive := now - now%3600
+	if endExclusive <= 0 {
+		return &tokenUsageBackfillResult{}, nil
+	}
+	startTimestamp := endExclusive - int64(days)*24*3600
+	if startTimestamp < 0 {
+		startTimestamp = 0
+	}
+
+	result := &tokenUsageBackfillResult{
+		StartTimestamp: startTimestamp,
+		EndTimestamp:   endExclusive - 1,
+	}
+	aggregate := make(map[tokenUsageAggregateKey]*TokenUsageData)
+
+	var logs []Log
+	err := LOG_DB.Model(&Log{}).
+		Select("user_id, username, token_id, token_name, model_name, created_at, quota, prompt_tokens, completion_tokens").
+		Where("type = ? and token_id > ? and created_at >= ? and created_at < ?", LogTypeConsume, 0, startTimestamp, endExclusive).
+		Order("id asc").
+		FindInBatches(&logs, tokenUsageBackfillBatchSize, func(tx *gorm.DB, batch int) error {
+			result.Logs += len(logs)
+			for _, log := range logs {
+				if log.UserId <= 0 || log.TokenId <= 0 {
+					continue
+				}
+				bucket := log.CreatedAt - log.CreatedAt%3600
+				if bucket < startTimestamp || bucket >= endExclusive {
+					continue
+				}
+				key := tokenUsageAggregateKey{
+					UserID:    log.UserId,
+					TokenID:   log.TokenId,
+					ModelName: log.ModelName,
+					CreatedAt: bucket,
+				}
+				row, ok := aggregate[key]
+				if !ok {
+					row = &TokenUsageData{
+						UserID:    log.UserId,
+						TokenID:   log.TokenId,
+						ModelName: log.ModelName,
+						CreatedAt: bucket,
+					}
+					aggregate[key] = row
+				}
+				row.Count++
+				row.Quota += int64(log.Quota)
+				row.PromptTokens += int64(log.PromptTokens)
+				row.CompletionTokens += int64(log.CompletionTokens)
+				row.TotalTokens += int64(log.PromptTokens + log.CompletionTokens)
+				if log.CreatedAt >= row.LastUsedAt {
+					row.Username = log.Username
+					row.TokenName = log.TokenName
+					row.LastUsedAt = log.CreatedAt
+				}
+			}
+			return nil
+		}).Error
+	if err != nil {
+		return nil, err
+	}
+
+	rows := make([]TokenUsageData, 0, len(aggregate))
+	for _, row := range aggregate {
+		rows = append(rows, *row)
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].CreatedAt != rows[j].CreatedAt {
+			return rows[i].CreatedAt < rows[j].CreatedAt
+		}
+		if rows[i].UserID != rows[j].UserID {
+			return rows[i].UserID < rows[j].UserID
+		}
+		if rows[i].TokenID != rows[j].TokenID {
+			return rows[i].TokenID < rows[j].TokenID
+		}
+		return rows[i].ModelName < rows[j].ModelName
+	})
+	result.Rows = len(rows)
+
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("created_at >= ? and created_at < ?", startTimestamp, endExclusive).Delete(&TokenUsageData{}).Error; err != nil {
+			return err
+		}
+		for start := 0; start < len(rows); start += tokenUsageBackfillBatchSize {
+			end := start + tokenUsageBackfillBatchSize
+			if end > len(rows) {
+				end = len(rows)
+			}
+			chunk := rows[start:end]
+			if err := tx.Clauses(clause.OnConflict{
+				Columns: []clause.Column{
+					{Name: "user_id"},
+					{Name: "token_id"},
+					{Name: "model_name"},
+					{Name: "created_at"},
+				},
+				DoUpdates: clause.AssignmentColumns([]string{
+					"username",
+					"token_name",
+					"count",
+					"quota",
+					"prompt_tokens",
+					"completion_tokens",
+					"total_tokens",
+					"last_used_at",
+				}),
+			}).Create(&chunk).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 func GetTokenUsageSelf(userId int, query TokenUsageQuery) (*TokenUsageSelfResponse, error) {

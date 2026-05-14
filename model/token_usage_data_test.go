@@ -9,10 +9,14 @@ import (
 
 func setupTokenUsageDataTest(t *testing.T) {
 	t.Helper()
-	require.NoError(t, DB.AutoMigrate(&TokenUsageData{}))
+	require.NoError(t, DB.AutoMigrate(&TokenUsageData{}, &Log{}, &Option{}))
 	require.NoError(t, DB.Exec("DELETE FROM token_usage_data").Error)
+	require.NoError(t, DB.Exec("DELETE FROM logs").Error)
+	require.NoError(t, DB.Where("key = ?", tokenUsageBackfillOptionKey).Delete(&Option{}).Error)
 	t.Cleanup(func() {
 		_ = DB.Exec("DELETE FROM token_usage_data").Error
+		_ = DB.Exec("DELETE FROM logs").Error
+		_ = DB.Where("key = ?", tokenUsageBackfillOptionKey).Delete(&Option{}).Error
 	})
 }
 
@@ -161,4 +165,145 @@ func TestGetTokenUsageSelfAggregatesTrendByDay(t *testing.T) {
 	require.Equal(t, int64(1), resp.Trend[1].Count)
 	require.Equal(t, int64(10), resp.Trend[1].Quota)
 	require.Less(t, resp.Trend[0].Timestamp, resp.Trend[1].Timestamp)
+}
+
+func TestBackfillTokenUsageDataFromLogsRebuildsRecentWindow(t *testing.T) {
+	setupTokenUsageDataTest(t)
+
+	now := time.Date(2026, 5, 14, 19, 30, 0, 0, time.Local).Unix()
+	currentHour := now - now%3600
+	previousHour := currentHour - 3600
+	oldTimestamp := currentHour - 91*24*3600
+
+	require.NoError(t, DB.Create(&TokenUsageData{
+		UserID:           1,
+		Username:         "stale",
+		TokenID:          11,
+		TokenName:        "stale-key",
+		ModelName:        "gpt-test",
+		CreatedAt:        previousHour,
+		Count:            99,
+		Quota:            990,
+		PromptTokens:     990,
+		CompletionTokens: 990,
+		TotalTokens:      1980,
+		LastUsedAt:       previousHour,
+	}).Error)
+
+	logs := []Log{
+		{
+			UserId:           1,
+			Username:         "alice",
+			CreatedAt:        previousHour + 60,
+			Type:             LogTypeConsume,
+			TokenId:          11,
+			TokenName:        "alice-main",
+			ModelName:        "gpt-test",
+			Quota:            100,
+			PromptTokens:     10,
+			CompletionTokens: 20,
+		},
+		{
+			UserId:           1,
+			Username:         "alice",
+			CreatedAt:        previousHour + 120,
+			Type:             LogTypeConsume,
+			TokenId:          11,
+			TokenName:        "alice-renamed",
+			ModelName:        "gpt-test",
+			Quota:            150,
+			PromptTokens:     15,
+			CompletionTokens: 25,
+		},
+		{
+			UserId:           2,
+			Username:         "bob",
+			CreatedAt:        previousHour + 180,
+			Type:             LogTypeConsume,
+			TokenId:          21,
+			TokenName:        "bob-main",
+			ModelName:        "claude-test",
+			Quota:            80,
+			PromptTokens:     4,
+			CompletionTokens: 6,
+		},
+		{
+			UserId:           1,
+			Username:         "alice",
+			CreatedAt:        previousHour + 240,
+			Type:             LogTypeConsume,
+			TokenId:          0,
+			TokenName:        "ignored-zero-token",
+			ModelName:        "gpt-test",
+			Quota:            999,
+			PromptTokens:     999,
+			CompletionTokens: 999,
+		},
+		{
+			UserId:           1,
+			Username:         "alice",
+			CreatedAt:        oldTimestamp,
+			Type:             LogTypeConsume,
+			TokenId:          12,
+			TokenName:        "ignored-old",
+			ModelName:        "gpt-test",
+			Quota:            999,
+			PromptTokens:     999,
+			CompletionTokens: 999,
+		},
+		{
+			UserId:           1,
+			Username:         "alice",
+			CreatedAt:        currentHour + 60,
+			Type:             LogTypeConsume,
+			TokenId:          13,
+			TokenName:        "ignored-current-hour",
+			ModelName:        "gpt-test",
+			Quota:            999,
+			PromptTokens:     999,
+			CompletionTokens: 999,
+		},
+		{
+			UserId:           1,
+			Username:         "alice",
+			CreatedAt:        previousHour + 300,
+			Type:             LogTypeSystem,
+			TokenId:          14,
+			TokenName:        "ignored-non-consume",
+			ModelName:        "gpt-test",
+			Quota:            999,
+			PromptTokens:     999,
+			CompletionTokens: 999,
+		},
+	}
+	require.NoError(t, DB.Create(&logs).Error)
+
+	result, err := backfillTokenUsageDataFromLogs(90, now)
+	require.NoError(t, err)
+	require.Equal(t, 3, result.Logs)
+	require.Equal(t, 2, result.Rows)
+
+	var row TokenUsageData
+	require.NoError(t, DB.Where("user_id = ? and token_id = ? and model_name = ? and created_at = ?", 1, 11, "gpt-test", previousHour).First(&row).Error)
+	require.Equal(t, "alice", row.Username)
+	require.Equal(t, "alice-renamed", row.TokenName)
+	require.Equal(t, int64(2), row.Count)
+	require.Equal(t, int64(250), row.Quota)
+	require.Equal(t, int64(25), row.PromptTokens)
+	require.Equal(t, int64(45), row.CompletionTokens)
+	require.Equal(t, int64(70), row.TotalTokens)
+	require.Equal(t, previousHour+120, row.LastUsedAt)
+
+	var count int64
+	require.NoError(t, DB.Model(&TokenUsageData{}).Count(&count).Error)
+	require.Equal(t, int64(2), count)
+
+	result, err = backfillTokenUsageDataFromLogs(90, now)
+	require.NoError(t, err)
+	require.Equal(t, 3, result.Logs)
+	require.Equal(t, 2, result.Rows)
+
+	require.NoError(t, DB.Where("user_id = ? and token_id = ? and model_name = ? and created_at = ?", 1, 11, "gpt-test", previousHour).First(&row).Error)
+	require.Equal(t, int64(2), row.Count)
+	require.Equal(t, int64(250), row.Quota)
 }

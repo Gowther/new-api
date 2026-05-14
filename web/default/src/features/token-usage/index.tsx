@@ -96,6 +96,8 @@ function emptyTokenUsage(): TokenUsageSelfResponse {
       total_prompt_tokens: 0,
       total_completion_tokens: 0,
       total_tokens: 0,
+      total_cache_read_tokens: 0,
+      total_cache_write_tokens: 0,
       api_key_count: 0,
       model_count: 0,
     },
@@ -110,6 +112,13 @@ function formatInteger(value: number) {
   return Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
     value || 0
   )
+}
+
+function cacheTokenParts(row: TokenUsageDetailItem) {
+  return {
+    read: row.cache_read_tokens || 0,
+    write: row.cache_write_tokens || 0,
+  }
 }
 
 function formatPercent(value: number) {
@@ -331,11 +340,11 @@ function TokenRankList({
                 value={formatInteger(item.total_tokens)}
               />
               <RankMetric
-                label={t('Prompt Tokens')}
+                label={t('Input Tokens')}
                 value={formatInteger(item.prompt_tokens)}
               />
               <RankMetric
-                label={t('Completion Tokens')}
+                label={t('Output Tokens')}
                 value={formatInteger(item.completion_tokens)}
               />
             </div>
@@ -365,31 +374,50 @@ function UsageDetailsTable({ rows }: { rows: TokenUsageDetailItem[] }) {
           <TableHead>{t('API Key')}</TableHead>
           <TableHead>{t('Model')}</TableHead>
           <TableHead className='text-right'>{t('Requests')}</TableHead>
-          <TableHead className='text-right'>{t('Prompt Tokens')}</TableHead>
-          <TableHead className='text-right'>{t('Completion Tokens')}</TableHead>
+          <TableHead className='text-right'>{t('Input Tokens')}</TableHead>
+          <TableHead className='text-right'>{t('Output Tokens')}</TableHead>
           <TableHead className='text-right'>{t('Cost')}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.map((row) => (
-          <TableRow key={`${row.created_at}-${row.token_id}-${row.model_name}`}>
-            <TableCell>{formatHourRange(row.created_at)}</TableCell>
-            <TableCell>{row.token_name || `#${row.token_id}`}</TableCell>
-            <TableCell>{row.model_name || '-'}</TableCell>
-            <TableCell className='text-right'>
-              {formatInteger(row.count)}
-            </TableCell>
-            <TableCell className='text-right'>
-              {formatInteger(row.prompt_tokens)}
-            </TableCell>
-            <TableCell className='text-right'>
-              {formatInteger(row.completion_tokens)}
-            </TableCell>
-            <TableCell className='text-right'>
-              {formatQuotaWithCurrency(row.quota)}
-            </TableCell>
-          </TableRow>
-        ))}
+        {rows.map((row) => {
+          const cache = cacheTokenParts(row)
+          return (
+            <TableRow
+              key={`${row.created_at}-${row.token_id}-${row.model_name}`}
+            >
+              <TableCell>{formatHourRange(row.created_at)}</TableCell>
+              <TableCell>{row.token_name || `#${row.token_id}`}</TableCell>
+              <TableCell>{row.model_name || '-'}</TableCell>
+              <TableCell className='text-right'>
+                {formatInteger(row.count)}
+              </TableCell>
+              <TableCell className='text-right'>
+                <div>{formatInteger(row.prompt_tokens)}</div>
+                {(cache.read > 0 || cache.write > 0) && (
+                  <div className='text-muted-foreground mt-1 text-[11px] leading-tight'>
+                    {cache.read > 0 && (
+                      <div>
+                        {t('Cache Read')} {formatInteger(cache.read)}
+                      </div>
+                    )}
+                    {cache.write > 0 && (
+                      <div>
+                        {t('Cache Write')} {formatInteger(cache.write)}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </TableCell>
+              <TableCell className='text-right'>
+                {formatInteger(row.completion_tokens)}
+              </TableCell>
+              <TableCell className='text-right'>
+                {formatQuotaWithCurrency(row.quota)}
+              </TableCell>
+            </TableRow>
+          )
+        })}
       </TableBody>
     </Table>
   )
@@ -529,7 +557,7 @@ export function TokenUsage() {
 
   return (
     <SectionPageLayout>
-      <SectionPageLayout.Title>{t('API Key Usage')}</SectionPageLayout.Title>
+      <SectionPageLayout.Title>{t('Token Usage')}</SectionPageLayout.Title>
       <SectionPageLayout.Actions>
         <NativeSelect
           value={rangeValue}
@@ -608,7 +636,7 @@ export function TokenUsage() {
           </div>
 
           <div className='grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.75fr)]'>
-            <Panel title={t('API Key Usage')}>
+            <Panel title={t('Token Usage')}>
               <div className='h-[320px]'>
                 <VChart spec={apiKeyBarSpec} option={VCHART_OPTION} />
               </div>

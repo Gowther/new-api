@@ -88,7 +88,7 @@ export function SidebarModulesCard() {
         },
         {
           key: 'token_usage',
-          title: t('API Key Usage'),
+          title: t('Token Usage'),
           description: t('API usage records'),
         },
         {

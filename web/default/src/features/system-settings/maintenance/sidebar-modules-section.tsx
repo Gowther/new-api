@@ -97,7 +97,7 @@ export function SidebarModulesSection({
         description: t('Create, revoke, and audit API tokens.'),
       },
       token_usage: {
-        title: t('API Key Usage'),
+        title: t('Token Usage'),
         description: t('API usage records'),
       },
       log: {

@@ -48,12 +48,22 @@ func TestRecordTokenUsageDataAggregatesHourlyAndIgnoresZeroToken(t *testing.T) {
 		PromptTokens:     10,
 		CompletionTokens: 20,
 		Quota:            100,
+		Other: map[string]interface{}{
+			"cache_tokens":          3,
+			"cache_creation_tokens": 4,
+		},
 	}
 	require.NoError(t, RecordTokenUsageData(1, "alice", params, base))
 	params.TokenName = "key-a-renamed"
 	params.PromptTokens = 15
 	params.CompletionTokens = 25
 	params.Quota = 150
+	params.Other = map[string]interface{}{
+		"cache_tokens":             5,
+		"cache_creation_tokens_5m": 6,
+		"cache_creation_tokens_1h": 7,
+		"cache_creation_tokens":    99,
+	}
 	require.NoError(t, RecordTokenUsageData(1, "alice", params, base+1200))
 
 	var row TokenUsageData
@@ -63,6 +73,8 @@ func TestRecordTokenUsageDataAggregatesHourlyAndIgnoresZeroToken(t *testing.T) {
 	require.Equal(t, int64(25), row.PromptTokens)
 	require.Equal(t, int64(45), row.CompletionTokens)
 	require.Equal(t, int64(70), row.TotalTokens)
+	require.Equal(t, int64(8), row.CacheReadTokens)
+	require.Equal(t, int64(17), row.CacheWriteTokens)
 	require.Equal(t, base-base%3600, row.CreatedAt)
 	require.Equal(t, "key-a-renamed", row.TokenName)
 	require.Equal(t, base+1200, row.LastUsedAt)
@@ -92,6 +104,10 @@ func TestGetTokenUsageSelfFiltersByAuthenticatedUserTokenAndModel(t *testing.T) 
 		PromptTokens:     10,
 		CompletionTokens: 20,
 		Quota:            100,
+		Other: map[string]interface{}{
+			"cache_tokens":          2,
+			"cache_creation_tokens": 3,
+		},
 	}, base))
 	require.NoError(t, RecordTokenUsageData(1, "alice", RecordConsumeLogParams{
 		TokenId:          11,
@@ -100,6 +116,10 @@ func TestGetTokenUsageSelfFiltersByAuthenticatedUserTokenAndModel(t *testing.T) 
 		PromptTokens:     2,
 		CompletionTokens: 3,
 		Quota:            50,
+		Other: map[string]interface{}{
+			"cache_tokens":             4,
+			"cache_creation_tokens_5m": 5,
+		},
 	}, base+60))
 	require.NoError(t, RecordTokenUsageData(1, "alice", RecordConsumeLogParams{
 		TokenId:          12,
@@ -130,6 +150,8 @@ func TestGetTokenUsageSelfFiltersByAuthenticatedUserTokenAndModel(t *testing.T) 
 	require.Equal(t, int64(2), resp.Summary.TotalRequests)
 	require.Equal(t, int64(150), resp.Summary.TotalQuota)
 	require.Equal(t, int64(35), resp.Summary.TotalTokens)
+	require.Equal(t, int64(6), resp.Summary.TotalCacheReadTokens)
+	require.Equal(t, int64(8), resp.Summary.TotalCacheWriteTokens)
 	require.Equal(t, int64(1), resp.Summary.ApiKeyCount)
 	require.Equal(t, int64(1), resp.Summary.ModelCount)
 	require.Len(t, resp.ByToken, 1)
@@ -138,6 +160,8 @@ func TestGetTokenUsageSelfFiltersByAuthenticatedUserTokenAndModel(t *testing.T) 
 	require.Equal(t, "gpt-test", resp.ByModel[0].ModelName)
 	require.Len(t, resp.Rows, 1)
 	require.Equal(t, 11, resp.Rows[0].TokenID)
+	require.Equal(t, int64(6), resp.Rows[0].CacheReadTokens)
+	require.Equal(t, int64(8), resp.Rows[0].CacheWriteTokens)
 
 	allResp, err := GetTokenUsageSelf(1, TokenUsageQuery{
 		StartTimestamp: base - 3600,
@@ -219,6 +243,10 @@ func TestBackfillTokenUsageDataFromLogsRebuildsRecentWindow(t *testing.T) {
 			Quota:            100,
 			PromptTokens:     10,
 			CompletionTokens: 20,
+			Other: common.MapToJsonStr(map[string]interface{}{
+				"cache_tokens":          3,
+				"cache_creation_tokens": 4,
+			}),
 		},
 		{
 			UserId:           1,
@@ -231,6 +259,12 @@ func TestBackfillTokenUsageDataFromLogsRebuildsRecentWindow(t *testing.T) {
 			Quota:            150,
 			PromptTokens:     15,
 			CompletionTokens: 25,
+			Other: common.MapToJsonStr(map[string]interface{}{
+				"cache_tokens":             5,
+				"cache_creation_tokens_5m": 6,
+				"cache_creation_tokens_1h": 7,
+				"cache_creation_tokens":    99,
+			}),
 		},
 		{
 			UserId:           2,
@@ -309,6 +343,8 @@ func TestBackfillTokenUsageDataFromLogsRebuildsRecentWindow(t *testing.T) {
 	require.Equal(t, int64(25), row.PromptTokens)
 	require.Equal(t, int64(45), row.CompletionTokens)
 	require.Equal(t, int64(70), row.TotalTokens)
+	require.Equal(t, int64(8), row.CacheReadTokens)
+	require.Equal(t, int64(17), row.CacheWriteTokens)
 	require.Equal(t, previousHour+120, row.LastUsedAt)
 
 	var count int64

@@ -57,6 +57,8 @@ const emptyUsage = {
     total_prompt_tokens: 0,
     total_completion_tokens: 0,
     total_tokens: 0,
+    total_cache_read_tokens: 0,
+    total_cache_write_tokens: 0,
     api_key_count: 0,
     model_count: 0,
   },
@@ -69,6 +71,36 @@ const emptyUsage = {
 function formatInteger(value) {
   return Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
     value || 0,
+  );
+}
+
+function getCacheTokenParts(row) {
+  return {
+    read: row?.cache_read_tokens || 0,
+    write: row?.cache_write_tokens || 0,
+  };
+}
+
+function renderInputTokens(value, record, t) {
+  const cache = getCacheTokenParts(record);
+  return (
+    <div className='text-right'>
+      <div>{formatInteger(value)}</div>
+      {(cache.read > 0 || cache.write > 0) && (
+        <div className='mt-1 text-[11px] leading-tight text-gray-500 dark:text-gray-400'>
+          {cache.read > 0 && (
+            <div>
+              {t('缓存读')} {formatInteger(cache.read)}
+            </div>
+          )}
+          {cache.write > 0 && (
+            <div>
+              {t('缓存写')} {formatInteger(cache.write)}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -273,11 +305,11 @@ function TokenRankList({ items, colorByKey, t }) {
                 value={formatInteger(item.total_tokens)}
               />
               <RankMetric
-                label={t('提示 Tokens')}
+                label={t('输入 Token 数')}
                 value={formatInteger(item.prompt_tokens)}
               />
               <RankMetric
-                label={t('补全 Tokens')}
+                label={t('输出 Token 数')}
                 value={formatInteger(item.completion_tokens)}
               />
             </div>
@@ -459,13 +491,13 @@ const TokenUsage = () => {
         render: formatInteger,
       },
       {
-        title: t('提示 Tokens'),
+        title: t('输入 Token 数'),
         dataIndex: 'prompt_tokens',
         align: 'right',
-        render: formatInteger,
+        render: (value, record) => renderInputTokens(value, record, t),
       },
       {
-        title: t('补全 Tokens'),
+        title: t('输出 Token 数'),
         dataIndex: 'completion_tokens',
         align: 'right',
         render: formatInteger,
@@ -483,7 +515,7 @@ const TokenUsage = () => {
   return (
     <div className='mt-[60px] px-2'>
       <div className='mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
-        <h2 className='text-lg font-semibold'>{t('API Key 用量')}</h2>
+        <h2 className='text-lg font-semibold'>{t('令牌用量')}</h2>
         <div className='flex flex-wrap items-center gap-2'>
           <Select
             value={rangeIndex}
@@ -564,7 +596,7 @@ const TokenUsage = () => {
           </div>
 
           <div className='grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.75fr)]'>
-            <Panel title={t('API Key 用量')}>
+            <Panel title={t('令牌用量')}>
               <div className='h-80'>
                 <VChart spec={apiKeyBarSpec} option={CHART_CONFIG} />
               </div>

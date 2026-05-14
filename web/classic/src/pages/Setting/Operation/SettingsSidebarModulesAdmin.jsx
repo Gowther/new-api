@@ -151,7 +151,7 @@ export default function SettingsSidebarModulesAdmin(props) {
         { key: 'token', title: t('令牌管理'), description: t('API令牌管理') },
         {
           key: 'token_usage',
-          title: t('API Key 用量'),
+          title: t('令牌用量'),
           description: t('API使用记录'),
         },
         { key: 'log', title: t('使用日志'), description: t('API使用记录') },

@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -23,6 +24,8 @@ type TokenUsageData struct {
 	PromptTokens     int64  `json:"prompt_tokens" gorm:"default:0"`
 	CompletionTokens int64  `json:"completion_tokens" gorm:"default:0"`
 	TotalTokens      int64  `json:"total_tokens" gorm:"default:0"`
+	CacheReadTokens  int64  `json:"cache_read_tokens" gorm:"default:0"`
+	CacheWriteTokens int64  `json:"cache_write_tokens" gorm:"default:0"`
 	LastUsedAt       int64  `json:"last_used_at" gorm:"bigint;index"`
 }
 
@@ -45,6 +48,8 @@ type TokenUsageSummary struct {
 	TotalPromptTokens     int64 `json:"total_prompt_tokens"`
 	TotalCompletionTokens int64 `json:"total_completion_tokens"`
 	TotalTokens           int64 `json:"total_tokens"`
+	TotalCacheReadTokens  int64 `json:"total_cache_read_tokens"`
+	TotalCacheWriteTokens int64 `json:"total_cache_write_tokens"`
 	ApiKeyCount           int64 `json:"api_key_count"`
 	ModelCount            int64 `json:"model_count"`
 }
@@ -56,6 +61,8 @@ type TokenUsageTrendItem struct {
 	PromptTokens     int64 `json:"prompt_tokens"`
 	CompletionTokens int64 `json:"completion_tokens"`
 	TotalTokens      int64 `json:"total_tokens"`
+	CacheReadTokens  int64 `json:"cache_read_tokens"`
+	CacheWriteTokens int64 `json:"cache_write_tokens"`
 }
 
 type TokenUsageTokenItem struct {
@@ -66,6 +73,8 @@ type TokenUsageTokenItem struct {
 	PromptTokens     int64  `json:"prompt_tokens"`
 	CompletionTokens int64  `json:"completion_tokens"`
 	TotalTokens      int64  `json:"total_tokens"`
+	CacheReadTokens  int64  `json:"cache_read_tokens"`
+	CacheWriteTokens int64  `json:"cache_write_tokens"`
 	LastUsedAt       int64  `json:"last_used_at"`
 }
 
@@ -76,6 +85,8 @@ type TokenUsageModelItem struct {
 	PromptTokens     int64  `json:"prompt_tokens"`
 	CompletionTokens int64  `json:"completion_tokens"`
 	TotalTokens      int64  `json:"total_tokens"`
+	CacheReadTokens  int64  `json:"cache_read_tokens"`
+	CacheWriteTokens int64  `json:"cache_write_tokens"`
 	LastUsedAt       int64  `json:"last_used_at"`
 }
 
@@ -89,6 +100,8 @@ type TokenUsageDetailItem struct {
 	PromptTokens     int64  `json:"prompt_tokens"`
 	CompletionTokens int64  `json:"completion_tokens"`
 	TotalTokens      int64  `json:"total_tokens"`
+	CacheReadTokens  int64  `json:"cache_read_tokens"`
+	CacheWriteTokens int64  `json:"cache_write_tokens"`
 	LastUsedAt       int64  `json:"last_used_at"`
 }
 
@@ -100,7 +113,7 @@ type TokenUsageSelfResponse struct {
 	Rows    []TokenUsageDetailItem `json:"rows"`
 }
 
-const tokenUsageBackfillOptionKey = "TokenUsageBackfill90dV3CompletedAt"
+const tokenUsageBackfillOptionKey = "TokenUsageBackfill90dV4CompletedAt"
 const tokenUsageBackfillBatchSize = 1000
 
 type tokenUsageBackfillResult struct {
@@ -125,6 +138,7 @@ func RecordTokenUsageData(userId int, username string, params RecordConsumeLogPa
 	promptTokens := int64(params.PromptTokens)
 	completionTokens := int64(params.CompletionTokens)
 	totalTokens := promptTokens + completionTokens
+	cacheReadTokens, cacheWriteTokens := tokenUsageCacheTokensFromOther(params.Other)
 	row := &TokenUsageData{
 		UserID:           userId,
 		Username:         username,
@@ -137,6 +151,8 @@ func RecordTokenUsageData(userId int, username string, params RecordConsumeLogPa
 		PromptTokens:     promptTokens,
 		CompletionTokens: completionTokens,
 		TotalTokens:      totalTokens,
+		CacheReadTokens:  cacheReadTokens,
+		CacheWriteTokens: cacheWriteTokens,
 		LastUsedAt:       createdAt,
 	}
 
@@ -148,14 +164,16 @@ func RecordTokenUsageData(userId int, username string, params RecordConsumeLogPa
 			{Name: "created_at"},
 		},
 		DoUpdates: clause.Assignments(map[string]interface{}{
-			"username":          username,
-			"token_name":        params.TokenName,
-			"count":             tokenUsageAddExpr("count", 1),
-			"quota":             tokenUsageAddExpr("quota", params.Quota),
-			"prompt_tokens":     tokenUsageAddExpr("prompt_tokens", params.PromptTokens),
-			"completion_tokens": tokenUsageAddExpr("completion_tokens", params.CompletionTokens),
-			"total_tokens":      tokenUsageAddExpr("total_tokens", totalTokens),
-			"last_used_at":      tokenUsageLastUsedExpr(createdAt),
+			"username":           username,
+			"token_name":         params.TokenName,
+			"count":              tokenUsageAddExpr("count", 1),
+			"quota":              tokenUsageAddExpr("quota", params.Quota),
+			"prompt_tokens":      tokenUsageAddExpr("prompt_tokens", params.PromptTokens),
+			"completion_tokens":  tokenUsageAddExpr("completion_tokens", params.CompletionTokens),
+			"total_tokens":       tokenUsageAddExpr("total_tokens", totalTokens),
+			"cache_read_tokens":  tokenUsageAddExpr("cache_read_tokens", cacheReadTokens),
+			"cache_write_tokens": tokenUsageAddExpr("cache_write_tokens", cacheWriteTokens),
+			"last_used_at":       tokenUsageLastUsedExpr(createdAt),
 		}),
 	}).Create(row).Error
 }
@@ -233,7 +251,7 @@ func backfillTokenUsageDataFromLogs(days int, now int64) (*tokenUsageBackfillRes
 
 	var logs []Log
 	err := LOG_DB.Model(&Log{}).
-		Select("user_id, username, token_id, token_name, model_name, created_at, quota, prompt_tokens, completion_tokens").
+		Select("user_id, username, token_id, token_name, model_name, created_at, quota, prompt_tokens, completion_tokens, other").
 		Where("type = ? and token_id > ? and created_at >= ? and created_at < ?", LogTypeConsume, 0, startTimestamp, endExclusive).
 		Order("id asc").
 		FindInBatches(&logs, tokenUsageBackfillBatchSize, func(tx *gorm.DB, batch int) error {
@@ -267,6 +285,10 @@ func backfillTokenUsageDataFromLogs(days int, now int64) (*tokenUsageBackfillRes
 				row.PromptTokens += int64(log.PromptTokens)
 				row.CompletionTokens += int64(log.CompletionTokens)
 				row.TotalTokens += int64(log.PromptTokens + log.CompletionTokens)
+				otherMap, _ := common.StrToMap(log.Other)
+				cacheReadTokens, cacheWriteTokens := tokenUsageCacheTokensFromOther(otherMap)
+				row.CacheReadTokens += cacheReadTokens
+				row.CacheWriteTokens += cacheWriteTokens
 				if log.CreatedAt >= row.LastUsedAt {
 					row.Username = log.Username
 					row.TokenName = log.TokenName
@@ -322,6 +344,8 @@ func backfillTokenUsageDataFromLogs(days int, now int64) (*tokenUsageBackfillRes
 					"prompt_tokens",
 					"completion_tokens",
 					"total_tokens",
+					"cache_read_tokens",
+					"cache_write_tokens",
 					"last_used_at",
 				}),
 			}).Create(&chunk).Error; err != nil {
@@ -390,6 +414,8 @@ func buildTokenUsageSelfResponse(rows []TokenUsageData, granularity string, deta
 		resp.Summary.TotalPromptTokens += row.PromptTokens
 		resp.Summary.TotalCompletionTokens += row.CompletionTokens
 		resp.Summary.TotalTokens += row.TotalTokens
+		resp.Summary.TotalCacheReadTokens += row.CacheReadTokens
+		resp.Summary.TotalCacheWriteTokens += row.CacheWriteTokens
 		tokenIDs[row.TokenID] = struct{}{}
 		modelNames[row.ModelName] = struct{}{}
 
@@ -399,7 +425,7 @@ func buildTokenUsageSelfResponse(rows []TokenUsageData, granularity string, deta
 			trend = &TokenUsageTrendItem{Timestamp: bucket}
 			trendMap[bucket] = trend
 		}
-		addTokenUsageMetrics(&trend.Count, &trend.Quota, &trend.PromptTokens, &trend.CompletionTokens, &trend.TotalTokens, row)
+		addTokenUsageMetrics(&trend.Count, &trend.Quota, &trend.PromptTokens, &trend.CompletionTokens, &trend.TotalTokens, &trend.CacheReadTokens, &trend.CacheWriteTokens, row)
 
 		tokenItem, ok := tokenMap[row.TokenID]
 		if !ok {
@@ -413,7 +439,7 @@ func buildTokenUsageSelfResponse(rows []TokenUsageData, granularity string, deta
 			tokenItem.TokenName = row.TokenName
 			tokenItem.LastUsedAt = row.LastUsedAt
 		}
-		addTokenUsageMetrics(&tokenItem.Count, &tokenItem.Quota, &tokenItem.PromptTokens, &tokenItem.CompletionTokens, &tokenItem.TotalTokens, row)
+		addTokenUsageMetrics(&tokenItem.Count, &tokenItem.Quota, &tokenItem.PromptTokens, &tokenItem.CompletionTokens, &tokenItem.TotalTokens, &tokenItem.CacheReadTokens, &tokenItem.CacheWriteTokens, row)
 
 		modelName := row.ModelName
 		modelItem, ok := modelMap[modelName]
@@ -424,7 +450,7 @@ func buildTokenUsageSelfResponse(rows []TokenUsageData, granularity string, deta
 		if row.LastUsedAt > modelItem.LastUsedAt {
 			modelItem.LastUsedAt = row.LastUsedAt
 		}
-		addTokenUsageMetrics(&modelItem.Count, &modelItem.Quota, &modelItem.PromptTokens, &modelItem.CompletionTokens, &modelItem.TotalTokens, row)
+		addTokenUsageMetrics(&modelItem.Count, &modelItem.Quota, &modelItem.PromptTokens, &modelItem.CompletionTokens, &modelItem.TotalTokens, &modelItem.CacheReadTokens, &modelItem.CacheWriteTokens, row)
 
 		resp.Rows = append(resp.Rows, TokenUsageDetailItem{
 			CreatedAt:        row.CreatedAt,
@@ -436,6 +462,8 @@ func buildTokenUsageSelfResponse(rows []TokenUsageData, granularity string, deta
 			PromptTokens:     row.PromptTokens,
 			CompletionTokens: row.CompletionTokens,
 			TotalTokens:      row.TotalTokens,
+			CacheReadTokens:  row.CacheReadTokens,
+			CacheWriteTokens: row.CacheWriteTokens,
 			LastUsedAt:       row.LastUsedAt,
 		})
 	}
@@ -477,12 +505,68 @@ func buildTokenUsageSelfResponse(rows []TokenUsageData, granularity string, deta
 	return resp
 }
 
-func addTokenUsageMetrics(count *int64, quota *int64, promptTokens *int64, completionTokens *int64, totalTokens *int64, row TokenUsageData) {
+func addTokenUsageMetrics(count *int64, quota *int64, promptTokens *int64, completionTokens *int64, totalTokens *int64, cacheReadTokens *int64, cacheWriteTokens *int64, row TokenUsageData) {
 	*count += row.Count
 	*quota += row.Quota
 	*promptTokens += row.PromptTokens
 	*completionTokens += row.CompletionTokens
 	*totalTokens += row.TotalTokens
+	*cacheReadTokens += row.CacheReadTokens
+	*cacheWriteTokens += row.CacheWriteTokens
+}
+
+func tokenUsageCacheTokensFromOther(other map[string]interface{}) (int64, int64) {
+	if other == nil {
+		return 0, 0
+	}
+	cacheReadTokens := tokenUsageInt64FromValue(other["cache_tokens"])
+	cacheWriteTokens5m := tokenUsageInt64FromValue(other["cache_creation_tokens_5m"])
+	cacheWriteTokens1h := tokenUsageInt64FromValue(other["cache_creation_tokens_1h"])
+	if cacheWriteTokens5m > 0 || cacheWriteTokens1h > 0 {
+		return cacheReadTokens, cacheWriteTokens5m + cacheWriteTokens1h
+	}
+	return cacheReadTokens, tokenUsageInt64FromValue(other["cache_creation_tokens"])
+}
+
+func tokenUsageInt64FromValue(value interface{}) int64 {
+	var result int64
+	switch v := value.(type) {
+	case int:
+		result = int64(v)
+	case int8:
+		result = int64(v)
+	case int16:
+		result = int64(v)
+	case int32:
+		result = int64(v)
+	case int64:
+		result = v
+	case uint:
+		result = int64(v)
+	case uint8:
+		result = int64(v)
+	case uint16:
+		result = int64(v)
+	case uint32:
+		result = int64(v)
+	case uint64:
+		if v > uint64(^uint64(0)>>1) {
+			return 0
+		}
+		result = int64(v)
+	case float32:
+		result = int64(v)
+	case float64:
+		result = int64(v)
+	case string:
+		if parsed, err := strconv.ParseFloat(v, 64); err == nil {
+			result = int64(parsed)
+		}
+	}
+	if result < 0 {
+		return 0
+	}
+	return result
 }
 
 func tokenUsageRankLess(leftQuota int64, rightQuota int64, leftTokens int64, rightTokens int64, leftCount int64, rightCount int64) bool {

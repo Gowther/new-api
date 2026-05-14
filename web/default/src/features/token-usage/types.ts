@@ -23,6 +23,8 @@ export interface TokenUsageSummary {
   total_prompt_tokens: number
   total_completion_tokens: number
   total_tokens: number
+  total_cache_read_tokens: number
+  total_cache_write_tokens: number
   api_key_count: number
   model_count: number
 }
@@ -34,6 +36,8 @@ export interface TokenUsageTrendItem {
   prompt_tokens: number
   completion_tokens: number
   total_tokens: number
+  cache_read_tokens: number
+  cache_write_tokens: number
 }
 
 export interface TokenUsageTokenItem {
@@ -44,6 +48,8 @@ export interface TokenUsageTokenItem {
   prompt_tokens: number
   completion_tokens: number
   total_tokens: number
+  cache_read_tokens: number
+  cache_write_tokens: number
   last_used_at: number
 }
 
@@ -54,6 +60,8 @@ export interface TokenUsageModelItem {
   prompt_tokens: number
   completion_tokens: number
   total_tokens: number
+  cache_read_tokens: number
+  cache_write_tokens: number
   last_used_at: number
 }
 
@@ -67,6 +75,8 @@ export interface TokenUsageDetailItem {
   prompt_tokens: number
   completion_tokens: number
   total_tokens: number
+  cache_read_tokens: number
+  cache_write_tokens: number
   last_used_at: number
 }
 

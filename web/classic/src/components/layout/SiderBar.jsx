@@ -86,7 +86,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         to: '/token',
       },
       {
-        text: t('API Key 用量'),
+        text: t('令牌用量'),
         itemKey: 'token_usage',
         to: '/token-usage',
       },

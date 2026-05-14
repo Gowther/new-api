@@ -100,7 +100,7 @@ type TokenUsageSelfResponse struct {
 	Rows    []TokenUsageDetailItem `json:"rows"`
 }
 
-const tokenUsageBackfillOptionKey = "TokenUsageBackfill90dV2CompletedAt"
+const tokenUsageBackfillOptionKey = "TokenUsageBackfill90dV3CompletedAt"
 const tokenUsageBackfillBatchSize = 1000
 
 type tokenUsageBackfillResult struct {

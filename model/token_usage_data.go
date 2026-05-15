@@ -251,7 +251,7 @@ func backfillTokenUsageDataFromLogs(days int, now int64) (*tokenUsageBackfillRes
 
 	var logs []Log
 	err := LOG_DB.Model(&Log{}).
-		Select("user_id, username, token_id, token_name, model_name, created_at, quota, prompt_tokens, completion_tokens, other").
+		Select("id, user_id, username, token_id, token_name, model_name, created_at, quota, prompt_tokens, completion_tokens, other").
 		Where("type = ? and token_id > ? and created_at >= ? and created_at < ?", LogTypeConsume, 0, startTimestamp, endExclusive).
 		Order("id asc").
 		FindInBatches(&logs, tokenUsageBackfillBatchSize, func(tx *gorm.DB, batch int) error {

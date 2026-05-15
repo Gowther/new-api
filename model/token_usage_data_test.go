@@ -391,6 +391,41 @@ func TestBackfillTokenUsageDataFromLogsRebuildsRecentWindow(t *testing.T) {
 	require.Equal(t, int64(250), row.Quota)
 }
 
+func TestBackfillTokenUsageDataFromLogsPaginatesWithSelectedPrimaryKey(t *testing.T) {
+	setupTokenUsageDataTest(t)
+
+	now := time.Date(2026, 5, 14, 19, 30, 0, 0, time.Local).Unix()
+	currentHour := now - now%3600
+	previousHour := currentHour - 3600
+
+	logs := make([]Log, 0, tokenUsageBackfillBatchSize+1)
+	for i := 0; i < tokenUsageBackfillBatchSize+1; i++ {
+		logs = append(logs, Log{
+			UserId:           1,
+			Username:         "alice",
+			CreatedAt:        previousHour + int64(i%1800),
+			Type:             LogTypeConsume,
+			TokenId:          11,
+			TokenName:        "alice-main",
+			ModelName:        "gpt-test",
+			Quota:            1,
+			PromptTokens:     1,
+			CompletionTokens: 1,
+		})
+	}
+	require.NoError(t, DB.Create(&logs).Error)
+
+	result, err := backfillTokenUsageDataFromLogs(90, now)
+	require.NoError(t, err)
+	require.Equal(t, tokenUsageBackfillBatchSize+1, result.Logs)
+	require.Equal(t, 1, result.Rows)
+
+	var row TokenUsageData
+	require.NoError(t, DB.Where("user_id = ? and token_id = ? and model_name = ? and created_at = ?", 1, 11, "gpt-test", previousHour).First(&row).Error)
+	require.Equal(t, int64(tokenUsageBackfillBatchSize+1), row.Count)
+	require.Equal(t, int64((tokenUsageBackfillBatchSize+1)*2), row.TotalTokens)
+}
+
 func TestRecordConsumeLogWritesTokenUsageWhenConsumeLogDisabled(t *testing.T) {
 	setupTokenUsageDataTest(t)
 	oldLogConsumeEnabled := common.LogConsumeEnabled

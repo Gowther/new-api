@@ -356,11 +356,11 @@ function TokenRankList({
                 value={formatInteger(item.total_tokens)}
               />
               <RankMetric
-                label={t('Input Tokens')}
+                label={t('Input')}
                 value={formatInteger(item.prompt_tokens)}
               />
               <RankMetric
-                label={t('Output Tokens')}
+                label={t('Output')}
                 value={formatInteger(item.completion_tokens)}
               />
             </div>
@@ -387,11 +387,11 @@ function UsageDetailsTable({ rows }: { rows: TokenUsageDetailItem[] }) {
       <TableHeader>
         <TableRow>
           <TableHead>{t('Time Range')}</TableHead>
-          <TableHead>{t('API Key')}</TableHead>
+          <TableHead>{t('Token Name')}</TableHead>
           <TableHead>{t('Model')}</TableHead>
           <TableHead className='text-right'>{t('Requests')}</TableHead>
-          <TableHead className='text-right'>{t('Input Tokens')}</TableHead>
-          <TableHead className='text-right'>{t('Output Tokens')}</TableHead>
+          <TableHead className='text-right'>{t('Input')}</TableHead>
+          <TableHead className='text-right'>{t('Output')}</TableHead>
           <TableHead className='text-right'>{t('Cost')}</TableHead>
         </TableRow>
       </TableHeader>
@@ -645,7 +645,7 @@ export function TokenUsage() {
               icon={Clock}
             />
             <StatCard
-              title={t('API Keys Used')}
+              title={t('Tokens Used')}
               value={formatInteger(data.summary.api_key_count)}
               icon={Key}
             />
@@ -657,7 +657,7 @@ export function TokenUsage() {
                 <VChart spec={apiKeyBarSpec} option={VCHART_OPTION} />
               </div>
             </Panel>
-            <Panel title={`${t('API Key')} ${t('Share')}`}>
+            <Panel title={t('Token Share')}>
               <div className='h-[320px]'>
                 <VChart spec={apiKeyShareSpec} option={VCHART_OPTION} />
               </div>
@@ -665,7 +665,7 @@ export function TokenUsage() {
           </div>
 
           <div className='grid gap-4 xl:grid-cols-[minmax(320px,0.45fr)_minmax(0,1fr)]'>
-            <Panel title={t('API Key Ranking')}>
+            <Panel title={t('Token Ranking')}>
               <TokenRankList
                 items={data.by_token as TokenUsageTokenItem[]}
                 colorByKey={apiKeyColorByKey}

@@ -93,6 +93,36 @@ func TestTokenUsageExistingColumnQualifiesPostgreSQLUpsertColumns(t *testing.T) 
 	require.Equal(t, "completion_tokens", tokenUsageExistingColumn("completion_tokens"))
 }
 
+func TestTokenUsageCacheTokensFromOtherSupportsNormalizedAndProviderFields(t *testing.T) {
+	read, write := tokenUsageCacheTokensFromOther(map[string]interface{}{
+		"cache_read_tokens":      float64(11),
+		"cache_tokens":           3,
+		"cache_write_tokens":     "12",
+		"cache_creation_tokens":  99,
+		"cached_creation_tokens": 88,
+	})
+	require.Equal(t, int64(11), read)
+	require.Equal(t, int64(12), write)
+
+	read, write = tokenUsageCacheTokensFromOther(map[string]interface{}{
+		"prompt_tokens_details": map[string]interface{}{
+			"cached_tokens":          "7",
+			"cached_creation_tokens": float64(8),
+		},
+	})
+	require.Equal(t, int64(7), read)
+	require.Equal(t, int64(8), write)
+
+	read, write = tokenUsageCacheTokensFromOther(map[string]interface{}{
+		"cache_tokens":             5,
+		"cache_creation_tokens_5m": 6,
+		"cache_creation_tokens_1h": 7,
+		"cache_creation_tokens":    99,
+	})
+	require.Equal(t, int64(5), read)
+	require.Equal(t, int64(13), write)
+}
+
 func TestGetTokenUsageSelfFiltersByAuthenticatedUserTokenAndModel(t *testing.T) {
 	setupTokenUsageDataTest(t)
 

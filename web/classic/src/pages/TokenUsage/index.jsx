@@ -322,11 +322,11 @@ function TokenRankList({ items, colorByKey, t }) {
                 value={formatInteger(item.total_tokens)}
               />
               <RankMetric
-                label={t('输入 Token 数')}
+                label={t('输入')}
                 value={formatInteger(item.prompt_tokens)}
               />
               <RankMetric
-                label={t('输出 Token 数')}
+                label={t('输出')}
                 value={formatInteger(item.completion_tokens)}
               />
             </div>
@@ -492,7 +492,7 @@ const TokenUsage = () => {
         render: (value) => formatHourRange(value),
       },
       {
-        title: t('API Key'),
+        title: t('令牌名称'),
         dataIndex: 'token_name',
         render: (value, record) => value || `#${record.token_id}`,
       },
@@ -508,13 +508,13 @@ const TokenUsage = () => {
         render: formatInteger,
       },
       {
-        title: t('输入 Token 数'),
+        title: t('输入'),
         dataIndex: 'prompt_tokens',
         align: 'right',
         render: (value, record) => renderInputTokens(value, record, t),
       },
       {
-        title: t('输出 Token 数'),
+        title: t('输出'),
         dataIndex: 'completion_tokens',
         align: 'right',
         render: formatInteger,
@@ -606,7 +606,7 @@ const TokenUsage = () => {
               icon={Clock}
             />
             <StatCard
-              title={t('使用的 API Key')}
+              title={t('使用的令牌')}
               value={formatInteger(usage.summary.api_key_count)}
               icon={Key}
             />
@@ -618,7 +618,7 @@ const TokenUsage = () => {
                 <VChart spec={apiKeyBarSpec} option={CHART_CONFIG} />
               </div>
             </Panel>
-            <Panel title={`${t('API Key')} ${t('占比')}`}>
+            <Panel title={t('令牌占比')}>
               <div className='h-80'>
                 <VChart spec={apiKeyShareSpec} option={CHART_CONFIG} />
               </div>
@@ -626,7 +626,7 @@ const TokenUsage = () => {
           </div>
 
           <div className='grid grid-cols-1 gap-4 xl:grid-cols-[minmax(320px,0.45fr)_minmax(0,1fr)]'>
-            <Panel title={t('API Key 排行')}>
+            <Panel title={t('令牌排行')}>
               <TokenRankList
                 items={usage.by_token}
                 colorByKey={apiKeyColorByKey}

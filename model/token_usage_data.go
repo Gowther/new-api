@@ -113,7 +113,7 @@ type TokenUsageSelfResponse struct {
 	Rows    []TokenUsageDetailItem `json:"rows"`
 }
 
-const tokenUsageBackfillOptionKey = "TokenUsageBackfill90dV4CompletedAt"
+const tokenUsageBackfillOptionKey = "TokenUsageBackfill90dV5CompletedAt"
 const tokenUsageBackfillBatchSize = 1000
 
 type tokenUsageBackfillResult struct {
@@ -519,13 +519,59 @@ func tokenUsageCacheTokensFromOther(other map[string]interface{}) (int64, int64)
 	if other == nil {
 		return 0, 0
 	}
-	cacheReadTokens := tokenUsageInt64FromValue(other["cache_tokens"])
+	cacheReadTokens := tokenUsageFirstPositiveFromOther(other,
+		"cache_read_tokens",
+		"cache_tokens",
+		"cached_tokens",
+		"prompt_cache_hit_tokens",
+		"prompt_tokens_details.cached_tokens",
+		"input_tokens_details.cached_tokens",
+	)
+	cacheWriteTokens := tokenUsageFirstPositiveFromOther(other, "cache_write_tokens")
+	if cacheWriteTokens > 0 {
+		return cacheReadTokens, cacheWriteTokens
+	}
 	cacheWriteTokens5m := tokenUsageInt64FromValue(other["cache_creation_tokens_5m"])
 	cacheWriteTokens1h := tokenUsageInt64FromValue(other["cache_creation_tokens_1h"])
 	if cacheWriteTokens5m > 0 || cacheWriteTokens1h > 0 {
 		return cacheReadTokens, cacheWriteTokens5m + cacheWriteTokens1h
 	}
-	return cacheReadTokens, tokenUsageInt64FromValue(other["cache_creation_tokens"])
+	return cacheReadTokens, tokenUsageFirstPositiveFromOther(other,
+		"cache_creation_tokens",
+		"cache_creation_input_tokens",
+		"cached_creation_tokens",
+		"prompt_tokens_details.cached_creation_tokens",
+		"input_tokens_details.cached_creation_tokens",
+	)
+}
+
+func tokenUsageFirstPositiveFromOther(other map[string]interface{}, paths ...string) int64 {
+	for _, path := range paths {
+		if value := tokenUsageInt64FromPath(other, path); value > 0 {
+			return value
+		}
+	}
+	return 0
+}
+
+func tokenUsageInt64FromPath(other map[string]interface{}, path string) int64 {
+	if other == nil || path == "" {
+		return 0
+	}
+	if value, ok := other[path]; ok {
+		return tokenUsageInt64FromValue(value)
+	}
+	for i := 0; i < len(path); i++ {
+		if path[i] != '.' {
+			continue
+		}
+		parent, ok := other[path[:i]].(map[string]interface{})
+		if !ok {
+			return 0
+		}
+		return tokenUsageInt64FromPath(parent, path[i+1:])
+	}
+	return 0
 }
 
 func tokenUsageInt64FromValue(value interface{}) int64 {

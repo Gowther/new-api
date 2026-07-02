@@ -56,6 +56,7 @@ const ChannelsActions = ({
   activePage,
   pageSize,
   setActivePage,
+  setShowModelPriority,
   t,
 }) => {
   return (
@@ -190,6 +191,16 @@ const ChannelsActions = ({
                     }}
                   >
                     {t('处理全部渠道上游更新')}
+                  </Button>
+                </Dropdown.Item>
+                <Dropdown.Item>
+                  <Button
+                    size='small'
+                    type='tertiary'
+                    className='w-full'
+                    onClick={() => setShowModelPriority(true)}
+                  >
+                    {t('模型优先级管理')}
                   </Button>
                 </Dropdown.Item>
                 <Dropdown.Item>

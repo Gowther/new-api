@@ -34,6 +34,7 @@ import EditChannelModal from './modals/EditChannelModal';
 import EditTagModal from './modals/EditTagModal';
 import MultiKeyManageModal from './modals/MultiKeyManageModal';
 import ChannelUpstreamUpdateModal from './modals/ChannelUpstreamUpdateModal';
+import ModelPriorityModal from './modals/ModelPriorityModal';
 import { createCardProPagination } from '../../../helpers/utils';
 
 const ChannelsPage = () => {
@@ -72,6 +73,11 @@ const ChannelsPage = () => {
         confirmLoading={channelsData.upstreamApplyLoading}
         onConfirm={channelsData.applyUpstreamUpdates}
         onCancel={channelsData.closeUpstreamUpdateModal}
+      />
+      <ModelPriorityModal
+        visible={channelsData.showModelPriority}
+        handleClose={() => channelsData.setShowModelPriority(false)}
+        refresh={channelsData.refresh}
       />
 
       {/* Main Content */}

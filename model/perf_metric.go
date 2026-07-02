@@ -136,7 +136,7 @@ func perfMetricAddExpr(column string, value interface{}) clause.Expr {
 }
 
 func perfMetricExistingColumn(column string) string {
-	if common.UsingPostgreSQL {
+	if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
 		return fmt.Sprintf(`"perf_metrics"."%s"`, column)
 	}
 	return column

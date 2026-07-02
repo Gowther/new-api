@@ -642,7 +642,7 @@ func tokenUsageTrendBucket(timestamp int64, granularity string) int64 {
 }
 
 func tokenUsageLastUsedExpr(timestamp int64) clause.Expr {
-	if common.UsingMySQL || common.UsingPostgreSQL {
+	if common.UsingMainDatabase(common.DatabaseTypeMySQL) || common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
 		return gorm.Expr(fmt.Sprintf("GREATEST(%s, ?)", tokenUsageExistingColumn("last_used_at")), timestamp)
 	}
 	return gorm.Expr(fmt.Sprintf("MAX(%s, ?)", tokenUsageExistingColumn("last_used_at")), timestamp)
@@ -653,7 +653,7 @@ func tokenUsageAddExpr(column string, value interface{}) clause.Expr {
 }
 
 func tokenUsageExistingColumn(column string) string {
-	if common.UsingPostgreSQL {
+	if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
 		return fmt.Sprintf(`"token_usage_data"."%s"`, column)
 	}
 	return column

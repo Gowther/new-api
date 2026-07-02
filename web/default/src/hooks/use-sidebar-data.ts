@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import {
   LayoutDashboard,
   Activity,
+  Gauge,
   Key,
   FileText,
   Wallet,
@@ -85,6 +86,11 @@ export function useSidebarData(): SidebarData {
             title: t('API Keys'),
             url: '/keys',
             icon: Key,
+          },
+          {
+            title: t('Token Usage'),
+            url: '/token-usage',
+            icon: Gauge,
           },
           {
             title: t('Usage Logs'),

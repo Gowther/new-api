@@ -102,6 +102,11 @@ func main() {
 
 	// 数据看板
 	go model.UpdateQuotaData()
+	go func() {
+		if err := model.BackfillRecentTokenUsageDataFromLogsIfNeeded(90); err != nil {
+			common.SysLog("failed to backfill token usage data: " + err.Error())
+		}
+	}()
 
 	if os.Getenv("CHANNEL_UPDATE_FREQUENCY") != "" {
 		frequency, err := strconv.Atoi(os.Getenv("CHANNEL_UPDATE_FREQUENCY"))

@@ -34,6 +34,7 @@ const routerMap = {
   home: '/',
   channel: '/console/channel',
   token: '/console/token',
+  token_usage: '/console/token-usage',
   redemption: '/console/redemption',
   topup: '/console/topup',
   user: '/console/user',
@@ -83,6 +84,11 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('令牌管理'),
         itemKey: 'token',
         to: '/token',
+      },
+      {
+        text: t('令牌用量'),
+        itemKey: 'token_usage',
+        to: '/token-usage',
       },
       {
         text: t('使用日志'),

@@ -118,6 +118,9 @@ export const useChannelsData = () => {
   const [showMultiKeyManageModal, setShowMultiKeyManageModal] = useState(false);
   const [currentMultiKeyChannel, setCurrentMultiKeyChannel] = useState(null);
 
+  // Model priority management state
+  const [showModelPriority, setShowModelPriority] = useState(false);
+
   // Refs
   const requestCounter = useRef(0);
   const allSelectingRef = useRef(false);
@@ -1203,6 +1206,11 @@ export const useChannelsData = () => {
     setShowMultiKeyManageModal,
     currentMultiKeyChannel,
     setCurrentMultiKeyChannel,
+
+    // Model priority management state
+    showModelPriority,
+    setShowModelPriority,
+
     ...upstreamUpdates,
 
     // Form

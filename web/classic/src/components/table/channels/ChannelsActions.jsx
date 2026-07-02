@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React from 'react';
+import React, { useRef } from 'react';
 import {
   Button,
   Dropdown,
@@ -56,8 +56,11 @@ const ChannelsActions = ({
   activePage,
   pageSize,
   setActivePage,
+  setShowModelPriority,
   t,
 }) => {
+  const dropdownRef = useRef(null);
+
   return (
     <div className='flex flex-col gap-2'>
       {/* 第一行：批量操作按钮 + 设置开关 */}
@@ -91,8 +94,10 @@ const ChannelsActions = ({
           </Button>
 
           <Dropdown
+            ref={dropdownRef}
             size='small'
             trigger='click'
+            clickToHide={true}
             render={
               <Dropdown.Menu>
                 <Dropdown.Item>
@@ -190,6 +195,19 @@ const ChannelsActions = ({
                     }}
                   >
                     {t('处理全部渠道上游更新')}
+                  </Button>
+                </Dropdown.Item>
+                <Dropdown.Item
+                  onClick={() => {
+                    setShowModelPriority(true);
+                  }}
+                >
+                  <Button
+                    size='small'
+                    type='tertiary'
+                    className='w-full'
+                  >
+                    {t('模型优先级管理')}
                   </Button>
                 </Dropdown.Item>
                 <Dropdown.Item>

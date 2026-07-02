@@ -1,8 +1,10 @@
 package model
 
 import (
+	"fmt"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -37,13 +39,13 @@ func UpsertPerfMetric(metric *PerfMetric) error {
 			{Name: "bucket_ts"},
 		},
 		DoUpdates: clause.Assignments(map[string]interface{}{
-			"request_count":    gorm.Expr("request_count + ?", metric.RequestCount),
-			"success_count":    gorm.Expr("success_count + ?", metric.SuccessCount),
-			"total_latency_ms": gorm.Expr("total_latency_ms + ?", metric.TotalLatencyMs),
-			"ttft_sum_ms":      gorm.Expr("ttft_sum_ms + ?", metric.TtftSumMs),
-			"ttft_count":       gorm.Expr("ttft_count + ?", metric.TtftCount),
-			"output_tokens":    gorm.Expr("output_tokens + ?", metric.OutputTokens),
-			"generation_ms":    gorm.Expr("generation_ms + ?", metric.GenerationMs),
+			"request_count":    perfMetricAddExpr("request_count", metric.RequestCount),
+			"success_count":    perfMetricAddExpr("success_count", metric.SuccessCount),
+			"total_latency_ms": perfMetricAddExpr("total_latency_ms", metric.TotalLatencyMs),
+			"ttft_sum_ms":      perfMetricAddExpr("ttft_sum_ms", metric.TtftSumMs),
+			"ttft_count":       perfMetricAddExpr("ttft_count", metric.TtftCount),
+			"output_tokens":    perfMetricAddExpr("output_tokens", metric.OutputTokens),
+			"generation_ms":    perfMetricAddExpr("generation_ms", metric.GenerationMs),
 		}),
 	}).Create(metric).Error
 }
@@ -91,4 +93,15 @@ func PerfMetricStartTime(hours int) int64 {
 		hours = 24
 	}
 	return time.Now().Add(-time.Duration(hours) * time.Hour).Unix()
+}
+
+func perfMetricAddExpr(column string, value interface{}) clause.Expr {
+	return gorm.Expr(fmt.Sprintf("%s + ?", perfMetricExistingColumn(column)), value)
+}
+
+func perfMetricExistingColumn(column string) string {
+	if common.UsingPostgreSQL {
+		return fmt.Sprintf(`"perf_metrics"."%s"`, column)
+	}
+	return column
 }

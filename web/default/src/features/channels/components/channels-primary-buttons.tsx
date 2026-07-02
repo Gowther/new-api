@@ -29,6 +29,7 @@ import {
   SortAsc,
   RefreshCw,
   ArrowUpFromLine,
+  ListTree,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
@@ -194,6 +195,13 @@ export function ChannelsPrimaryButtons() {
               {t('Fix Abilities')}
               <DropdownMenuShortcut>
                 <Settings2 className='h-4 w-4' />
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
+
+            <DropdownMenuItem onClick={() => setOpen('model-priority')}>
+              {t('Model Priority Management')}
+              <DropdownMenuShortcut>
+                <ListTree className='h-4 w-4' />
               </DropdownMenuShortcut>
             </DropdownMenuItem>
 

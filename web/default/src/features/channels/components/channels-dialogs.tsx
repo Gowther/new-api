@@ -22,6 +22,7 @@ import { ChannelTestDialog } from './dialogs/channel-test-dialog'
 import { CopyChannelDialog } from './dialogs/copy-channel-dialog'
 import { EditTagDialog } from './dialogs/edit-tag-dialog'
 import { FetchModelsDialog } from './dialogs/fetch-models-dialog'
+import { ModelPriorityDialog } from './dialogs/model-priority-dialog'
 import { MultiKeyManageDialog } from './dialogs/multi-key-manage-dialog'
 import { OllamaModelsDialog } from './dialogs/ollama-models-dialog'
 import { TagBatchEditDialog } from './dialogs/tag-batch-edit-dialog'
@@ -85,6 +86,12 @@ export function ChannelsDialogs() {
       {/* Edit Tag Dialog */}
       <EditTagDialog
         open={open === 'edit-tag'}
+        onOpenChange={(v) => !v && setOpen(null)}
+      />
+
+      {/* Model Priority Dialog */}
+      <ModelPriorityDialog
+        open={open === 'model-priority'}
         onOpenChange={(v) => !v && setOpen(null)}
       />
 

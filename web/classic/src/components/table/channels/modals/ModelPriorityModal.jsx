@@ -58,7 +58,7 @@ const ModelPriorityModal = ({ visible, handleClose, refresh }) => {
   const fetchAllChannels = async () => {
     setLoading(true);
     try {
-      const res = await API.get('/api/channel?p=0');
+      const res = await API.get('/api/channel?p=0&page_size=9999');
       const { success, message, data } = res.data;
       if (success) {
         setChannels(data?.items || []);

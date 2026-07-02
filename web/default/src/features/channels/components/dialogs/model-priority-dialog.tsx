@@ -57,9 +57,9 @@ export function ModelPriorityDialog({
 
   // Fetch all channels
   const { data: channelsData, isLoading } = useQuery({
-    queryKey: channelsQueryKeys.list({ p: 0 }),
+    queryKey: channelsQueryKeys.list({ p: 0, page_size: 9999 }),
     queryFn: async () => {
-      const response = await getChannels({ p: 0 })
+      const response = await getChannels({ p: 0, page_size: 9999 })
       return response
     },
     enabled: open,

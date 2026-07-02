@@ -431,7 +431,6 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 			tokenName = token.Name
 		}
 	}
-<<<<<<< HEAD
 	if params.LogType == LogTypeConsume {
 		recordTokenUsageDataAsync(params.UserId, username, RecordConsumeLogParams{
 			Content:   params.Content,
@@ -447,9 +446,6 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 	if params.LogType == LogTypeConsume && !common.LogConsumeEnabled {
 		return
 	}
-=======
-	createdAt := common.GetTimestamp()
->>>>>>> upstream/main
 	log := &Log{
 		UserId:    params.UserId,
 		Username:  username,

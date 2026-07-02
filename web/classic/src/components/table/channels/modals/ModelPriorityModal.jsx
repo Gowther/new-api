@@ -27,6 +27,7 @@ import {
   Typography,
   Space,
   Button,
+  Tag,
 } from '@douyinfe/semi-ui';
 import { IconSearch } from '@douyinfe/semi-icons';
 import { API, showError, showSuccess, showInfo } from '../../../../helpers';
@@ -315,53 +316,71 @@ const ModelPriorityModal = ({ visible, handleClose, refresh }) => {
                       </div>
                     ) : (
                       <Space vertical spacing='loose' style={{ width: '100%' }}>
-                        {channelsForModel.map((channel) => (
-                          <div
-                            key={channel.id}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '12px',
-                              padding: '12px',
-                              border: '1px solid var(--semi-color-border)',
-                              borderRadius: '4px',
-                            }}
-                          >
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <Text
-                                strong
-                                ellipsis
-                                style={{ display: 'block', marginBottom: '4px' }}
-                              >
-                                {channel.name}
-                              </Text>
-                              <Text
-                                type='tertiary'
-                                size='small'
-                                style={{ display: 'block' }}
-                              >
-                                ID: {channel.id} | {t('分组')}: {channel.group}
-                              </Text>
-                            </div>
+                        {channelsForModel.map((channel) => {
+                          const isEnabled = channel.status === 1;
+                          return (
                             <div
+                              key={channel.id}
                               style={{
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: '8px',
+                                gap: '12px',
+                                padding: '12px',
+                                border: '1px solid var(--semi-color-border)',
+                                borderRadius: '4px',
+                                backgroundColor: isEnabled
+                                  ? 'transparent'
+                                  : 'var(--semi-color-fill-0)',
+                                opacity: isEnabled ? 1 : 0.6,
                               }}
                             >
-                              <Text>{t('优先级')}:</Text>
-                              <InputNumber
-                                value={getPriorityValue(channel)}
-                                onChange={(value) =>
-                                  handlePriorityChange(channel.id, value)
-                                }
-                                min={0}
-                                style={{ width: '80px' }}
-                              />
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                  <Text
+                                    strong
+                                    ellipsis
+                                    style={{
+                                      textDecoration: isEnabled ? 'none' : 'line-through',
+                                    }}
+                                  >
+                                    {channel.name}
+                                  </Text>
+                                  <Tag
+                                    color={isEnabled ? 'green' : 'red'}
+                                    size='small'
+                                  >
+                                    {isEnabled ? t('已启用') : t('已禁用')}
+                                  </Tag>
+                                </div>
+                                <Text
+                                  type='tertiary'
+                                  size='small'
+                                  style={{ display: 'block' }}
+                                >
+                                  ID: {channel.id} | {t('分组')}: {channel.group}
+                                </Text>
+                              </div>
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                }}
+                              >
+                                <Text>{t('优先级')}:</Text>
+                                <InputNumber
+                                  value={getPriorityValue(channel)}
+                                  onChange={(value) =>
+                                    handlePriorityChange(channel.id, value)
+                                  }
+                                  min={0}
+                                  disabled={!isEnabled}
+                                  style={{ width: '80px' }}
+                                />
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </Space>
                     )}
                   </div>

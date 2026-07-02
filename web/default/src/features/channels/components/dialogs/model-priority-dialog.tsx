@@ -262,39 +262,60 @@ export function ModelPriorityDialog({
                       </div>
                     ) : (
                       <div className='space-y-3 pr-2'>
-                        {channelsForModel.map((channel) => (
-                          <div
-                            key={channel.id}
-                            className='flex items-center gap-3 p-3 border rounded-md'
-                          >
-                            <div className='flex-1 min-w-0'>
-                              <div className='font-medium truncate'>
-                                {channel.name}
+                        {channelsForModel.map((channel) => {
+                          const isEnabled = channel.status === 1
+                          return (
+                            <div
+                              key={channel.id}
+                              className={`flex items-center gap-3 p-3 border rounded-md ${
+                                !isEnabled ? 'opacity-60 bg-muted/30' : ''
+                              }`}
+                            >
+                              <div className='flex-1 min-w-0'>
+                                <div className='flex items-center gap-2 mb-1'>
+                                  <div
+                                    className={`font-medium truncate ${
+                                      !isEnabled ? 'line-through' : ''
+                                    }`}
+                                  >
+                                    {channel.name}
+                                  </div>
+                                  <span
+                                    className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                      isEnabled
+                                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                        : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                                    }`}
+                                  >
+                                    {isEnabled ? t('Enabled') : t('Disabled')}
+                                  </span>
+                                </div>
+                                <div className='text-xs text-muted-foreground'>
+                                  ID: {channel.id} | Group: {channel.group}
+                                </div>
                               </div>
-                              <div className='text-xs text-muted-foreground'>
-                                ID: {channel.id} | Group: {channel.group}
+                              <div className='flex items-center gap-2'>
+                                <Label
+                                  htmlFor={`priority-${channel.id}`}
+                                  className='text-sm whitespace-nowrap'
+                                >
+                                  {t('Priority')}:
+                                </Label>
+                                <Input
+                                  id={`priority-${channel.id}`}
+                                  type='number'
+                                  value={getPriorityValue(channel)}
+                                  onChange={(e) =>
+                                    handlePriorityChange(channel.id, e.target.value)
+                                  }
+                                  className='w-20'
+                                  min={0}
+                                  disabled={!isEnabled}
+                                />
                               </div>
                             </div>
-                            <div className='flex items-center gap-2'>
-                              <Label
-                                htmlFor={`priority-${channel.id}`}
-                                className='text-sm whitespace-nowrap'
-                              >
-                                {t('Priority')}:
-                              </Label>
-                              <Input
-                                id={`priority-${channel.id}`}
-                                type='number'
-                                value={getPriorityValue(channel)}
-                                onChange={(e) =>
-                                  handlePriorityChange(channel.id, e.target.value)
-                                }
-                                className='w-20'
-                                min={0}
-                              />
-                            </div>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     )}
                   </ScrollArea>

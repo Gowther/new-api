@@ -198,7 +198,14 @@ const ChannelsActions = ({
                     size='small'
                     type='tertiary'
                     className='w-full'
-                    onClick={() => setShowModelPriority(true)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowModelPriority(true);
+                      // Close dropdown by clicking outside programmatically
+                      setTimeout(() => {
+                        document.body.click();
+                      }, 0);
+                    }}
                   >
                     {t('模型优先级管理')}
                   </Button>

@@ -189,7 +189,7 @@ export function ModelPriorityDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='w-[95vw] max-w-6xl h-[85vh] max-h-[85vh] flex flex-col p-6'>
+      <DialogContent className='w-[95vw] max-w-6xl sm:max-w-6xl h-[85vh] max-h-[85vh] flex flex-col p-6'>
         <DialogHeader className='flex-shrink-0'>
           <DialogTitle>{t('Model Priority Management')}</DialogTitle>
           <DialogDescription>

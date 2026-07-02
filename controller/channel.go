@@ -928,9 +928,54 @@ func UpdateChannel(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	// Backward compat: legacy clients (web/classic and older scripts) toggle
+	// channel enabled/disabled via PUT /api/channel/ with {id, status}. The
+	// dedicated endpoint POST /api/channel/:id/status now owns this operation
+	// (gated by ChannelOperate) and UpdateChannel otherwise rejects the field.
+	// Tolerate the legacy call here instead of failing it: route the status
+	// change through the same model.UpdateChannelStatus path so the audit log
+	// and cache invalidation stay consistent. If the request carries only
+	// {id, status} (the classic enable/disable shape), return early; otherwise
+	// strip status and let the normal field-update flow handle the rest.
 	if _, ok := requestData["status"]; ok {
-		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
-		return
+		if !authz.Can(c.GetInt("id"), c.GetInt("role"), authz.ChannelOperate) {
+			common.ApiErrorI18n(c, i18n.MsgAuthInsufficientPrivilege)
+			return
+		}
+		if !isManageableChannelStatus(channel.Status) {
+			common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+			return
+		}
+		changed := model.UpdateChannelStatus(channel.Id, "", channel.Status, "manual operation (legacy PUT)")
+		if changed {
+			model.InitChannelCache()
+			service.ResetProxyClientCache()
+		}
+		recordManageAudit(c, "channel.status_update", map[string]interface{}{
+			"id":      channel.Id,
+			"status":  channel.Status,
+			"changed": changed,
+		})
+		// Legacy enable/disable sends only {id, status}; respond now so we
+		// don't run a no-op full Update() that would clobber other fields.
+		if len(requestData) <= 2 {
+			updated, err := model.GetChannelById(channel.Id, true)
+			if err != nil {
+				common.ApiError(c, err)
+				return
+			}
+			updated.Key = ""
+			clearChannelInfo(updated)
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"message": "",
+				"data":    updated,
+			})
+			return
+		}
+		// Status handled; drop it so the field-update flow below doesn't
+		// re-write it or treat it as a sensitive change.
+		delete(requestData, "status")
 	}
 	clearChannelReadOnlyFields(&channel, requestData)
 

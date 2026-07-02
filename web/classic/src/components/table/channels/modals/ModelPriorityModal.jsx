@@ -58,13 +58,30 @@ const ModelPriorityModal = ({ visible, handleClose, refresh }) => {
   const fetchAllChannels = async () => {
     setLoading(true);
     try {
-      const res = await API.get('/api/channel?p=0&page_size=9999');
-      const { success, message, data } = res.data;
-      if (success) {
-        setChannels(data?.items || []);
-      } else {
-        showError(message || t('获取渠道列表失败'));
+      let allChannels = [];
+      let page = 1;
+      const pageSize = 100; // Backend max limit
+      let hasMore = true;
+
+      while (hasMore) {
+        const res = await API.get(`/api/channel?p=${page}&page_size=${pageSize}`);
+        const { success, message, data } = res.data;
+
+        if (!success) {
+          showError(message || t('获取渠道列表失败'));
+          break;
+        }
+
+        const items = data?.items || [];
+        allChannels = allChannels.concat(items);
+
+        // Check if there are more pages
+        const total = data?.total || 0;
+        hasMore = allChannels.length < total;
+        page++;
       }
+
+      setChannels(allChannels);
     } catch (error) {
       showError(t('获取渠道列表失败'));
     } finally {

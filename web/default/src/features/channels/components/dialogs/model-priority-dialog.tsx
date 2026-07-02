@@ -55,12 +55,39 @@ export function ModelPriorityDialog({
     Record<number, number>
   >({})
 
-  // Fetch all channels
+  // Fetch all channels with pagination
   const { data: channelsData, isLoading } = useQuery({
-    queryKey: channelsQueryKeys.list({ p: 0, page_size: 9999 }),
+    queryKey: channelsQueryKeys.list({ all: true }),
     queryFn: async () => {
-      const response = await getChannels({ p: 0, page_size: 9999 })
-      return response
+      let allChannels: typeof channels = []
+      let page = 1
+      const pageSize = 100 // Backend max limit
+      let hasMore = true
+
+      while (hasMore) {
+        const response = await getChannels({ p: page, page_size: pageSize })
+        if (!response.success || !response.data) {
+          break
+        }
+
+        const items = response.data.items || []
+        allChannels = allChannels.concat(items)
+
+        // Check if there are more pages
+        const total = response.data.total || 0
+        hasMore = allChannels.length < total
+        page++
+      }
+
+      return {
+        success: true,
+        data: {
+          items: allChannels,
+          total: allChannels.length,
+          page: 1,
+          page_size: allChannels.length,
+        },
+      }
     },
     enabled: open,
   })

@@ -189,7 +189,7 @@ export function ModelPriorityDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='max-w-4xl h-[80vh] flex flex-col'>
+      <DialogContent className='max-w-6xl max-h-[85vh] flex flex-col'>
         <DialogHeader>
           <DialogTitle>{t('Model Priority Management')}</DialogTitle>
           <DialogDescription>
@@ -200,14 +200,14 @@ export function ModelPriorityDialog({
         </DialogHeader>
 
         {isLoading ? (
-          <div className='flex items-center justify-center flex-1'>
+          <div className='flex items-center justify-center flex-1 min-h-[400px]'>
             <Loader2 className='h-8 w-8 animate-spin text-muted-foreground' />
           </div>
         ) : (
-          <div className='flex-1 flex gap-4 min-h-0'>
+          <div className='flex-1 flex gap-6 overflow-hidden'>
             {/* Left: Model List */}
-            <div className='w-1/3 flex flex-col gap-2 border-r pr-4'>
-              <div className='relative'>
+            <div className='w-80 flex flex-col gap-3 border-r pr-4'>
+              <div className='relative flex-shrink-0'>
                 <Search className='absolute left-2 top-2.5 h-4 w-4 text-muted-foreground' />
                 <Input
                   placeholder={t('Search models...')}
@@ -216,10 +216,10 @@ export function ModelPriorityDialog({
                   className='pl-8'
                 />
               </div>
-              <ScrollArea className='flex-1'>
-                <div className='space-y-1'>
+              <ScrollArea className='flex-1 -mr-4 pr-4'>
+                <div className='space-y-1 pb-2'>
                   {filteredModels.length === 0 ? (
-                    <div className='text-center text-sm text-muted-foreground py-4'>
+                    <div className='text-center text-sm text-muted-foreground py-8'>
                       {t('No models found')}
                     </div>
                   ) : (
@@ -227,9 +227,9 @@ export function ModelPriorityDialog({
                       <button
                         key={model}
                         onClick={() => setSelectedModel(model)}
-                        className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+                        className={`w-full text-left px-3 py-2.5 rounded-md text-sm transition-colors break-words ${
                           selectedModel === model
-                            ? 'bg-primary text-primary-foreground'
+                            ? 'bg-primary text-primary-foreground font-medium'
                             : 'hover:bg-muted'
                         }`}
                       >
@@ -242,46 +242,46 @@ export function ModelPriorityDialog({
             </div>
 
             {/* Right: Channel List with Priority Editor */}
-            <div className='flex-1 flex flex-col gap-2'>
+            <div className='flex-1 flex flex-col gap-3 min-w-0'>
               {!selectedModel ? (
                 <div className='flex items-center justify-center h-full text-muted-foreground text-sm'>
                   {t('Select a model to view channels')}
                 </div>
               ) : (
                 <>
-                  <div className='text-sm font-medium'>
+                  <div className='text-sm font-medium flex-shrink-0'>
                     {t('Channels supporting: {{model}}', {
                       model: selectedModel,
                     })}{' '}
                     ({channelsForModel.length})
                   </div>
-                  <ScrollArea className='flex-1'>
+                  <ScrollArea className='flex-1 -mr-4 pr-4'>
                     {channelsForModel.length === 0 ? (
-                      <div className='text-center text-sm text-muted-foreground py-4'>
+                      <div className='text-center text-sm text-muted-foreground py-8'>
                         {t('No channels support this model')}
                       </div>
                     ) : (
-                      <div className='space-y-3 pr-2'>
+                      <div className='space-y-3 pb-2'>
                         {channelsForModel.map((channel) => {
                           const isEnabled = channel.status === 1
                           return (
                             <div
                               key={channel.id}
-                              className={`flex items-center gap-3 p-3 border rounded-md ${
+                              className={`flex items-center gap-4 p-4 border rounded-lg ${
                                 !isEnabled ? 'opacity-60 bg-muted/30' : ''
                               }`}
                             >
                               <div className='flex-1 min-w-0'>
-                                <div className='flex items-center gap-2 mb-1'>
+                                <div className='flex items-center gap-2 mb-1.5 flex-wrap'>
                                   <div
-                                    className={`font-medium truncate ${
+                                    className={`font-medium ${
                                       !isEnabled ? 'line-through' : ''
                                     }`}
                                   >
                                     {channel.name}
                                   </div>
                                   <span
-                                    className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                    className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${
                                       isEnabled
                                         ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
                                         : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
@@ -294,7 +294,7 @@ export function ModelPriorityDialog({
                                   ID: {channel.id} | Group: {channel.group}
                                 </div>
                               </div>
-                              <div className='flex items-center gap-2'>
+                              <div className='flex items-center gap-2 flex-shrink-0'>
                                 <Label
                                   htmlFor={`priority-${channel.id}`}
                                   className='text-sm whitespace-nowrap'
@@ -308,7 +308,7 @@ export function ModelPriorityDialog({
                                   onChange={(e) =>
                                     handlePriorityChange(channel.id, e.target.value)
                                   }
-                                  className='w-20'
+                                  className='w-24'
                                   min={0}
                                   disabled={!isEnabled}
                                 />

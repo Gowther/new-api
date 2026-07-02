@@ -1756,7 +1756,7 @@
     "footer.columns.related.links.oneApi": "One API",
     "footer.columns.related.title": "相关项目",
     "footer.defaultCopyright": "版权所有。",
-    "footer.new\u0061pi.projectAttributionSuffix": "版权所有，由项目贡献者设计与开发。",
+    "footer.newapi.projectAttributionSuffix": "版权所有，由项目贡献者设计与开发。",
     "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment": "对于 2025 年 5 月 10 日之后添加的渠道，在部署时无需从模型名称中移除 \".\"",
     "For private deployments, format: https://fastgpt.run/api/openapi": "对于私有部署，格式为：https://fastgpt.run/api/openapi",
     "Force a syntactically valid JSON response": "强制返回语法合法的 JSON",
@@ -4473,6 +4473,14 @@
     "Time Range": "时间范围",
     "Total Requests": "总请求数",
     "Usage Details": "用量明细",
-    "Usage Trend": "用量趋势"
+    "Usage Trend": "用量趋势",
+    "Model Priority Management": "模型优先级管理",
+    "Select a model from the left to view and edit priorities for channels that support it": "从左侧选择一个模型，查看并编辑支持该模型的渠道优先级",
+    "Channels supporting: {{model}}": "支持的渠道：{{model}}",
+    "Select a model to view channels": "选择模型以查看渠道",
+    "No channels support this model": "没有渠道支持此模型",
+    "{{count}} channel(s) updated": "已更新 {{count}} 个渠道",
+    "{{count}} channel(s) failed to update": "{{count}} 个渠道更新失败",
+    "Failed to update priorities": "更新优先级失败"
   }
 }

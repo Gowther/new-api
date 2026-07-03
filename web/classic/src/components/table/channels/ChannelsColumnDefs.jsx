@@ -581,6 +581,7 @@ export const getChannelsColumns = ({
           return (
             <div>
               <InputNumber
+                key={`priority-${record.id}-${record.priority}`}
                 style={{ width: 70 }}
                 name='priority'
                 onBlur={(e) => {
@@ -597,6 +598,7 @@ export const getChannelsColumns = ({
         } else {
           return (
             <InputNumber
+              key={`priority-${record.id}-${record.priority}`}
               style={{ width: 70 }}
               name='priority'
               keepFocus={true}

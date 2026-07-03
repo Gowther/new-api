@@ -42,7 +42,12 @@ const sortChannelsByPriority = (channels) =>
     return a.id - b.id;
   });
 
-const ModelPriorityModal = ({ visible, handleClose, refresh }) => {
+const ModelPriorityModal = ({
+  visible,
+  handleClose,
+  refresh,
+  onPrioritiesUpdated,
+}) => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -72,7 +77,9 @@ const ModelPriorityModal = ({ visible, handleClose, refresh }) => {
       let hasMore = true;
 
       while (hasMore) {
-        const res = await API.get(`/api/channel?p=${page}&page_size=${pageSize}`);
+        const res = await API.get(
+          `/api/channel?p=${page}&page_size=${pageSize}`,
+        );
         const { success, message, data } = res.data;
 
         if (!success) {
@@ -118,12 +125,15 @@ const ModelPriorityModal = ({ visible, handleClose, refresh }) => {
     return allModels.filter((model) => model.toLowerCase().includes(search));
   }, [allModels, modelSearch]);
 
-  const getPriorityValue = useCallback((channel) => {
-    if (priorityChanges[channel.id] !== undefined) {
-      return priorityChanges[channel.id];
-    }
-    return channel.priority ?? 0;
-  }, [priorityChanges]);
+  const getPriorityValue = useCallback(
+    (channel) => {
+      if (priorityChanges[channel.id] !== undefined) {
+        return priorityChanges[channel.id];
+      }
+      return channel.priority ?? 0;
+    },
+    [priorityChanges],
+  );
 
   // Get channels that support the selected model
   const channelsForModel = useMemo(() => {
@@ -157,19 +167,24 @@ const ModelPriorityModal = ({ visible, handleClose, refresh }) => {
 
     setSaving(true);
     try {
-      const updates = Object.entries(priorityChanges).map(async ([id, priority]) => {
-        const channelId = parseInt(id, 10);
-        const res = await API.put('/api/channel/', { id: channelId, priority });
-        const { success, message } = res.data;
-        if (!success) {
-          throw new Error(message || t('更新优先级失败'));
-        }
-        return { id: channelId, priority };
-      });
+      const updates = Object.entries(priorityChanges).map(
+        async ([id, priority]) => {
+          const channelId = parseInt(id, 10);
+          const res = await API.put('/api/channel/', {
+            id: channelId,
+            priority,
+          });
+          const { success, message } = res.data;
+          if (!success) {
+            throw new Error(message || t('更新优先级失败'));
+          }
+          return { id: channelId, priority };
+        },
+      );
 
       const results = await Promise.allSettled(updates);
       const successfulUpdates = results.flatMap((result) =>
-        result.status === 'fulfilled' ? [result.value] : []
+        result.status === 'fulfilled' ? [result.value] : [],
       );
       const successCount = successfulUpdates.length;
       const failCount = results.filter((r) => r.status === 'rejected').length;
@@ -178,14 +193,14 @@ const ModelPriorityModal = ({ visible, handleClose, refresh }) => {
         showSuccess(t('已更新 {{count}} 个渠道', { count: successCount }));
         setChannels((prev) => {
           const prioritiesById = new Map(
-            successfulUpdates.map((update) => [update.id, update.priority])
+            successfulUpdates.map((update) => [update.id, update.priority]),
           );
           return sortChannelsByPriority(
             prev.map((channel) => {
               const priority = prioritiesById.get(channel.id);
               if (priority === undefined) return channel;
               return { ...channel, priority };
-            })
+            }),
           );
         });
         setPriorityChanges((prev) => {
@@ -195,7 +210,8 @@ const ModelPriorityModal = ({ visible, handleClose, refresh }) => {
           });
           return next;
         });
-        refresh?.();
+        onPrioritiesUpdated?.(successfulUpdates);
+        await refresh?.();
       }
 
       if (failCount > 0) {
@@ -216,7 +232,9 @@ const ModelPriorityModal = ({ visible, handleClose, refresh }) => {
       width={1000}
       style={{ maxWidth: '95vw' }}
       footer={
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+        <div
+          style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}
+        >
           <Button onClick={handleClose} disabled={saving}>
             {t('取消')}
           </Button>
@@ -226,7 +244,9 @@ const ModelPriorityModal = ({ visible, handleClose, refresh }) => {
             onClick={handleSave}
             loading={saving}
             disabled={
-              saving || Object.keys(priorityChanges).length === 0 || !selectedModel
+              saving ||
+              Object.keys(priorityChanges).length === 0 ||
+              !selectedModel
             }
           >
             {t('保存更改')}
@@ -235,7 +255,10 @@ const ModelPriorityModal = ({ visible, handleClose, refresh }) => {
       }
     >
       <div style={{ minHeight: '500px', maxHeight: '70vh' }}>
-        <Text type='tertiary' style={{ display: 'block', marginBottom: '16px' }}>
+        <Text
+          type='tertiary'
+          style={{ display: 'block', marginBottom: '16px' }}
+        >
           {t('从左侧选择一个模型，查看并编辑支持该模型的渠道优先级')}
         </Text>
 
@@ -334,7 +357,10 @@ const ModelPriorityModal = ({ visible, handleClose, refresh }) => {
                 </div>
               ) : (
                 <>
-                  <Text strong style={{ display: 'block', marginBottom: '12px' }}>
+                  <Text
+                    strong
+                    style={{ display: 'block', marginBottom: '12px' }}
+                  >
                     {t('支持模型的渠道：{{model}}', { model: selectedModel })} (
                     {channelsForModel.length})
                   </Text>
@@ -375,12 +401,21 @@ const ModelPriorityModal = ({ visible, handleClose, refresh }) => {
                               }}
                             >
                               <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                <div
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    marginBottom: '4px',
+                                  }}
+                                >
                                   <Text
                                     strong
                                     ellipsis
                                     style={{
-                                      textDecoration: isEnabled ? 'none' : 'line-through',
+                                      textDecoration: isEnabled
+                                        ? 'none'
+                                        : 'line-through',
                                     }}
                                   >
                                     {channel.name}
@@ -397,7 +432,8 @@ const ModelPriorityModal = ({ visible, handleClose, refresh }) => {
                                   size='small'
                                   style={{ display: 'block' }}
                                 >
-                                  ID: {channel.id} | {t('分组')}: {channel.group}
+                                  ID: {channel.id} | {t('分组')}:{' '}
+                                  {channel.group}
                                 </Text>
                               </div>
                               <div

@@ -93,6 +93,15 @@ const ChannelsActions = ({
             {t('批量设置标签')}
           </Button>
 
+          <Button
+            size='small'
+            type='tertiary'
+            onClick={() => setShowModelPriority(true)}
+            className='w-full md:w-auto'
+          >
+            {t('模型优先级管理')}
+          </Button>
+
           <Dropdown
             ref={dropdownRef}
             size='small'
@@ -195,19 +204,6 @@ const ChannelsActions = ({
                     }}
                   >
                     {t('处理全部渠道上游更新')}
-                  </Button>
-                </Dropdown.Item>
-                <Dropdown.Item
-                  onClick={() => {
-                    setShowModelPriority(true);
-                  }}
-                >
-                  <Button
-                    size='small'
-                    type='tertiary'
-                    className='w-full'
-                  >
-                    {t('模型优先级管理')}
                   </Button>
                 </Dropdown.Item>
                 <Dropdown.Item>

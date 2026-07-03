@@ -618,6 +618,86 @@ export const useChannelsData = () => {
     }
   };
 
+  const priorityValue = (priority) => {
+    const value = Number(priority);
+    return Number.isFinite(value) ? value : 0;
+  };
+
+  const compareChannelIds = (leftId, rightId) => {
+    const leftValue = Number(leftId);
+    const rightValue = Number(rightId);
+    if (Number.isFinite(leftValue) && Number.isFinite(rightValue)) {
+      return leftValue - rightValue;
+    }
+    return String(leftId ?? '').localeCompare(
+      String(rightId ?? ''),
+      undefined,
+      {
+        numeric: true,
+      },
+    );
+  };
+
+  const sortChannelRowsByPriority = (rows) =>
+    [...rows].sort((a, b) => {
+      const priorityDiff =
+        priorityValue(b.priority) - priorityValue(a.priority);
+      if (priorityDiff !== 0) return priorityDiff;
+      return compareChannelIds(a.id, b.id);
+    });
+
+  const syncChannelPriorityUpdates = (updates = []) => {
+    const prioritiesById = new Map(
+      updates.map((update) => [Number(update.id), update.priority]),
+    );
+    if (prioritiesById.size === 0) return;
+
+    setChannels((prev) => {
+      let changed = false;
+      const nextChannels = prev.map((channel) => {
+        if (channel.children !== undefined) {
+          let childrenChanged = false;
+          const children = channel.children.map((child) => {
+            if (!prioritiesById.has(Number(child.id))) return child;
+
+            childrenChanged = true;
+            changed = true;
+            return {
+              ...child,
+              priority: prioritiesById.get(Number(child.id)),
+            };
+          });
+          if (!childrenChanged) return channel;
+
+          const firstPriority = children[0]?.priority;
+          const samePriority = children.every(
+            (child) => child.priority === firstPriority,
+          );
+          const sortedChildren = idSort
+            ? children
+            : sortChannelRowsByPriority(children);
+
+          return {
+            ...channel,
+            children: sortedChildren,
+            priority: samePriority ? firstPriority : '',
+          };
+        }
+
+        if (!prioritiesById.has(Number(channel.id))) return channel;
+
+        changed = true;
+        return {
+          ...channel,
+          priority: prioritiesById.get(Number(channel.id)),
+        };
+      });
+
+      if (!changed) return prev;
+      return idSort ? nextChannels : sortChannelRowsByPriority(nextChannels);
+    });
+  };
+
   // Tag edit
   const submitTagEdit = async (type, data) => {
     switch (type) {
@@ -1232,6 +1312,7 @@ export const useChannelsData = () => {
     handlePageSizeChange,
     copySelectedChannel,
     updateChannelProperty,
+    syncChannelPriorityUpdates,
     submitTagEdit,
     closeEdit,
     handleRow,

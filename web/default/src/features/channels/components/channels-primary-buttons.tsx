@@ -172,6 +172,17 @@ export function ChannelsPrimaryButtons() {
           )}
         </Tooltip>
 
+        {/* Model Priority Management */}
+        <Button
+          variant='outline'
+          size='sm'
+          onClick={() => setOpen('model-priority')}
+        >
+          <ListTree className='h-4 w-4' />
+          <span className='max-sm:hidden'>{t('Model Priority Management')}</span>
+          <span className='sm:hidden'>{t('Priority')}</span>
+        </Button>
+
         {/* More Actions */}
         <DropdownMenu>
           <DropdownMenuTrigger render={<Button variant='outline' size='sm' />}>
@@ -263,13 +274,6 @@ export function ChannelsPrimaryButtons() {
               {t('Repair Channel Consistency')}
               <DropdownMenuShortcut>
                 <Settings2 className='h-4 w-4' />
-              </DropdownMenuShortcut>
-            </DropdownMenuItem>
-
-            <DropdownMenuItem onClick={() => setOpen('model-priority')}>
-              {t('Model Priority Management')}
-              <DropdownMenuShortcut>
-                <ListTree className='h-4 w-4' />
               </DropdownMenuShortcut>
             </DropdownMenuItem>
 

@@ -78,6 +78,7 @@ const ChannelsPage = () => {
         visible={channelsData.showModelPriority}
         handleClose={() => channelsData.setShowModelPriority(false)}
         refresh={channelsData.refresh}
+        onPrioritiesUpdated={channelsData.syncChannelPriorityUpdates}
       />
 
       {/* Main Content */}

@@ -41,6 +41,25 @@ type testResult struct {
 	newAPIError *types.NewAPIError
 }
 
+const channelTestTextPrompt = "Explain in one short sentence why caching can reduce latency."
+
+func buildTextChannelTestMessages() []dto.Message {
+	return []dto.Message{
+		{
+			Role:    "user",
+			Content: channelTestTextPrompt,
+		},
+	}
+}
+
+func buildTextChannelTestResponsesInput() json.RawMessage {
+	data, err := common.Marshal(buildTextChannelTestMessages())
+	if err != nil {
+		return json.RawMessage(`[{"role":"user","content":"Explain in one short sentence why caching can reduce latency."}]`)
+	}
+	return json.RawMessage(data)
+}
+
 func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointType string) string {
 	normalized := strings.TrimSpace(endpointType)
 	if normalized != "" {
@@ -693,7 +712,7 @@ func detectErrorMessageFromJSONBytes(jsonBytes []byte) string {
 }
 
 func buildTestRequest(model string, endpointType string, channel *model.Channel, isStream bool) dto.Request {
-	testResponsesInput := json.RawMessage(`[{"role":"user","content":"hi"}]`)
+	testResponsesInput := buildTextChannelTestResponsesInput()
 
 	// 根据端点类型构建不同的测试请求
 	if endpointType != "" {
@@ -724,7 +743,7 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 			// 返回 OpenAIResponsesRequest
 			return &dto.OpenAIResponsesRequest{
 				Model:  model,
-				Input:  json.RawMessage(`[{"role":"user","content":"hi"}]`),
+				Input:  testResponsesInput,
 				Stream: lo.ToPtr(isStream),
 			}
 		case constant.EndpointTypeOpenAIResponseCompact:
@@ -740,14 +759,9 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 				maxTokens = 3000
 			}
 			req := &dto.GeneralOpenAIRequest{
-				Model:  model,
-				Stream: lo.ToPtr(isStream),
-				Messages: []dto.Message{
-					{
-						Role:    "user",
-						Content: "hi",
-					},
-				},
+				Model:     model,
+				Stream:    lo.ToPtr(isStream),
+				Messages:  buildTextChannelTestMessages(),
 				MaxTokens: lo.ToPtr(maxTokens),
 			}
 			if isStream {
@@ -790,21 +804,16 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 	if strings.Contains(strings.ToLower(model), "codex") {
 		return &dto.OpenAIResponsesRequest{
 			Model:  model,
-			Input:  json.RawMessage(`[{"role":"user","content":"hi"}]`),
+			Input:  testResponsesInput,
 			Stream: lo.ToPtr(isStream),
 		}
 	}
 
 	// Chat/Completion 请求 - 返回 GeneralOpenAIRequest
 	testRequest := &dto.GeneralOpenAIRequest{
-		Model:  model,
-		Stream: lo.ToPtr(isStream),
-		Messages: []dto.Message{
-			{
-				Role:    "user",
-				Content: "hi",
-			},
-		},
+		Model:    model,
+		Stream:   lo.ToPtr(isStream),
+		Messages: buildTextChannelTestMessages(),
 	}
 	if isStream {
 		testRequest.StreamOptions = &dto.StreamOptions{IncludeUsage: true}

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
@@ -15,6 +16,41 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
+
+func requireTextChannelTestPrompt(t *testing.T, input []byte) {
+	t.Helper()
+
+	var messages []dto.Message
+	require.NoError(t, common.Unmarshal(input, &messages))
+	require.Len(t, messages, 1)
+	require.Equal(t, "user", messages[0].Role)
+	require.Equal(t, channelTestTextPrompt, messages[0].Content)
+}
+
+func TestBuildTestRequestUsesDescriptiveTextPrompt(t *testing.T) {
+	t.Run("chat completions", func(t *testing.T) {
+		request := buildTestRequest("gpt-4o", "", nil, false)
+		chatRequest, ok := request.(*dto.GeneralOpenAIRequest)
+		require.True(t, ok)
+		require.Len(t, chatRequest.Messages, 1)
+		require.Equal(t, "user", chatRequest.Messages[0].Role)
+		require.Equal(t, channelTestTextPrompt, chatRequest.Messages[0].Content)
+	})
+
+	t.Run("responses", func(t *testing.T) {
+		request := buildTestRequest("gpt-4o", string(constant.EndpointTypeOpenAIResponse), nil, false)
+		responsesRequest, ok := request.(*dto.OpenAIResponsesRequest)
+		require.True(t, ok)
+		requireTextChannelTestPrompt(t, responsesRequest.Input)
+	})
+
+	t.Run("responses compact", func(t *testing.T) {
+		request := buildTestRequest("gpt-4o", string(constant.EndpointTypeOpenAIResponseCompact), nil, false)
+		compactRequest, ok := request.(*dto.OpenAIResponsesCompactionRequest)
+		require.True(t, ok)
+		requireTextChannelTestPrompt(t, compactRequest.Input)
+	})
+}
 
 func TestSettleTestQuotaUsesTieredBilling(t *testing.T) {
 	info := &relaycommon.RelayInfo{

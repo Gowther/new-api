@@ -20,12 +20,35 @@ func filterPricingByUsableGroups(pricing []model.Pricing, usableGroup map[string
 	filtered := make([]model.Pricing, 0, len(pricing))
 	for _, item := range pricing {
 		if common.StringsContains(item.EnableGroup, "all") {
+			item.BoundChannels = filterBoundChannelsByUsableGroups(item.BoundChannels, usableGroup)
 			filtered = append(filtered, item)
 			continue
 		}
 		for _, group := range item.EnableGroup {
 			if _, ok := usableGroup[group]; ok {
+				item.BoundChannels = filterBoundChannelsByUsableGroups(item.BoundChannels, usableGroup)
 				filtered = append(filtered, item)
+				break
+			}
+		}
+	}
+	return filtered
+}
+
+func filterBoundChannelsByUsableGroups(channels []model.BoundChannel, usableGroup map[string]string) []model.BoundChannel {
+	if len(channels) == 0 {
+		return channels
+	}
+
+	filtered := make([]model.BoundChannel, 0, len(channels))
+	for _, channel := range channels {
+		if len(channel.Groups) == 0 || common.StringsContains(channel.Groups, "all") {
+			filtered = append(filtered, channel)
+			continue
+		}
+		for _, group := range channel.Groups {
+			if _, ok := usableGroup[group]; ok {
+				filtered = append(filtered, channel)
 				break
 			}
 		}

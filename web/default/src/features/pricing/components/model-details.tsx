@@ -60,6 +60,7 @@ import { cn } from '@/lib/utils'
 
 import { DEFAULT_TOKEN_UNIT, QUOTA_TYPE_VALUES } from '../constants'
 import { usePricingData } from '../hooks/use-pricing-data'
+import { getPricingChannelDisplayLabel } from '../lib/channels'
 import {
   getDynamicPriceEntries,
   getDynamicPricingSummary,
@@ -445,6 +446,9 @@ function ModelBackendProviderSection(props: { model: PricingModel }) {
   const { t } = useTranslation()
   const model = props.model
   const groups = normalizeCatalogItems(model.enable_groups)
+  const channels = (model.bound_channels || []).map((channel) =>
+    getPricingChannelDisplayLabel(channel, t)
+  )
   const endpoints = normalizeCatalogItems(model.supported_endpoint_types)
   const tags = parseTags(model.tags)
   const cells: React.ReactNode[] = []
@@ -471,6 +475,14 @@ function ModelBackendProviderSection(props: { model: PricingModel }) {
     cells.push(
       <CatalogInfoCell key='groups' label={t('Groups')}>
         <CatalogPillList items={groups} />
+      </CatalogInfoCell>
+    )
+  }
+
+  if (channels.length > 0) {
+    cells.push(
+      <CatalogInfoCell key='channels' label={t('Channels')}>
+        <CatalogPillList items={channels} />
       </CatalogInfoCell>
     )
   }

@@ -32,6 +32,7 @@ type Pricing struct {
 	AudioRatio             *float64                `json:"audio_ratio,omitempty"`
 	AudioCompletionRatio   *float64                `json:"audio_completion_ratio,omitempty"`
 	EnableGroup            []string                `json:"enable_groups"`
+	BoundChannels          []BoundChannel          `json:"bound_channels,omitempty"`
 	SupportedEndpointTypes []constant.EndpointType `json:"supported_endpoint_types"`
 	BillingMode            string                  `json:"billing_mode,omitempty"`
 	BillingExpr            string                  `json:"billing_expr,omitempty"`
@@ -338,6 +339,21 @@ func updatePricing() {
 			}
 		}
 		pricingMap = append(pricingMap, pricing)
+	}
+
+	modelNames := make([]string, 0, len(pricingMap))
+	for _, pricing := range pricingMap {
+		modelNames = append(modelNames, pricing.ModelName)
+	}
+	if len(modelNames) > 0 {
+		boundChannelsByModel, err := GetBoundChannelsByModelsMap(modelNames)
+		if err != nil {
+			common.SysLog(fmt.Sprintf("GetBoundChannelsByModelsMap error: %v", err))
+		} else {
+			for i := range pricingMap {
+				pricingMap[i].BoundChannels = boundChannelsByModel[pricingMap[i].ModelName]
+			}
+		}
 	}
 
 	// 防止大更新后数据不通用

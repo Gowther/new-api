@@ -29,6 +29,7 @@ import { StatusBadge } from '@/components/status-badge'
 import { getLobeIcon } from '@/lib/lobe-icon'
 
 import { DEFAULT_TOKEN_UNIT, QUOTA_TYPE_VALUES } from '../constants'
+import { getPricingChannelDisplayLabel } from '../lib/channels'
 import {
   getDynamicDisplayGroupRatio,
   getDynamicPricingSummary,
@@ -359,6 +360,33 @@ export function usePricingColumns(
         )
       },
       size: 140,
+      enableSorting: false,
+    },
+
+    // Channels column
+    {
+      accessorKey: 'bound_channels',
+      header: t('Channels'),
+      cell: ({ row }) => {
+        const channels = row.original.bound_channels || []
+        if (channels.length === 0) {
+          return <span className='text-muted-foreground/50 text-xs'>—</span>
+        }
+        return (
+          <BadgeListCell
+            items={channels.map((channel) => (
+              <StatusBadge
+                key={`${channel.name}-${channel.type}`}
+                label={getPricingChannelDisplayLabel(channel, t)}
+                autoColor={channel.name || String(channel.type)}
+                size='sm'
+                copyable={false}
+              />
+            ))}
+          />
+        )
+      },
+      size: 220,
       enableSorting: false,
     },
 

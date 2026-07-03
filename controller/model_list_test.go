@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
@@ -152,6 +153,11 @@ func pricingByModelName(pricings []model.Pricing) map[string]model.Pricing {
 	return byName
 }
 
+type pricingResponse struct {
+	Success bool            `json:"success"`
+	Data    []model.Pricing `json:"data"`
+}
+
 func decodeUserModelsResponse(t *testing.T, recorder *httptest.ResponseRecorder) []string {
 	t.Helper()
 
@@ -283,4 +289,72 @@ func TestListModelsTokenLimitIncludesTieredBillingModel(t *testing.T) {
 	require.NotContains(t, ids, "zz-token-tiered-empty-expr-model")
 	require.NotContains(t, ids, "zz-token-tiered-missing-expr-model")
 	require.NotContains(t, ids, "zz-token-unpriced-model")
+}
+
+func TestGetPricingFiltersBoundChannelsByUsableGroups(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+
+	originalUsableGroups := setting.UserUsableGroups2JSONString()
+	t.Cleanup(func() {
+		require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(originalUsableGroups))
+		model.InvalidatePricingCache()
+	})
+
+	usableGroups, err := common.Marshal(map[string]string{
+		"default": "Default",
+	})
+	require.NoError(t, err)
+	require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(string(usableGroups)))
+
+	require.NoError(t, db.Create(&model.User{
+		Id:       2001,
+		Username: "pricing-user",
+		Password: "password",
+		Group:    "default",
+		Status:   common.UserStatusEnabled,
+	}).Error)
+	require.NoError(t, db.Create(&[]model.Channel{
+		{
+			Id:     1,
+			Type:   constant.ChannelTypeOpenAI,
+			Key:    "sk-default",
+			Status: common.ChannelStatusEnabled,
+			Name:   "default-channel",
+			Group:  "default",
+		},
+		{
+			Id:     2,
+			Type:   constant.ChannelTypeOpenAI,
+			Key:    "sk-vip",
+			Status: common.ChannelStatusEnabled,
+			Name:   "vip-channel",
+			Group:  "vip",
+		},
+	}).Error)
+	require.NoError(t, db.Create(&[]model.Ability{
+		{Group: "default", Model: "zz-pricing-channel-model", ChannelId: 1, Enabled: true},
+		{Group: "vip", Model: "zz-pricing-channel-model", ChannelId: 2, Enabled: true},
+	}).Error)
+
+	model.InvalidatePricingCache()
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/pricing", nil)
+	ctx.Set("id", 2001)
+
+	GetPricing(ctx)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var payload pricingResponse
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &payload))
+	require.True(t, payload.Success)
+
+	pricingByName := pricingByModelName(payload.Data)
+	pricing, ok := pricingByName["zz-pricing-channel-model"]
+	require.True(t, ok)
+	require.Len(t, pricing.BoundChannels, 1)
+	require.Equal(t, "default-channel", pricing.BoundChannels[0].Name)
+	require.Equal(t, constant.ChannelTypeOpenAI, pricing.BoundChannels[0].Type)
 }

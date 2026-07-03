@@ -17,8 +17,9 @@ const (
 )
 
 type BoundChannel struct {
-	Name string `json:"name"`
-	Type int    `json:"type"`
+	Name   string   `json:"name"`
+	Type   int      `json:"type"`
+	Groups []string `json:"-"`
 }
 
 type Model struct {
@@ -116,22 +117,45 @@ func GetBoundChannelsByModelsMap(modelNames []string) (map[string][]BoundChannel
 		return result, nil
 	}
 	type row struct {
-		Model string
-		Name  string
-		Type  int
+		Model        string
+		Name         string
+		Type         int
+		AbilityGroup string
 	}
 	var rows []row
 	err := DB.Table("channels").
-		Select("abilities.model as model, channels.name as name, channels.type as type").
+		Select("abilities.model as model, channels.name as name, channels.type as type, abilities."+commonGroupCol+" as ability_group").
 		Joins("JOIN abilities ON abilities.channel_id = channels.id").
 		Where("abilities.model IN ? AND abilities.enabled = ?", modelNames, true).
-		Distinct().
 		Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
+
+	modelChannelIndex := make(map[string]map[string]int, len(modelNames))
 	for _, r := range rows {
-		result[r.Model] = append(result[r.Model], BoundChannel{Name: r.Name, Type: r.Type})
+		channelKey := r.Name + "_" + strconv.Itoa(r.Type)
+		indexByChannel, ok := modelChannelIndex[r.Model]
+		if !ok {
+			indexByChannel = make(map[string]int)
+			modelChannelIndex[r.Model] = indexByChannel
+		}
+		if idx, exists := indexByChannel[channelKey]; exists {
+			if r.AbilityGroup != "" && !common.StringsContains(result[r.Model][idx].Groups, r.AbilityGroup) {
+				result[r.Model][idx].Groups = append(result[r.Model][idx].Groups, r.AbilityGroup)
+			}
+			continue
+		}
+
+		channel := BoundChannel{
+			Name: r.Name,
+			Type: r.Type,
+		}
+		if r.AbilityGroup != "" {
+			channel.Groups = []string{r.AbilityGroup}
+		}
+		result[r.Model] = append(result[r.Model], channel)
+		indexByChannel[channelKey] = len(result[r.Model]) - 1
 	}
 	return result, nil
 }

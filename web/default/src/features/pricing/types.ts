@@ -27,6 +27,11 @@ export type PricingVendor = {
   description?: string
 }
 
+export type PricingBoundChannel = {
+  name: string
+  type: number
+}
+
 export type PricingModel = {
   id: number
   model_name: string
@@ -46,6 +51,7 @@ export type PricingModel = {
   audio_ratio?: number | null
   audio_completion_ratio?: number | null
   enable_groups: string[]
+  bound_channels?: PricingBoundChannel[]
   tags?: string
   supported_endpoint_types?: string[]
   key?: string

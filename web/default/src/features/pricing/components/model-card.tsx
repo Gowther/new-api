@@ -26,6 +26,7 @@ import { getLobeIcon } from '@/lib/lobe-icon'
 import { cn } from '@/lib/utils'
 
 import { DEFAULT_TOKEN_UNIT } from '../constants'
+import { getPricingChannelShortLabel } from '../lib/channels'
 import {
   getDynamicDisplayGroupRatio,
   getDynamicPricingSummary,
@@ -57,6 +58,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   const tokenUnitLabel = tokenUnit === 'K' ? '1K' : '1M'
   const tags = parseTags(props.model.tags)
   const groups = props.model.enable_groups || []
+  const channels = props.model.bound_channels || []
   const endpoints = props.model.supported_endpoint_types || []
   const modelIconKey = props.model.icon || props.model.vendor_icon
   const modelIcon = modelIconKey ? getLobeIcon(modelIconKey, 28) : null
@@ -76,11 +78,19 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
     : null
 
   const primaryGroup = groups[0]
-  const bottomTags = [...endpoints.slice(0, 2), ...tags.slice(0, 2)]
+  const previewChannels = channels
+    .slice(0, 2)
+    .map((channel) => getPricingChannelShortLabel(channel, t))
+  const bottomTags = [
+    ...previewChannels,
+    ...endpoints.slice(0, 1),
+    ...tags.slice(0, 1),
+  ]
   const hiddenCount =
     Math.max(groups.length - 1, 0) +
-    Math.max(endpoints.length - 2, 0) +
-    Math.max(tags.length - 2, 0)
+    Math.max(channels.length - previewChannels.length, 0) +
+    Math.max(endpoints.length - 1, 0) +
+    Math.max(tags.length - 1, 0)
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -238,6 +248,11 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
           <span className='text-muted-foreground text-xs font-medium'>
             {isTokenBased ? t('Token-based') : t('Per Request')}
           </span>
+          {channels.length > 0 && (
+            <span className='text-muted-foreground text-xs font-medium'>
+              {channels.length} {t('Channels')}
+            </span>
+          )}
           {isDynamicPricing && (
             <StatusBadge
               label={t('Dynamic Pricing')}

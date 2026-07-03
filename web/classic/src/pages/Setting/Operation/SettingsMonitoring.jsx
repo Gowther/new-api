@@ -30,23 +30,28 @@ import {
 import { useTranslation } from 'react-i18next';
 import HttpStatusCodeRulesInput from '../../../components/settings/HttpStatusCodeRulesInput';
 
+const DEFAULT_INPUTS = {
+  ChannelDisableThreshold: '',
+  QuotaRemindThreshold: '',
+  AutomaticDisableChannelEnabled: false,
+  AutomaticEnableChannelEnabled: false,
+  AutomaticDisableKeywords: '',
+  AutomaticDisableStatusCodes: '401',
+  AutomaticRetryStatusCodes:
+    '100-199,300-399,401-407,409-499,500-503,505-523,525-599',
+  'monitor_setting.auto_test_channel_enabled': false,
+  'monitor_setting.auto_test_channel_minutes': 10,
+  'monitor_setting.channel_test_mode': 'scheduled_all',
+};
+
 export default function SettingsMonitoring(props) {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
-  const [inputs, setInputs] = useState({
-    ChannelDisableThreshold: '',
-    QuotaRemindThreshold: '',
-    AutomaticDisableChannelEnabled: false,
-    AutomaticEnableChannelEnabled: false,
-    AutomaticDisableKeywords: '',
-    AutomaticDisableStatusCodes: '401',
-    AutomaticRetryStatusCodes:
-      '100-199,300-399,401-407,409-499,500-503,505-523,525-599',
-    'monitor_setting.auto_test_channel_enabled': false,
-    'monitor_setting.auto_test_channel_minutes': 10,
-  });
+  const [inputs, setInputs] = useState(DEFAULT_INPUTS);
   const refForm = useRef();
   const [inputsRow, setInputsRow] = useState(inputs);
+  const channelTestMode =
+    inputs['monitor_setting.channel_test_mode'] || 'scheduled_all';
   const parsedAutoDisableStatusCodes = parseHttpStatusCodeRules(
     inputs.AutomaticDisableStatusCodes || '',
   );
@@ -110,15 +115,15 @@ export default function SettingsMonitoring(props) {
   }
 
   useEffect(() => {
-    const currentInputs = {};
+    const currentInputs = { ...DEFAULT_INPUTS };
     for (let key in props.options) {
-      if (Object.keys(inputs).includes(key)) {
+      if (Object.prototype.hasOwnProperty.call(DEFAULT_INPUTS, key)) {
         currentInputs[key] = props.options[key];
       }
     }
     setInputs(currentInputs);
     setInputsRow(structuredClone(currentInputs));
-    refForm.current.setValues(currentInputs);
+    refForm.current?.setValues(currentInputs);
   }, [props.options]);
 
   return (
@@ -134,7 +139,7 @@ export default function SettingsMonitoring(props) {
               <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                 <Form.Switch
                   field={'monitor_setting.auto_test_channel_enabled'}
-                  label={t('定时测试所有通道')}
+                  label={t('定时测试通道')}
                   size='default'
                   checkedText='｜'
                   uncheckedText='〇'
@@ -147,12 +152,41 @@ export default function SettingsMonitoring(props) {
                 />
               </Col>
               <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Select
+                  field={'monitor_setting.channel_test_mode'}
+                  label={t('渠道测试模式')}
+                  optionList={[
+                    {
+                      label: t('定时全量测试'),
+                      value: 'scheduled_all',
+                    },
+                    {
+                      label: t('仅被动恢复'),
+                      value: 'passive_recovery',
+                    },
+                  ]}
+                  extraText={t(
+                    '定时全量测试会探测非手动禁用的渠道；仅被动恢复只会在真实请求失败导致渠道自动禁用后检查这些渠道是否可恢复。',
+                  )}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'monitor_setting.channel_test_mode': value,
+                    })
+                  }
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                 <Form.InputNumber
-                  label={t('自动测试所有通道间隔时间')}
+                  label={t('自动测试通道间隔时间')}
                   step={1}
                   min={1}
                   suffix={t('分钟')}
-                  extraText={t('每隔多少分钟测试一次所有通道')}
+                  extraText={
+                    channelTestMode === 'passive_recovery'
+                      ? t('系统检查自动禁用渠道是否可恢复的频率')
+                      : t('系统测试所有渠道的频率')
+                  }
                   placeholder={''}
                   field={'monitor_setting.auto_test_channel_minutes'}
                   onChange={(value) =>

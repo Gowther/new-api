@@ -151,6 +151,68 @@ func TestUpdateChannelRejectsStatusField(t *testing.T) {
 	assert.False(t, response.Success)
 }
 
+func TestUpdateChannelAcceptsPriorityOnly(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	originalPriority := int64(1)
+	newPriority := int64(9)
+	weight := uint(3)
+	autoBan := 1
+	channel := model.Channel{
+		Id:       1,
+		Type:     1,
+		Key:      "secret-key",
+		Status:   common.ChannelStatusEnabled,
+		Name:     "primary",
+		Models:   "gpt-4o,gpt-4o-mini",
+		Group:    "default",
+		Priority: &originalPriority,
+		Weight:   &weight,
+		AutoBan:  &autoBan,
+	}
+	require.NoError(t, db.Create(&channel).Error)
+	require.NoError(t, channel.UpdateAbilities(nil))
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(
+		http.MethodPut,
+		"/api/channel/",
+		bytes.NewBufferString(`{"id":1,"priority":9}`),
+	)
+	ctx.Request.Header.Set("Content-Type", "application/json")
+
+	UpdateChannel(ctx)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response struct {
+		Success bool          `json:"success"`
+		Message string        `json:"message"`
+		Data    model.Channel `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	require.True(t, response.Success, response.Message)
+	require.NotNil(t, response.Data.Priority)
+	assert.Equal(t, newPriority, *response.Data.Priority)
+	assert.Empty(t, response.Data.Key)
+
+	updated, err := model.GetChannelById(1, true)
+	require.NoError(t, err)
+	require.NotNil(t, updated.Priority)
+	assert.Equal(t, newPriority, *updated.Priority)
+	assert.Equal(t, "secret-key", updated.Key)
+	assert.Equal(t, "primary", updated.Name)
+	assert.Equal(t, "gpt-4o,gpt-4o-mini", updated.Models)
+	assert.Equal(t, "default", updated.Group)
+
+	var abilities []model.Ability
+	require.NoError(t, db.Where("channel_id = ?", 1).Find(&abilities).Error)
+	require.Len(t, abilities, 2)
+	for _, ability := range abilities {
+		require.NotNil(t, ability.Priority)
+		assert.Equal(t, newPriority, *ability.Priority)
+	}
+}
+
 func TestChannelStatusValidation(t *testing.T) {
 	assert.True(t, isManageableChannelStatus(common.ChannelStatusEnabled))
 	assert.True(t, isManageableChannelStatus(common.ChannelStatusManuallyDisabled))

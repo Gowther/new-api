@@ -572,6 +572,37 @@ func (channel *Channel) Update() error {
 	return err
 }
 
+func UpdateChannelRoutingFields(id int, priority *int64, weight *uint) (*Channel, error) {
+	updateData := map[string]any{}
+	if priority != nil {
+		updateData["priority"] = *priority
+	}
+	if weight != nil {
+		updateData["weight"] = *weight
+	}
+	if len(updateData) == 0 {
+		return GetChannelById(id, true)
+	}
+
+	var updated Channel
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.First(&updated, "id = ?", id).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&Channel{}).Where("id = ?", id).Updates(updateData).Error; err != nil {
+			return err
+		}
+		if err := tx.First(&updated, "id = ?", id).Error; err != nil {
+			return err
+		}
+		return updated.UpdateAbilities(tx)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &updated, nil
+}
+
 func (channel *Channel) UpdateResponseTime(responseTime int64) {
 	err := DB.Model(channel).Select("response_time", "test_time").Updates(Channel{
 		TestTime:     common.GetTimestamp(),

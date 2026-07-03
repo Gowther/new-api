@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Loader2, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -35,11 +35,19 @@ import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { getChannels, updateChannel } from '../../api'
 import { channelsQueryKeys } from '../../lib'
-import type { Channel } from '../../types'
+import type { Channel, GetChannelsResponse } from '../../types'
 
 type ModelPriorityDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
+}
+
+function sortChannelsByPriority(channels: Channel[]): Channel[] {
+  return [...channels].sort((a, b) => {
+    const priorityDiff = (b.priority ?? 0) - (a.priority ?? 0)
+    if (priorityDiff !== 0) return priorityDiff
+    return a.id - b.id
+  })
 }
 
 export function ModelPriorityDialog({
@@ -56,10 +64,10 @@ export function ModelPriorityDialog({
   >({})
 
   // Fetch all channels with pagination
-  const { data: channelsData, isLoading } = useQuery({
+  const { data: channelsData, isLoading } = useQuery<GetChannelsResponse>({
     queryKey: channelsQueryKeys.list({ all: true }),
     queryFn: async () => {
-      let allChannels: typeof channels = []
+      let allChannels: Channel[] = []
       let page = 1
       const pageSize = 100 // Backend max limit
       let hasMore = true
@@ -92,7 +100,7 @@ export function ModelPriorityDialog({
     enabled: open,
   })
 
-  const channels = channelsData?.data?.items || []
+  const channels: Channel[] = channelsData?.data?.items || []
 
   // Extract unique models from all channels
   const allModels = useMemo(() => {
@@ -115,15 +123,28 @@ export function ModelPriorityDialog({
     return allModels.filter((model) => model.toLowerCase().includes(search))
   }, [allModels, modelSearch])
 
+  const getPriorityValue = useCallback((channel: Channel): number => {
+    if (priorityChanges[channel.id] !== undefined) {
+      return priorityChanges[channel.id]
+    }
+    return channel.priority ?? 0
+  }, [priorityChanges])
+
   // Get channels that support the selected model
   const channelsForModel = useMemo(() => {
     if (!selectedModel) return []
-    return channels.filter((channel) => {
-      if (!channel.models) return false
-      const models = channel.models.split(',').map((m) => m.trim())
-      return models.includes(selectedModel)
-    })
-  }, [channels, selectedModel])
+    return channels
+      .filter((channel) => {
+        if (!channel.models) return false
+        const models = channel.models.split(',').map((m) => m.trim())
+        return models.includes(selectedModel)
+      })
+      .sort((a, b) => {
+        const priorityDiff = getPriorityValue(b) - getPriorityValue(a)
+        if (priorityDiff !== 0) return priorityDiff
+        return a.id - b.id
+      })
+  }, [channels, selectedModel, getPriorityValue])
 
   // Reset when dialog opens
   useEffect(() => {
@@ -152,20 +173,61 @@ export function ModelPriorityDialog({
     setIsSaving(true)
 
     try {
-      const updates = Object.entries(priorityChanges).map(([id, priority]) =>
-        updateChannel(parseInt(id, 10), { priority })
+      const updates = Object.entries(priorityChanges).map(
+        async ([id, priority]) => {
+          const channelId = parseInt(id, 10)
+          const response = await updateChannel(channelId, { priority })
+          if (!response.success) {
+            throw new Error(response.message || t('Failed to update priorities'))
+          }
+          return { id: channelId, priority }
+        }
       )
 
       const results = await Promise.allSettled(updates)
-      const successCount = results.filter((r) => r.status === 'fulfilled').length
+      const successfulUpdates = results.flatMap((result) =>
+        result.status === 'fulfilled' ? [result.value] : []
+      )
+      const successCount = successfulUpdates.length
       const failCount = results.filter((r) => r.status === 'rejected').length
 
       if (successCount > 0) {
         toast.success(
           t('{{count}} channel(s) updated', { count: successCount })
         )
-        queryClient.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
-        setPriorityChanges({})
+        queryClient.setQueryData(
+          channelsQueryKeys.list({ all: true }),
+          (oldData: GetChannelsResponse | undefined) => {
+            if (!oldData?.data?.items) return oldData
+
+            const prioritiesById = new Map(
+              successfulUpdates.map((update) => [update.id, update.priority])
+            )
+            const items = oldData.data.items.map((channel) => {
+              const priority = prioritiesById.get(channel.id)
+              if (priority === undefined) return channel
+              return { ...channel, priority }
+            })
+
+            return {
+              ...oldData,
+              data: {
+                ...oldData.data,
+                items: sortChannelsByPriority(items),
+              },
+            }
+          }
+        )
+        await queryClient.invalidateQueries({
+          queryKey: channelsQueryKeys.lists(),
+        })
+        setPriorityChanges((prev) => {
+          const next = { ...prev }
+          successfulUpdates.forEach((update) => {
+            delete next[update.id]
+          })
+          return next
+        })
       }
 
       if (failCount > 0) {
@@ -178,13 +240,6 @@ export function ModelPriorityDialog({
     } finally {
       setIsSaving(false)
     }
-  }
-
-  const getPriorityValue = (channel: Channel): number => {
-    if (priorityChanges[channel.id] !== undefined) {
-      return priorityChanges[channel.id]
-    }
-    return channel.priority ?? 0
   }
 
   return (

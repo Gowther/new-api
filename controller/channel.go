@@ -912,6 +912,24 @@ type ChannelStatusBatchRequest struct {
 	Status int   `json:"status"`
 }
 
+func isRoutingOnlyChannelUpdate(requestData map[string]any) bool {
+	if _, ok := requestData["id"]; !ok {
+		return false
+	}
+
+	hasRoutingField := false
+	for field := range requestData {
+		switch field {
+		case "id":
+		case "priority", "weight":
+			hasRoutingField = true
+		default:
+			return false
+		}
+	}
+	return hasRoutingField
+}
+
 func UpdateChannel(c *gin.Context) {
 	channel := PatchChannel{}
 	rawBody, err := c.GetRawData()
@@ -977,6 +995,38 @@ func UpdateChannel(c *gin.Context) {
 		// re-write it or treat it as a sensitive change.
 		delete(requestData, "status")
 	}
+
+	if isRoutingOnlyChannelUpdate(requestData) {
+		updated, err := model.UpdateChannelRoutingFields(channel.Id, channel.Priority, channel.Weight)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		model.InitChannelCache()
+		service.ResetProxyClientCache()
+
+		changedFields := make([]string, 0, 2)
+		if _, ok := requestData["priority"]; ok {
+			changedFields = append(changedFields, "priority")
+		}
+		if _, ok := requestData["weight"]; ok {
+			changedFields = append(changedFields, "weight")
+		}
+		recordManageAudit(c, "channel.update", map[string]interface{}{
+			"id":             updated.Id,
+			"name":           updated.Name,
+			"changed_fields": changedFields,
+		})
+		updated.Key = ""
+		clearChannelInfo(updated)
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "",
+			"data":    updated,
+		})
+		return
+	}
+
 	clearChannelReadOnlyFields(&channel, requestData)
 
 	// 使用统一的校验函数

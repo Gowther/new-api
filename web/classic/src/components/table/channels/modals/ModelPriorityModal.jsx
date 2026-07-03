@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Modal,
   Input,
@@ -34,6 +34,13 @@ import { API, showError, showSuccess, showInfo } from '../../../../helpers';
 import { useTranslation } from 'react-i18next';
 
 const { Text } = Typography;
+
+const sortChannelsByPriority = (channels) =>
+  [...channels].sort((a, b) => {
+    const priorityDiff = (b.priority ?? 0) - (a.priority ?? 0);
+    if (priorityDiff !== 0) return priorityDiff;
+    return a.id - b.id;
+  });
 
 const ModelPriorityModal = ({ visible, handleClose, refresh }) => {
   const { t } = useTranslation();
@@ -82,7 +89,7 @@ const ModelPriorityModal = ({ visible, handleClose, refresh }) => {
         page++;
       }
 
-      setChannels(allChannels);
+      setChannels(sortChannelsByPriority(allChannels));
     } catch (error) {
       showError(t('获取渠道列表失败'));
     } finally {
@@ -111,15 +118,28 @@ const ModelPriorityModal = ({ visible, handleClose, refresh }) => {
     return allModels.filter((model) => model.toLowerCase().includes(search));
   }, [allModels, modelSearch]);
 
+  const getPriorityValue = useCallback((channel) => {
+    if (priorityChanges[channel.id] !== undefined) {
+      return priorityChanges[channel.id];
+    }
+    return channel.priority ?? 0;
+  }, [priorityChanges]);
+
   // Get channels that support the selected model
   const channelsForModel = useMemo(() => {
     if (!selectedModel) return [];
-    return channels.filter((channel) => {
-      if (!channel.models) return false;
-      const models = channel.models.split(',').map((m) => m.trim());
-      return models.includes(selectedModel);
-    });
-  }, [channels, selectedModel]);
+    return channels
+      .filter((channel) => {
+        if (!channel.models) return false;
+        const models = channel.models.split(',').map((m) => m.trim());
+        return models.includes(selectedModel);
+      })
+      .sort((a, b) => {
+        const priorityDiff = getPriorityValue(b) - getPriorityValue(a);
+        if (priorityDiff !== 0) return priorityDiff;
+        return a.id - b.id;
+      });
+  }, [channels, selectedModel, getPriorityValue]);
 
   const handlePriorityChange = (channelId, value) => {
     const priority = value === null || value === undefined ? 0 : value;
@@ -127,13 +147,6 @@ const ModelPriorityModal = ({ visible, handleClose, refresh }) => {
       ...prev,
       [channelId]: priority,
     }));
-  };
-
-  const getPriorityValue = (channel) => {
-    if (priorityChanges[channel.id] !== undefined) {
-      return priorityChanges[channel.id];
-    }
-    return channel.priority ?? 0;
   };
 
   const handleSave = async () => {
@@ -144,17 +157,44 @@ const ModelPriorityModal = ({ visible, handleClose, refresh }) => {
 
     setSaving(true);
     try {
-      const updates = Object.entries(priorityChanges).map(([id, priority]) =>
-        API.put('/api/channel/', { id: parseInt(id, 10), priority })
-      );
+      const updates = Object.entries(priorityChanges).map(async ([id, priority]) => {
+        const channelId = parseInt(id, 10);
+        const res = await API.put('/api/channel/', { id: channelId, priority });
+        const { success, message } = res.data;
+        if (!success) {
+          throw new Error(message || t('更新优先级失败'));
+        }
+        return { id: channelId, priority };
+      });
 
       const results = await Promise.allSettled(updates);
-      const successCount = results.filter((r) => r.status === 'fulfilled').length;
+      const successfulUpdates = results.flatMap((result) =>
+        result.status === 'fulfilled' ? [result.value] : []
+      );
+      const successCount = successfulUpdates.length;
       const failCount = results.filter((r) => r.status === 'rejected').length;
 
       if (successCount > 0) {
         showSuccess(t('已更新 {{count}} 个渠道', { count: successCount }));
-        setPriorityChanges({});
+        setChannels((prev) => {
+          const prioritiesById = new Map(
+            successfulUpdates.map((update) => [update.id, update.priority])
+          );
+          return sortChannelsByPriority(
+            prev.map((channel) => {
+              const priority = prioritiesById.get(channel.id);
+              if (priority === undefined) return channel;
+              return { ...channel, priority };
+            })
+          );
+        });
+        setPriorityChanges((prev) => {
+          const next = { ...prev };
+          successfulUpdates.forEach((update) => {
+            delete next[update.id];
+          });
+          return next;
+        });
         refresh?.();
       }
 

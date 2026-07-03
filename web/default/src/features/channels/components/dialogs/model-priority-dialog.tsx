@@ -22,6 +22,7 @@ import { Loader2, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { StatusBadge } from '@/components/status-badge'
 import {
   Dialog,
   DialogContent,
@@ -33,7 +34,14 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { getChannels, updateChannel } from '../../api'
+import { Switch } from '@/components/ui/switch'
+import { getChannels, updateChannel, updateChannelStatus } from '../../api'
+import {
+  CHANNEL_STATUS,
+  CHANNEL_STATUS_CONFIG,
+  ERROR_MESSAGES,
+  SUCCESS_MESSAGES,
+} from '../../constants'
 import { channelsQueryKeys } from '../../lib'
 import type { Channel, GetChannelsResponse } from '../../types'
 
@@ -72,6 +80,25 @@ function applyPriorityUpdates(
   }
 }
 
+function applyChannelStatusUpdates(
+  oldData: GetChannelsResponse | undefined,
+  statusesById: Map<number, number>
+): GetChannelsResponse | undefined {
+  if (!oldData?.data?.items) return oldData
+
+  return {
+    ...oldData,
+    data: {
+      ...oldData.data,
+      items: oldData.data.items.map((channel) => {
+        const status = statusesById.get(channel.id)
+        if (status === undefined) return channel
+        return { ...channel, status }
+      }),
+    },
+  }
+}
+
 export function ModelPriorityDialog({
   open,
   onOpenChange,
@@ -83,6 +110,9 @@ export function ModelPriorityDialog({
   const [isSaving, setIsSaving] = useState(false)
   const [priorityChanges, setPriorityChanges] = useState<
     Record<number, number>
+  >({})
+  const [statusUpdatingIds, setStatusUpdatingIds] = useState<
+    Record<number, boolean>
   >({})
 
   // Fetch all channels with pagination
@@ -185,6 +215,60 @@ export function ModelPriorityDialog({
       [channelId]: priority,
     }))
   }
+
+  const updateCachedChannelStatuses = useCallback(
+    (statusesById: Map<number, number>) => {
+      queryClient.setQueriesData<GetChannelsResponse>(
+        { queryKey: channelsQueryKeys.lists() },
+        (oldData) => applyChannelStatusUpdates(oldData, statusesById)
+      )
+      queryClient.setQueryData(
+        channelsQueryKeys.list({ all: true }),
+        (oldData: GetChannelsResponse | undefined) =>
+          applyChannelStatusUpdates(oldData, statusesById)
+      )
+    },
+    [queryClient]
+  )
+
+  const handleChannelStatusChange = useCallback(
+    async (channel: Channel, checked: boolean) => {
+      const status = checked
+        ? CHANNEL_STATUS.ENABLED
+        : CHANNEL_STATUS.MANUAL_DISABLED
+
+      setStatusUpdatingIds((prev) => ({
+        ...prev,
+        [channel.id]: true,
+      }))
+
+      try {
+        const response = await updateChannelStatus(channel.id, status)
+        if (!response.success) {
+          throw new Error(response.message || t(ERROR_MESSAGES.UPDATE_FAILED))
+        }
+
+        updateCachedChannelStatuses(new Map([[channel.id, status]]))
+        await queryClient.invalidateQueries({
+          queryKey: channelsQueryKeys.lists(),
+        })
+        toast.success(
+          t(checked ? SUCCESS_MESSAGES.ENABLED : SUCCESS_MESSAGES.DISABLED)
+        )
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : t(ERROR_MESSAGES.UPDATE_FAILED)
+        )
+      } finally {
+        setStatusUpdatingIds((prev) => {
+          const next = { ...prev }
+          delete next[channel.id]
+          return next
+        })
+      }
+    },
+    [queryClient, t, updateCachedChannelStatuses]
+  )
 
   const handleSave = async () => {
     if (Object.keys(priorityChanges).length === 0) {
@@ -329,38 +413,63 @@ export function ModelPriorityDialog({
                     ) : (
                       <div className='space-y-3 pr-2'>
                         {channelsForModel.map((channel) => {
-                          const isEnabled = channel.status === 1
+                          const isEnabled =
+                            channel.status === CHANNEL_STATUS.ENABLED
+                          const isStatusUpdating = Boolean(
+                            statusUpdatingIds[channel.id]
+                          )
+                          const statusConfig =
+                            CHANNEL_STATUS_CONFIG[
+                              channel.status as keyof typeof CHANNEL_STATUS_CONFIG
+                            ] || CHANNEL_STATUS_CONFIG[CHANNEL_STATUS.UNKNOWN]
                           return (
                             <div
                               key={channel.id}
-                              className={`flex items-center gap-4 p-4 border rounded-lg ${
-                                !isEnabled ? 'opacity-60 bg-muted/30' : ''
+                              className={`grid gap-3 rounded-lg border p-4 transition-colors sm:grid-cols-[minmax(0,1fr)_9rem_8rem] sm:items-center ${
+                                !isEnabled ? 'bg-muted/30 opacity-75' : ''
                               }`}
                             >
-                              <div className='flex-1 min-w-0'>
-                                <div className='flex items-center gap-2 mb-1.5 flex-wrap'>
+                              <div className='min-w-0 space-y-1'>
+                                <div className='flex min-w-0 items-center gap-2'>
                                   <div
-                                    className={`font-medium ${
+                                    className={`min-w-0 truncate font-medium ${
                                       !isEnabled ? 'line-through' : ''
                                     }`}
                                   >
                                     {channel.name}
                                   </div>
-                                  <span
-                                    className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${
-                                      isEnabled
-                                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                        : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                                    }`}
-                                  >
-                                    {isEnabled ? t('Enabled') : t('Disabled')}
+                                  <StatusBadge
+                                    label={t(statusConfig.label)}
+                                    variant={statusConfig.variant}
+                                    copyable={false}
+                                    className='shrink-0'
+                                  />
+                                </div>
+                                <div className='text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs'>
+                                  <span>ID: {channel.id}</span>
+                                  <span>
+                                    {t('Group')}: {channel.group}
                                   </span>
                                 </div>
-                                <div className='text-xs text-muted-foreground'>
-                                  ID: {channel.id} | Group: {channel.group}
-                                </div>
                               </div>
-                              <div className='flex items-center gap-2 flex-shrink-0'>
+                              <div className='flex items-center justify-between gap-3 sm:justify-end'>
+                                <Label
+                                  htmlFor={`status-${channel.id}`}
+                                  className='text-sm whitespace-nowrap'
+                                >
+                                  {t('Status')}
+                                </Label>
+                                <Switch
+                                  id={`status-${channel.id}`}
+                                  checked={isEnabled}
+                                  onCheckedChange={(checked) =>
+                                    handleChannelStatusChange(channel, checked)
+                                  }
+                                  disabled={isStatusUpdating}
+                                  aria-label={t('Status')}
+                                />
+                              </div>
+                              <div className='flex items-center justify-between gap-2 sm:justify-end'>
                                 <Label
                                   htmlFor={`priority-${channel.id}`}
                                   className='text-sm whitespace-nowrap'
@@ -376,7 +485,7 @@ export function ModelPriorityDialog({
                                   }
                                   className='w-24'
                                   min={0}
-                                  disabled={!isEnabled}
+                                  disabled={!isEnabled || isStatusUpdating}
                                 />
                               </div>
                             </div>

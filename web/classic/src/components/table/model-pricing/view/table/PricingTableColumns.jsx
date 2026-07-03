@@ -32,6 +32,7 @@ import {
   renderDescription,
 } from '../../../../common/ui/RenderUtils';
 import { useIsMobile } from '../../../../../hooks/common/useIsMobile';
+import { renderBoundChannelList } from '../../utils/boundChannels';
 
 function renderQuotaType(type, t) {
   switch (type) {
@@ -139,6 +140,14 @@ export const getPricingTableColumns = ({
     dataIndex: 'supported_endpoint_types',
     render: (text, record, index) => {
       return renderSupportedEndpoints(text);
+    },
+  };
+
+  const boundChannelsColumn = {
+    title: t('已绑定渠道'),
+    dataIndex: 'bound_channels',
+    render: (text) => {
+      return renderBoundChannelList(text, { maxDisplay: 2 });
     },
   };
 
@@ -251,6 +260,7 @@ export const getPricingTableColumns = ({
 
   const columns = [...baseColumns];
   columns.push(endpointColumn);
+  columns.push(boundChannelsColumn);
   if (showRatio) {
     columns.push(ratioColumn);
   }

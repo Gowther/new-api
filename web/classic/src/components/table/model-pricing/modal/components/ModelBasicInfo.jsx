@@ -21,6 +21,7 @@ import React from 'react';
 import { Avatar, Typography, Tag, Space } from '@douyinfe/semi-ui';
 import { IconInfoCircle } from '@douyinfe/semi-icons';
 import { stringToColor } from '../../../../../helpers';
+import { renderBoundChannelList } from '../../utils/boundChannels';
 
 const { Text } = Typography;
 
@@ -57,6 +58,9 @@ const ModelBasicInfo = ({ modelData, vendorsMap = {}, t }) => {
     return tags;
   };
 
+  const modelTags = getModelTags();
+  const hasBoundChannels = modelData?.bound_channels?.length > 0;
+
   return (
     <div>
       <div className='flex items-center mb-4'>
@@ -72,14 +76,24 @@ const ModelBasicInfo = ({ modelData, vendorsMap = {}, t }) => {
       </div>
       <div className='text-gray-600'>
         <p className='mb-4'>{getModelDescription()}</p>
-        {getModelTags().length > 0 && (
+        {modelTags.length > 0 && (
           <Space wrap>
-            {getModelTags().map((tag, index) => (
+            {modelTags.map((tag, index) => (
               <Tag key={index} color={tag.color} shape='circle' size='small'>
                 {tag.text}
               </Tag>
             ))}
           </Space>
+        )}
+        {hasBoundChannels && (
+          <div className={modelTags.length > 0 ? 'mt-4' : ''}>
+            <Text className='text-sm font-medium text-gray-700'>
+              {t('已绑定渠道')}
+            </Text>
+            <div className='mt-2'>
+              {renderBoundChannelList(modelData.bound_channels)}
+            </div>
+          </div>
         )}
       </div>
     </div>

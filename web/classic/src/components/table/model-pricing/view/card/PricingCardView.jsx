@@ -45,6 +45,7 @@ import PricingCardSkeleton from './PricingCardSkeleton';
 import { useMinimumLoadingTime } from '../../../../../hooks/common/useMinimumLoadingTime';
 import { renderLimitedItems } from '../../../../common/ui/RenderUtils';
 import { useIsMobile } from '../../../../../hooks/common/useIsMobile';
+import { renderBoundChannelList } from '../../utils/boundChannels';
 
 const CARD_STYLES = {
   container:
@@ -315,6 +316,19 @@ const PricingCardView = ({
 
                 {/* 底部区域 */}
                 <div className='mt-auto'>
+                  {model.bound_channels?.length > 0 && (
+                    <div className='mb-3'>
+                      <div className='text-xs font-medium text-gray-700 mb-2'>
+                        {t('已绑定渠道')}
+                      </div>
+                      <div className='text-xs text-gray-600'>
+                        {renderBoundChannelList(model.bound_channels, {
+                          maxDisplay: 2,
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {/* 标签区域 */}
                   {renderTags(model)}
 

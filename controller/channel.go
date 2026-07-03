@@ -53,14 +53,27 @@ type OpenAIModelsResponse struct {
 	Success bool          `json:"success"`
 }
 
+const (
+	channelStatusFilterAll      = -1
+	channelStatusFilterDisabled = -2
+)
+
 func parseStatusFilter(statusParam string) int {
-	switch strings.ToLower(statusParam) {
+	switch strings.ToLower(strings.TrimSpace(statusParam)) {
+	case "", "all":
+		return channelStatusFilterAll
 	case "enabled", "1":
 		return common.ChannelStatusEnabled
 	case "disabled", "0":
-		return 0
+		return channelStatusFilterDisabled
+	case "unknown":
+		return common.ChannelStatusUnknown
+	case "manual", "manual_disabled", "manual-disabled", "2":
+		return common.ChannelStatusManuallyDisabled
+	case "auto", "auto_disabled", "auto-disabled", "3":
+		return common.ChannelStatusAutoDisabled
 	default:
-		return -1
+		return channelStatusFilterAll
 	}
 }
 
@@ -72,13 +85,25 @@ func clearChannelInfo(channel *model.Channel) {
 }
 
 func applyChannelStatusFilter(query *gorm.DB, statusFilter int) *gorm.DB {
-	if statusFilter == common.ChannelStatusEnabled {
-		return query.Where("status = ?", common.ChannelStatusEnabled)
-	}
-	if statusFilter == 0 {
+	switch statusFilter {
+	case channelStatusFilterAll:
+		return query
+	case channelStatusFilterDisabled:
 		return query.Where("status != ?", common.ChannelStatusEnabled)
+	default:
+		return query.Where("status = ?", statusFilter)
 	}
-	return query
+}
+
+func channelMatchesStatusFilter(channelStatus int, statusFilter int) bool {
+	switch statusFilter {
+	case channelStatusFilterAll:
+		return true
+	case channelStatusFilterDisabled:
+		return channelStatus != common.ChannelStatusEnabled
+	default:
+		return channelStatus == statusFilter
+	}
 }
 
 func buildChannelListQuery(group string, statusFilter int, typeFilter int) *gorm.DB {
@@ -105,7 +130,6 @@ func GetAllChannels(c *gin.Context) {
 	enableTagMode, _ := strconv.ParseBool(c.Query("tag_mode"))
 	groupFilter := model.NormalizeChannelGroupFilter(c.Query("group"))
 	statusParam := c.Query("status")
-	// statusFilter: -1 all, 1 enabled, 0 disabled (include auto & manual)
 	statusFilter := parseStatusFilter(statusParam)
 	// type filter
 	typeStr := c.Query("type")
@@ -312,13 +336,10 @@ func SearchChannels(c *gin.Context) {
 		channelData = channels
 	}
 
-	if statusFilter == common.ChannelStatusEnabled || statusFilter == 0 {
+	if statusFilter != channelStatusFilterAll {
 		filtered := make([]*model.Channel, 0, len(channelData))
 		for _, ch := range channelData {
-			if statusFilter == common.ChannelStatusEnabled && ch.Status != common.ChannelStatusEnabled {
-				continue
-			}
-			if statusFilter == 0 && ch.Status == common.ChannelStatusEnabled {
+			if !channelMatchesStatusFilter(ch.Status, statusFilter) {
 				continue
 			}
 			filtered = append(filtered, ch)

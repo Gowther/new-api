@@ -220,6 +220,42 @@ func TestChannelStatusValidation(t *testing.T) {
 	assert.False(t, isManageableChannelStatus(0))
 }
 
+func TestParseStatusFilter(t *testing.T) {
+	cases := []struct {
+		name     string
+		input    string
+		expected int
+	}{
+		{name: "empty", input: "", expected: channelStatusFilterAll},
+		{name: "all", input: "all", expected: channelStatusFilterAll},
+		{name: "enabled", input: "enabled", expected: common.ChannelStatusEnabled},
+		{name: "enabled number", input: "1", expected: common.ChannelStatusEnabled},
+		{name: "legacy disabled", input: "disabled", expected: channelStatusFilterDisabled},
+		{name: "legacy disabled number", input: "0", expected: channelStatusFilterDisabled},
+		{name: "unknown", input: "unknown", expected: common.ChannelStatusUnknown},
+		{name: "manual disabled", input: "manual_disabled", expected: common.ChannelStatusManuallyDisabled},
+		{name: "manual disabled number", input: "2", expected: common.ChannelStatusManuallyDisabled},
+		{name: "auto disabled", input: "auto_disabled", expected: common.ChannelStatusAutoDisabled},
+		{name: "auto disabled number", input: "3", expected: common.ChannelStatusAutoDisabled},
+		{name: "invalid", input: "not-a-status", expected: channelStatusFilterAll},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expected, parseStatusFilter(tc.input))
+		})
+	}
+}
+
+func TestChannelMatchesStatusFilter(t *testing.T) {
+	assert.True(t, channelMatchesStatusFilter(common.ChannelStatusEnabled, channelStatusFilterAll))
+	assert.True(t, channelMatchesStatusFilter(common.ChannelStatusManuallyDisabled, channelStatusFilterDisabled))
+	assert.True(t, channelMatchesStatusFilter(common.ChannelStatusAutoDisabled, channelStatusFilterDisabled))
+	assert.False(t, channelMatchesStatusFilter(common.ChannelStatusEnabled, channelStatusFilterDisabled))
+	assert.True(t, channelMatchesStatusFilter(common.ChannelStatusAutoDisabled, common.ChannelStatusAutoDisabled))
+	assert.False(t, channelMatchesStatusFilter(common.ChannelStatusManuallyDisabled, common.ChannelStatusAutoDisabled))
+}
+
 // TestChannelFieldsAreClassified guards the fail-closed sensitivity check: every
 // JSON field of PatchChannel (including the embedded model.Channel) must be listed
 // in channelSensitiveFields, channelNonSensitiveFields, or

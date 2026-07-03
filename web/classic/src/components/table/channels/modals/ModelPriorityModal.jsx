@@ -28,12 +28,27 @@ import {
   Space,
   Button,
   Tag,
+  Switch,
 } from '@douyinfe/semi-ui';
 import { IconSearch } from '@douyinfe/semi-icons';
 import { API, showError, showSuccess, showInfo } from '../../../../helpers';
 import { useTranslation } from 'react-i18next';
 
 const { Text } = Typography;
+
+const CHANNEL_STATUS = {
+  UNKNOWN: 0,
+  ENABLED: 1,
+  MANUAL_DISABLED: 2,
+  AUTO_DISABLED: 3,
+};
+
+const CHANNEL_STATUS_META = {
+  [CHANNEL_STATUS.UNKNOWN]: { label: '未知', color: 'grey' },
+  [CHANNEL_STATUS.ENABLED]: { label: '已启用', color: 'green' },
+  [CHANNEL_STATUS.MANUAL_DISABLED]: { label: '手动禁用', color: 'red' },
+  [CHANNEL_STATUS.AUTO_DISABLED]: { label: '自动禁用', color: 'orange' },
+};
 
 const sortChannelsByPriority = (channels) =>
   [...channels].sort((a, b) => {
@@ -55,6 +70,7 @@ const ModelPriorityModal = ({
   const [selectedModel, setSelectedModel] = useState(null);
   const [modelSearch, setModelSearch] = useState('');
   const [priorityChanges, setPriorityChanges] = useState({});
+  const [statusUpdatingIds, setStatusUpdatingIds] = useState({});
 
   // Fetch all channels when modal opens
   useEffect(() => {
@@ -65,6 +81,7 @@ const ModelPriorityModal = ({
       setSelectedModel(null);
       setModelSearch('');
       setPriorityChanges({});
+      setStatusUpdatingIds({});
     }
   }, [visible]);
 
@@ -157,6 +174,43 @@ const ModelPriorityModal = ({
       ...prev,
       [channelId]: priority,
     }));
+  };
+
+  const handleChannelStatusChange = async (channel, checked) => {
+    const status = checked
+      ? CHANNEL_STATUS.ENABLED
+      : CHANNEL_STATUS.MANUAL_DISABLED;
+
+    setStatusUpdatingIds((prev) => ({
+      ...prev,
+      [channel.id]: true,
+    }));
+
+    try {
+      const res = await API.post(`/api/channel/${channel.id}/status`, {
+        status,
+      });
+      const { success, message } = res.data;
+      if (!success) {
+        throw new Error(message || t('更新失败'));
+      }
+
+      setChannels((prev) =>
+        prev.map((item) =>
+          item.id === channel.id ? { ...item, status } : item,
+        ),
+      );
+      showSuccess(checked ? t('已启用') : t('已禁用'));
+      await refresh?.();
+    } catch (error) {
+      showError(error.message || t('更新失败'));
+    } finally {
+      setStatusUpdatingIds((prev) => {
+        const next = { ...prev };
+        delete next[channel.id];
+        return next;
+      });
+    }
   };
 
   const handleSave = async () => {
@@ -383,12 +437,21 @@ const ModelPriorityModal = ({
                     ) : (
                       <Space vertical spacing='loose' style={{ width: '100%' }}>
                         {channelsForModel.map((channel) => {
-                          const isEnabled = channel.status === 1;
+                          const isEnabled =
+                            channel.status === CHANNEL_STATUS.ENABLED;
+                          const isStatusUpdating = Boolean(
+                            statusUpdatingIds[channel.id],
+                          );
+                          const statusMeta =
+                            CHANNEL_STATUS_META[channel.status] ||
+                            CHANNEL_STATUS_META[CHANNEL_STATUS.UNKNOWN];
                           return (
                             <div
                               key={channel.id}
                               style={{
-                                display: 'flex',
+                                display: 'grid',
+                                gridTemplateColumns:
+                                  'minmax(0, 1fr) 120px 118px',
                                 alignItems: 'center',
                                 gap: '12px',
                                 padding: '12px',
@@ -420,11 +483,8 @@ const ModelPriorityModal = ({
                                   >
                                     {channel.name}
                                   </Text>
-                                  <Tag
-                                    color={isEnabled ? 'green' : 'red'}
-                                    size='small'
-                                  >
-                                    {isEnabled ? t('已启用') : t('已禁用')}
+                                  <Tag color={statusMeta.color} size='small'>
+                                    {t(statusMeta.label)}
                                   </Tag>
                                 </div>
                                 <Text
@@ -440,6 +500,26 @@ const ModelPriorityModal = ({
                                 style={{
                                   display: 'flex',
                                   alignItems: 'center',
+                                  justifyContent: 'flex-end',
+                                  gap: '8px',
+                                }}
+                              >
+                                <Text>{t('状态')}:</Text>
+                                <Switch
+                                  size='small'
+                                  checked={isEnabled}
+                                  disabled={isStatusUpdating}
+                                  loading={isStatusUpdating}
+                                  onChange={(checked) =>
+                                    handleChannelStatusChange(channel, checked)
+                                  }
+                                />
+                              </div>
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'flex-end',
                                   gap: '8px',
                                 }}
                               >
@@ -450,7 +530,7 @@ const ModelPriorityModal = ({
                                     handlePriorityChange(channel.id, value)
                                   }
                                   min={0}
-                                  disabled={!isEnabled}
+                                  disabled={!isEnabled || isStatusUpdating}
                                   style={{ width: '80px' }}
                                 />
                               </div>

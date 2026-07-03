@@ -228,6 +228,8 @@ const EditChannelModal = (props) => {
   const [modelGroups, setModelGroups] = useState([]);
   const [customModel, setCustomModel] = useState('');
   const [modelSearchValue, setModelSearchValue] = useState('');
+  const [draggedModel, setDraggedModel] = useState('');
+  const [dragOverModel, setDragOverModel] = useState('');
   const [modalImageUrl, setModalImageUrl] = useState('');
   const [isModalOpenurl, setIsModalOpenurl] = useState(false);
   const [modelModalVisible, setModelModalVisible] = useState(false);
@@ -241,6 +243,8 @@ const EditChannelModal = (props) => {
     useState('');
   const [ollamaModalVisible, setOllamaModalVisible] = useState(false);
   const formApiRef = useRef(null);
+  const modelDragMovedRef = useRef(false);
+  const modelDragSourceRef = useRef('');
   const [vertexKeys, setVertexKeys] = useState([]);
   const [vertexFileList, setVertexFileList] = useState([]);
   const vertexErroredNames = useRef(new Set()); // 避免重复报错
@@ -322,6 +326,22 @@ const EditChannelModal = (props) => {
       name: keyword,
     });
   }, [modelSearchMatchedCount, modelSearchValue, t]);
+  const testModelOptions = useMemo(() => {
+    const models = new Set(
+      (inputs.models || [])
+        .map((model) => String(model || '').trim())
+        .filter(Boolean),
+    );
+    const selectedTestModel = String(inputs.test_model || '').trim();
+    if (selectedTestModel) {
+      models.add(selectedTestModel);
+    }
+    return Array.from(models).map((model) => ({
+      key: model,
+      label: model,
+      value: model,
+    }));
+  }, [inputs.models, inputs.test_model]);
   const paramOverrideMeta = useMemo(() => {
     const raw =
       typeof inputs.param_override === 'string'
@@ -697,6 +717,28 @@ const EditChannelModal = (props) => {
       }
     }
     //setAutoBan
+  };
+
+  const moveModelBefore = (sourceModel, targetModel) => {
+    if (!sourceModel || !targetModel || sourceModel === targetModel) return;
+    const currentModels =
+      formApiRef.current?.getValue('models') || inputs.models || [];
+    const sourceIndex = currentModels.indexOf(sourceModel);
+    const targetIndex = currentModels.indexOf(targetModel);
+    if (sourceIndex < 0 || targetIndex < 0) return;
+
+    const nextModels = [...currentModels];
+    const [movedModel] = nextModels.splice(sourceIndex, 1);
+    const insertIndex = nextModels.indexOf(targetModel);
+    if (insertIndex < 0) return;
+    nextModels.splice(insertIndex, 0, movedModel);
+    handleInputChange('models', nextModels);
+  };
+
+  const resetModelDragState = () => {
+    modelDragSourceRef.current = '';
+    setDraggedModel('');
+    setDragOverModel('');
   };
 
   const formatJsonField = (fieldName) => {
@@ -3449,6 +3491,10 @@ const EditChannelModal = (props) => {
                       onChange={(value) => handleInputChange('models', value)}
                       renderSelectedItem={(optionNode) => {
                         const modelName = String(optionNode?.value ?? '');
+                        const isDragOver =
+                          draggedModel &&
+                          draggedModel !== modelName &&
+                          dragOverModel === modelName;
                         return {
                           isRenderInTag: true,
                           content: (
@@ -3457,8 +3503,59 @@ const EditChannelModal = (props) => {
                               role='button'
                               tabIndex={0}
                               title={t('点击复制模型名称')}
+                              draggable
+                              onDragStart={(e) => {
+                                e.dataTransfer.effectAllowed = 'move';
+                                e.dataTransfer.setData('text/plain', modelName);
+                                modelDragMovedRef.current = true;
+                                modelDragSourceRef.current = modelName;
+                                setDraggedModel(modelName);
+                              }}
+                              onDragOver={(e) => {
+                                const sourceModel =
+                                  modelDragSourceRef.current || draggedModel;
+                                if (!sourceModel || sourceModel === modelName)
+                                  return;
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setDragOverModel(modelName);
+                              }}
+                              onDragLeave={() => {
+                                if (dragOverModel === modelName) {
+                                  setDragOverModel('');
+                                }
+                              }}
+                              onDrop={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const sourceModel =
+                                  modelDragSourceRef.current ||
+                                  draggedModel ||
+                                  e.dataTransfer.getData('text/plain');
+                                moveModelBefore(sourceModel, modelName);
+                                resetModelDragState();
+                                setTimeout(() => {
+                                  modelDragMovedRef.current = false;
+                                }, 0);
+                              }}
+                              onDragEnd={() => {
+                                resetModelDragState();
+                                setTimeout(() => {
+                                  modelDragMovedRef.current = false;
+                                }, 0);
+                              }}
+                              style={{
+                                cursor: 'grab',
+                                outline: isDragOver
+                                  ? '2px solid var(--semi-color-primary)'
+                                  : undefined,
+                                borderRadius: 4,
+                              }}
                               onClick={async (e) => {
                                 e.stopPropagation();
+                                if (modelDragMovedRef.current) {
+                                  return;
+                                }
                                 const ok = await copy(modelName);
                                 if (ok) {
                                   showSuccess(
@@ -3629,14 +3726,18 @@ const EditChannelModal = (props) => {
                   />
 
                   {/* Test Model - Core Config */}
-                  <Form.Input
+                  <Form.Select
                     field='test_model'
                     label={t('默认测试模型')}
                     placeholder={t('不填则为模型列表第一个')}
-                    onChange={(value) =>
-                      handleInputChange('test_model', value)
-                    }
+                    optionList={testModelOptions}
+                    filter={selectFilter}
+                    allowCreate
                     showClear
+                    style={{ width: '100%' }}
+                    onChange={(value) =>
+                      handleInputChange('test_model', value || '')
+                    }
                   />
                 </Card>
 

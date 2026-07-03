@@ -25,3 +25,9 @@ dist-ssr
 *.sln
 *.sw?
 .tanstack/*
+
+# Generated i18n sync reports (output of `bun run i18n:sync`)
+src/i18n/locales/_reports/
+
+# npm lockfile; this project uses bun (bun.lock) instead
+package-lock.json

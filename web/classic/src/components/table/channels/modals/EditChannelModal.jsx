@@ -104,6 +104,15 @@ const REGION_EXAMPLE = {
 const UPSTREAM_DETECTED_MODEL_PREVIEW_LIMIT = 8;
 const ADVANCED_SETTINGS_EXPANDED_KEY = 'channel-advanced-settings-expanded';
 
+const normalizeChannelModels = (models) =>
+  Array.from(
+    new Set(
+      (Array.isArray(models) ? models : [])
+        .map((model) => String(model || '').trim())
+        .filter(Boolean),
+    ),
+  );
+
 const PARAM_OVERRIDE_LEGACY_TEMPLATE = {
   temperature: 0,
 };
@@ -220,6 +229,7 @@ const EditChannelModal = (props) => {
   const [multiKeyMode, setMultiKeyMode] = useState('random');
   const [autoBan, setAutoBan] = useState(true);
   const [inputs, setInputs] = useState(originInputs);
+  const [selectedModels, setSelectedModels] = useState([]);
   const [originModelOptions, setOriginModelOptions] = useState([]);
   const [modelOptions, setModelOptions] = useState([]);
   const [groupOptions, setGroupOptions] = useState([]);
@@ -327,11 +337,7 @@ const EditChannelModal = (props) => {
     });
   }, [modelSearchMatchedCount, modelSearchValue, t]);
   const testModelOptions = useMemo(() => {
-    const models = new Set(
-      (inputs.models || [])
-        .map((model) => String(model || '').trim())
-        .filter(Boolean),
-    );
+    const models = new Set(selectedModels);
     const selectedTestModel = String(inputs.test_model || '').trim();
     if (selectedTestModel) {
       models.add(selectedTestModel);
@@ -341,7 +347,12 @@ const EditChannelModal = (props) => {
       label: model,
       value: model,
     }));
-  }, [inputs.models, inputs.test_model]);
+  }, [selectedModels, inputs.test_model]);
+  const testModelSelectKey = useMemo(
+    () =>
+      `test-model-${testModelOptions.map((option) => option.value).join('|')}`,
+    [testModelOptions],
+  );
   const paramOverrideMeta = useMemo(() => {
     const raw =
       typeof inputs.param_override === 'string'
@@ -620,6 +631,11 @@ const EditChannelModal = (props) => {
   const isIonetLocked = isIonetChannel && isEdit;
 
   const handleInputChange = (name, value) => {
+    let nextValue = value;
+    if (name === 'models' && Array.isArray(value)) {
+      nextValue = normalizeChannelModels(value);
+      setSelectedModels(nextValue);
+    }
     if (
       isIonetChannel &&
       isEdit &&
@@ -628,27 +644,24 @@ const EditChannelModal = (props) => {
       return;
     }
     if (formApiRef.current) {
-      formApiRef.current.setValue(name, value);
-    }
-    if (name === 'models' && Array.isArray(value)) {
-      value = Array.from(new Set(value.map((m) => (m || '').trim())));
+      formApiRef.current.setValue(name, nextValue);
     }
 
-    if (name === 'base_url' && value.endsWith('/v1')) {
+    if (name === 'base_url' && nextValue.endsWith('/v1')) {
       Modal.confirm({
         title: '警告',
         content:
           '不需要在末尾加/v1，New API会自动处理，添加后可能导致请求失败，是否继续？',
         onOk: () => {
-          setInputs((inputs) => ({ ...inputs, [name]: value }));
+          setInputs((inputs) => ({ ...inputs, [name]: nextValue }));
         },
       });
       return;
     }
-    setInputs((inputs) => ({ ...inputs, [name]: value }));
+    setInputs((inputs) => ({ ...inputs, [name]: nextValue }));
     if (name === 'type') {
       let localModels = [];
-      switch (value) {
+      switch (nextValue) {
         case 2:
           localModels = [
             'mj_imagine',
@@ -686,18 +699,20 @@ const EditChannelModal = (props) => {
           localModels = ['suno_music', 'suno_lyrics'];
           break;
         case 45:
-          localModels = getChannelModels(value);
+          localModels = getChannelModels(nextValue);
           setInputs((prevInputs) => ({
             ...prevInputs,
             base_url: 'https://ark.cn-beijing.volces.com',
           }));
           break;
         default:
-          localModels = getChannelModels(value);
+          localModels = getChannelModels(nextValue);
           break;
       }
-      if (inputs.models.length === 0) {
-        setInputs((inputs) => ({ ...inputs, models: localModels }));
+      if (selectedModels.length === 0) {
+        const normalizedLocalModels = normalizeChannelModels(localModels);
+        setSelectedModels(normalizedLocalModels);
+        setInputs((inputs) => ({ ...inputs, models: normalizedLocalModels }));
       }
       setBasicModels(localModels);
 
@@ -722,7 +737,7 @@ const EditChannelModal = (props) => {
   const moveModelBefore = (sourceModel, targetModel) => {
     if (!sourceModel || !targetModel || sourceModel === targetModel) return;
     const currentModels =
-      formApiRef.current?.getValue('models') || inputs.models || [];
+      formApiRef.current?.getValue('models') || selectedModels || [];
     const sourceIndex = currentModels.indexOf(sourceModel);
     const targetIndex = currentModels.indexOf(targetModel);
     if (sourceIndex < 0 || targetIndex < 0) return;
@@ -870,8 +885,9 @@ const EditChannelModal = (props) => {
       if (data.models === '') {
         data.models = [];
       } else {
-        data.models = data.models.split(',');
+        data.models = normalizeChannelModels(data.models.split(','));
       }
+      setSelectedModels(data.models);
       if (data.group === '') {
         data.groups = [];
       } else {
@@ -1305,7 +1321,7 @@ const EditChannelModal = (props) => {
       }
     });
 
-    inputs.models.forEach((model) => {
+    selectedModels.forEach((model) => {
       const v = (model || '').trim();
       if (!modelMap.has(v)) {
         modelMap.set(v, {
@@ -1338,7 +1354,7 @@ const EditChannelModal = (props) => {
     });
 
     setModelOptions(optionsWithIcon);
-  }, [originModelOptions, inputs.models, t]);
+  }, [originModelOptions, selectedModels, t]);
 
   useEffect(() => {
     fetchModels().then();
@@ -1346,12 +1362,15 @@ const EditChannelModal = (props) => {
     if (!isEdit) {
       initialBaseUrlRef.current = '';
       setInputs(originInputs);
+      setSelectedModels([]);
       if (formApiRef.current) {
         formApiRef.current.setValues(originInputs);
       }
       let localModels = getChannelModels(inputs.type);
       setBasicModels(localModels);
-      setInputs((inputs) => ({ ...inputs, models: localModels }));
+      const normalizedLocalModels = normalizeChannelModels(localModels);
+      setSelectedModels(normalizedLocalModels);
+      setInputs((inputs) => ({ ...inputs, models: normalizedLocalModels }));
     }
   }, [props.editingChannel.id]);
 
@@ -1367,7 +1386,14 @@ const EditChannelModal = (props) => {
       if (isEdit) {
         loadChannel();
       } else {
-        formApiRef.current?.setValues(getInitValues());
+        const initialValues = getInitValues();
+        const initialModels = normalizeChannelModels(
+          getChannelModels(initialValues.type),
+        );
+        const nextValues = { ...initialValues, models: initialModels };
+        setSelectedModels(initialModels);
+        setInputs(nextValues);
+        formApiRef.current?.setValues(nextValues);
         try {
           navigator?.clipboard?.readText()?.then((text) => {
             const parsed = parseChannelConnectionString(text);
@@ -1436,6 +1462,7 @@ const EditChannelModal = (props) => {
     }
     // 重置本地输入，避免下次打开残留上一次的 JSON 字段值
     setInputs(getInitValues());
+    setSelectedModels([]);
     // 重置密钥显示状态
     resetKeyDisplayState();
     // 重置剪贴板检测状态
@@ -1981,7 +2008,7 @@ const EditChannelModal = (props) => {
     if (customModel.trim() === '') return;
     const modelArray = customModel.split(',').map((model) => model.trim());
 
-    let localModels = [...inputs.models];
+    let localModels = [...selectedModels];
     let localModelOptions = [...modelOptions];
     const addedModels = [];
 
@@ -3599,8 +3626,8 @@ const EditChannelModal = (props) => {
                               ...(inputs.type === 4 && isEdit ? [{ node: 'item', name: t('Ollama 模型管理'), onClick: () => setOllamaModalVisible(true) }] : []),
                               { node: 'divider' },
                               { node: 'item', name: t('复制所有模型'), onClick: () => {
-                                if (inputs.models.length === 0) { showInfo(t('没有模型可以复制')); return; }
-                                try { copy(inputs.models.join(',')); showSuccess(t('模型列表已复制到剪贴板')); } catch (error) { showError(t('复制失败')); }
+                                if (selectedModels.length === 0) { showInfo(t('没有模型可以复制')); return; }
+                                try { copy(selectedModels.join(',')); showSuccess(t('模型列表已复制到剪贴板')); } catch (error) { showError(t('复制失败')); }
                               }},
                               { node: 'item', name: t('清除所有模型'), type: 'danger', onClick: () => handleInputChange('models', []) },
                               ...((modelGroups && modelGroups.length > 0) ? [
@@ -3617,7 +3644,7 @@ const EditChannelModal = (props) => {
                                         if (Array.isArray(parsed)) items = parsed;
                                       }
                                     } catch {}
-                                    const current = formApiRef.current?.getValue('models') || inputs.models || [];
+                                    const current = formApiRef.current?.getValue('models') || selectedModels || [];
                                     const merged = Array.from(new Set([...current, ...items].map((m) => (m || '').trim()).filter(Boolean)));
                                     handleInputChange('models', merged);
                                   },
@@ -3727,6 +3754,7 @@ const EditChannelModal = (props) => {
 
                   {/* Test Model - Core Config */}
                   <Form.Select
+                    key={testModelSelectKey}
                     field='test_model'
                     label={t('默认测试模型')}
                     placeholder={t('不填则为模型列表第一个')}
@@ -3935,11 +3963,11 @@ const EditChannelModal = (props) => {
       <ModelSelectModal
         visible={modelModalVisible}
         models={fetchedModels}
-        selected={inputs.models}
+        selected={selectedModels}
         redirectModels={redirectModelList}
         redirectSourceModels={redirectModelKeyList}
-        onConfirm={(selectedModels) => {
-          handleInputChange('models', selectedModels);
+        onConfirm={(nextSelectedModels) => {
+          handleInputChange('models', nextSelectedModels);
           showSuccess(t('模型列表已更新'));
           setModelModalVisible(false);
         }}
@@ -4006,9 +4034,7 @@ const EditChannelModal = (props) => {
           if (!Array.isArray(modelIds) || modelIds.length === 0) {
             return;
           }
-          const existingModels = Array.isArray(inputs.models)
-            ? inputs.models.map(String)
-            : [];
+          const existingModels = selectedModels.map(String);
           const incoming = modelIds.map(String);
           const nextModels = Array.from(
             new Set([...existingModels, ...incoming]),

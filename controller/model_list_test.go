@@ -358,3 +358,122 @@ func TestGetPricingFiltersBoundChannelsByUsableGroups(t *testing.T) {
 	require.Equal(t, "default-channel", pricing.BoundChannels[0].Name)
 	require.Equal(t, constant.ChannelTypeOpenAI, pricing.BoundChannels[0].Type)
 }
+
+func TestGetPricingSortsBoundChannelsByBestUsablePriorityAndWeight(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+
+	originalUsableGroups := setting.UserUsableGroups2JSONString()
+	t.Cleanup(func() {
+		require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(originalUsableGroups))
+		model.InvalidatePricingCache()
+	})
+
+	usableGroups, err := common.Marshal(map[string]string{
+		"default": "Default",
+	})
+	require.NoError(t, err)
+	require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(string(usableGroups)))
+
+	require.NoError(t, db.Create(&model.User{
+		Id:       2002,
+		Username: "pricing-sort-user",
+		Password: "password",
+		Group:    "default",
+		Status:   common.UserStatusEnabled,
+	}).Error)
+	require.NoError(t, db.Create(&[]model.Channel{
+		{
+			Id:     11,
+			Type:   constant.ChannelTypeOpenAI,
+			Key:    "sk-top-weight",
+			Status: common.ChannelStatusEnabled,
+			Name:   "priority-five-high-weight",
+			Group:  "default",
+		},
+		{
+			Id:     12,
+			Type:   constant.ChannelTypeOpenAI,
+			Key:    "sk-low-weight",
+			Status: common.ChannelStatusEnabled,
+			Name:   "priority-five-low-weight",
+			Group:  "default",
+		},
+		{
+			Id:     13,
+			Type:   constant.ChannelTypeOpenAI,
+			Key:    "sk-priority-two",
+			Status: common.ChannelStatusEnabled,
+			Name:   "priority-two",
+			Group:  "default",
+		},
+		{
+			Id:     14,
+			Type:   constant.ChannelTypeOpenAI,
+			Key:    "sk-vip-top",
+			Status: common.ChannelStatusEnabled,
+			Name:   "vip-priority-nine",
+			Group:  "vip",
+		},
+	}).Error)
+
+	priorityFive := int64(5)
+	priorityTwo := int64(2)
+	priorityNine := int64(9)
+	require.NoError(t, db.Create(&[]model.Ability{
+		{
+			Group:     "default",
+			Model:     "zz-pricing-sort-model",
+			ChannelId: 11,
+			Enabled:   true,
+			Priority:  &priorityFive,
+			Weight:    80,
+		},
+		{
+			Group:     "default",
+			Model:     "zz-pricing-sort-model",
+			ChannelId: 12,
+			Enabled:   true,
+			Priority:  &priorityFive,
+			Weight:    10,
+		},
+		{
+			Group:     "default",
+			Model:     "zz-pricing-sort-model",
+			ChannelId: 13,
+			Enabled:   true,
+			Priority:  &priorityTwo,
+			Weight:    99,
+		},
+		{
+			Group:     "vip",
+			Model:     "zz-pricing-sort-model",
+			ChannelId: 14,
+			Enabled:   true,
+			Priority:  &priorityNine,
+			Weight:    1,
+		},
+	}).Error)
+
+	model.InvalidatePricingCache()
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/pricing", nil)
+	ctx.Set("id", 2002)
+
+	GetPricing(ctx)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var payload pricingResponse
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &payload))
+	require.True(t, payload.Success)
+
+	pricingByName := pricingByModelName(payload.Data)
+	pricing, ok := pricingByName["zz-pricing-sort-model"]
+	require.True(t, ok)
+	require.Len(t, pricing.BoundChannels, 3)
+	require.Equal(t, "priority-five-high-weight", pricing.BoundChannels[0].Name)
+	require.Equal(t, "priority-five-low-weight", pricing.BoundChannels[1].Name)
+	require.Equal(t, "priority-two", pricing.BoundChannels[2].Name)
+}

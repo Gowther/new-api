@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"sort"
+
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
@@ -53,7 +55,29 @@ func filterBoundChannelsByUsableGroups(channels []model.BoundChannel, usableGrou
 			}
 		}
 	}
+	sortBoundChannelsByUsableGroups(filtered, usableGroup)
 	return filtered
+}
+
+func sortBoundChannelsByUsableGroups(channels []model.BoundChannel, usableGroup map[string]string) {
+	if len(channels) < 2 {
+		return
+	}
+
+	sort.SliceStable(channels, func(i, j int) bool {
+		leftPriority, leftWeight := channels[i].BestPriorityWeightForGroups(usableGroup)
+		rightPriority, rightWeight := channels[j].BestPriorityWeightForGroups(usableGroup)
+		if leftPriority != rightPriority {
+			return leftPriority > rightPriority
+		}
+		if leftWeight != rightWeight {
+			return leftWeight > rightWeight
+		}
+		if channels[i].Name != channels[j].Name {
+			return channels[i].Name < channels[j].Name
+		}
+		return channels[i].Type < channels[j].Type
+	})
 }
 
 func GetPricing(c *gin.Context) {

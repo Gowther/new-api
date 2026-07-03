@@ -17,9 +17,60 @@ const (
 )
 
 type BoundChannel struct {
-	Name   string   `json:"name"`
-	Type   int      `json:"type"`
-	Groups []string `json:"-"`
+	Name        string                       `json:"name"`
+	Type        int                          `json:"type"`
+	Groups      []string                     `json:"-"`
+	groupOrders map[string]boundChannelOrder `json:"-" gorm:"-"`
+}
+
+type boundChannelOrder struct {
+	Priority int64
+	Weight   uint
+}
+
+func (c *BoundChannel) addGroupOrder(group string, priority int64, weight uint) {
+	if c.groupOrders == nil {
+		c.groupOrders = make(map[string]boundChannelOrder)
+	}
+
+	groupKey := group
+	if groupKey == "" {
+		groupKey = "all"
+	}
+
+	current, exists := c.groupOrders[groupKey]
+	if !exists || priority > current.Priority || (priority == current.Priority && weight > current.Weight) {
+		c.groupOrders[groupKey] = boundChannelOrder{
+			Priority: priority,
+			Weight:   weight,
+		}
+	}
+}
+
+func (c BoundChannel) BestPriorityWeightForGroups(usableGroup map[string]string) (int64, uint) {
+	var (
+		bestPriority int64
+		bestWeight   uint
+		found        bool
+	)
+
+	for group, order := range c.groupOrders {
+		if group != "all" {
+			if _, ok := usableGroup[group]; !ok {
+				continue
+			}
+		}
+		if !found || order.Priority > bestPriority || (order.Priority == bestPriority && order.Weight > bestWeight) {
+			bestPriority = order.Priority
+			bestWeight = order.Weight
+			found = true
+		}
+	}
+
+	if !found {
+		return 0, 0
+	}
+	return bestPriority, bestWeight
 }
 
 type Model struct {
@@ -121,10 +172,12 @@ func GetBoundChannelsByModelsMap(modelNames []string) (map[string][]BoundChannel
 		Name         string
 		Type         int
 		AbilityGroup string
+		Priority     int64
+		Weight       uint
 	}
 	var rows []row
 	err := DB.Table("channels").
-		Select("abilities.model as model, channels.name as name, channels.type as type, abilities."+commonGroupCol+" as ability_group").
+		Select("abilities.model as model, channels.name as name, channels.type as type, abilities."+commonGroupCol+" as ability_group, abilities.priority as priority, abilities.weight as weight").
 		Joins("JOIN abilities ON abilities.channel_id = channels.id").
 		Where("abilities.model IN ? AND abilities.enabled = ?", modelNames, true).
 		Scan(&rows).Error
@@ -141,6 +194,7 @@ func GetBoundChannelsByModelsMap(modelNames []string) (map[string][]BoundChannel
 			modelChannelIndex[r.Model] = indexByChannel
 		}
 		if idx, exists := indexByChannel[channelKey]; exists {
+			result[r.Model][idx].addGroupOrder(r.AbilityGroup, r.Priority, r.Weight)
 			if r.AbilityGroup != "" && !common.StringsContains(result[r.Model][idx].Groups, r.AbilityGroup) {
 				result[r.Model][idx].Groups = append(result[r.Model][idx].Groups, r.AbilityGroup)
 			}
@@ -151,6 +205,7 @@ func GetBoundChannelsByModelsMap(modelNames []string) (map[string][]BoundChannel
 			Name: r.Name,
 			Type: r.Type,
 		}
+		channel.addGroupOrder(r.AbilityGroup, r.Priority, r.Weight)
 		if r.AbilityGroup != "" {
 			channel.Groups = []string{r.AbilityGroup}
 		}

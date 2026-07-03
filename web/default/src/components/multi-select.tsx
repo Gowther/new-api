@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { Add01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
+import { GripVertical } from 'lucide-react'
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -77,6 +78,8 @@ interface MultiSelectProps {
    * instead of being inert. The remove (×) button keeps its own behaviour.
    */
   copyChipOnClick?: boolean
+  /** Allows selected chips to be reordered with native drag and drop. */
+  reorderable?: boolean
 }
 
 const COMMA_REGEX = /[,，\n]/
@@ -123,6 +126,11 @@ export function MultiSelect(props: MultiSelectProps) {
   const [inputValue, setInputValue] = React.useState('')
   const [open, setOpen] = React.useState(false)
   const [expanded, setExpanded] = React.useState(false)
+  const [draggedValue, setDraggedValue] = React.useState('')
+  const [dragOverValue, setDragOverValue] = React.useState('')
+  const [dragOverPosition, setDragOverPosition] = React.useState<
+    'before' | 'after'
+  >('before')
 
   const selectedSet = React.useMemo(
     () => new Set(props.selected),
@@ -209,6 +217,46 @@ export function MultiSelect(props: MultiSelectProps) {
     }
   }
 
+  const resetDragState = React.useCallback(() => {
+    setDraggedValue('')
+    setDragOverValue('')
+    setDragOverPosition('before')
+  }, [])
+
+  const reorderSelected = React.useCallback(
+    (sourceValue: string, targetValue: string, position: 'before' | 'after') => {
+      if (!sourceValue || sourceValue === targetValue) return
+      const sourceIndex = props.selected.indexOf(sourceValue)
+      const targetIndex = props.selected.indexOf(targetValue)
+      if (sourceIndex < 0 || targetIndex < 0) return
+
+      const next = [...props.selected]
+      const [movedValue] = next.splice(sourceIndex, 1)
+      let insertIndex = next.indexOf(targetValue)
+      if (insertIndex < 0) return
+      if (position === 'after') {
+        insertIndex += 1
+      }
+      next.splice(insertIndex, 0, movedValue)
+      props.onChange(next)
+    },
+    [props]
+  )
+
+  const handleChipDragOver = React.useCallback(
+    (event: React.DragEvent<HTMLElement>, value: string) => {
+      if (!props.reorderable || !draggedValue || draggedValue === value) return
+      event.preventDefault()
+      event.stopPropagation()
+      const rect = event.currentTarget.getBoundingClientRect()
+      const position =
+        event.clientX < rect.left + rect.width / 2 ? 'before' : 'after'
+      setDragOverValue(value)
+      setDragOverPosition(position)
+    },
+    [draggedValue, props.reorderable]
+  )
+
   const handleCopyChip = React.useCallback(
     async (
       event: React.MouseEvent<HTMLButtonElement>,
@@ -283,8 +331,53 @@ export function MultiSelect(props: MultiSelectProps) {
               <>
                 {visibleValues.map((value) => {
                   const label = labelMap.get(value) ?? value
+                  const isDragOver =
+                    props.reorderable &&
+                    draggedValue !== '' &&
+                    dragOverValue === value &&
+                    draggedValue !== value
                   return (
-                    <ComboboxChip key={value}>
+                    <ComboboxChip
+                      key={value}
+                      draggable={props.reorderable && values.length > 1}
+                      onDragStart={(event) => {
+                        if (!props.reorderable || values.length <= 1) return
+                        event.dataTransfer.effectAllowed = 'move'
+                        event.dataTransfer.setData('text/plain', value)
+                        setDraggedValue(value)
+                      }}
+                      onDragOver={(event) => handleChipDragOver(event, value)}
+                      onDragLeave={() => {
+                        if (dragOverValue === value) {
+                          setDragOverValue('')
+                        }
+                      }}
+                      onDrop={(event) => {
+                        if (!props.reorderable) return
+                        event.preventDefault()
+                        event.stopPropagation()
+                        const sourceValue =
+                          draggedValue ||
+                          event.dataTransfer.getData('text/plain')
+                        reorderSelected(sourceValue, value, dragOverPosition)
+                        resetDragState()
+                      }}
+                      onDragEnd={resetDragState}
+                      title={props.reorderable ? t('Move') : undefined}
+                      className={cn(
+                        props.reorderable &&
+                          'cursor-grab active:cursor-grabbing',
+                        draggedValue === value && 'opacity-50',
+                        isDragOver &&
+                          'ring-primary/70 ring-2 ring-offset-1'
+                      )}
+                    >
+                      {props.reorderable && values.length > 1 && (
+                        <GripVertical
+                          className='text-muted-foreground h-3 w-3 shrink-0'
+                          aria-hidden='true'
+                        />
+                      )}
                       {props.copyChipOnClick ? (
                         <button
                           type='button'

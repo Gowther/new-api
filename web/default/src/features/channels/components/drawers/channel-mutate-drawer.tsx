@@ -1055,6 +1055,18 @@ export function ChannelMutateDrawer({
     }))
   }, [allModelsList, currentModelsArray])
 
+  const testModelOptions = useMemo(() => {
+    const models = new Set(currentModelsArray)
+    const selectedTestModel = currentTestModel?.trim()
+    if (selectedTestModel) {
+      models.add(selectedTestModel)
+    }
+    return [...models].map((model) => ({
+      value: model,
+      label: model,
+    }))
+  }, [currentModelsArray, currentTestModel])
+
   const modelMappingGuardrail = useMemo<ModelMappingGuardrail>(() => {
     if (!currentModelMapping?.trim()) {
       return createEmptyModelMappingGuardrail()
@@ -3130,6 +3142,7 @@ export function ChannelMutateDrawer({
                                       createLabel='Add custom model "{{value}}"'
                                       maxVisibleChips={8}
                                       copyChipOnClick
+                                      reorderable
                                     />
                                   </FormControl>
                                   {modelMappingGuardrail.exposedTargetModels
@@ -3542,11 +3555,13 @@ export function ChannelMutateDrawer({
                                 <FormItem>
                                   <FormLabel>{t('Test Model')}</FormLabel>
                                   <FormControl>
-                                    <Input
-                                      placeholder={t(
-                                        FIELD_PLACEHOLDERS.TEST_MODEL
-                                      )}
-                                      {...field}
+                                    <Combobox
+                                      options={testModelOptions}
+                                      value={field.value || ''}
+                                      onValueChange={field.onChange}
+                                      placeholder={t('Select Model')}
+                                      emptyText={t('No models found')}
+                                      allowCustomValue
                                     />
                                   </FormControl>
                                   <FormDescription>

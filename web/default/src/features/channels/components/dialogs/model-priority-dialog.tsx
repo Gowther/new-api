@@ -50,6 +50,28 @@ function sortChannelsByPriority(channels: Channel[]): Channel[] {
   })
 }
 
+function applyPriorityUpdates(
+  oldData: GetChannelsResponse | undefined,
+  prioritiesById: Map<number, number>,
+  shouldSort = false
+): GetChannelsResponse | undefined {
+  if (!oldData?.data?.items) return oldData
+
+  const items = oldData.data.items.map((channel) => {
+    const priority = prioritiesById.get(channel.id)
+    if (priority === undefined) return channel
+    return { ...channel, priority }
+  })
+
+  return {
+    ...oldData,
+    data: {
+      ...oldData.data,
+      items: shouldSort ? sortChannelsByPriority(items) : items,
+    },
+  }
+}
+
 export function ModelPriorityDialog({
   open,
   onOpenChange,
@@ -195,28 +217,17 @@ export function ModelPriorityDialog({
         toast.success(
           t('{{count}} channel(s) updated', { count: successCount })
         )
+        const prioritiesById = new Map(
+          successfulUpdates.map((update) => [update.id, update.priority])
+        )
+        queryClient.setQueriesData<GetChannelsResponse>(
+          { queryKey: channelsQueryKeys.lists() },
+          (oldData) => applyPriorityUpdates(oldData, prioritiesById)
+        )
         queryClient.setQueryData(
           channelsQueryKeys.list({ all: true }),
-          (oldData: GetChannelsResponse | undefined) => {
-            if (!oldData?.data?.items) return oldData
-
-            const prioritiesById = new Map(
-              successfulUpdates.map((update) => [update.id, update.priority])
-            )
-            const items = oldData.data.items.map((channel) => {
-              const priority = prioritiesById.get(channel.id)
-              if (priority === undefined) return channel
-              return { ...channel, priority }
-            })
-
-            return {
-              ...oldData,
-              data: {
-                ...oldData.data,
-                items: sortChannelsByPriority(items),
-              },
-            }
-          }
+          (oldData: GetChannelsResponse | undefined) =>
+            applyPriorityUpdates(oldData, prioritiesById, true)
         )
         await queryClient.invalidateQueries({
           queryKey: channelsQueryKeys.lists(),

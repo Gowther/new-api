@@ -218,6 +218,8 @@ const EditChannelModal = (props) => {
     allow_inference_geo: false,
     allow_speed: false,
     claude_beta_query: false,
+    automatic_channel_test_disabled: false,
+    auto_test_channel_interval_minutes: 0,
     upstream_model_update_check_enabled: false,
     upstream_model_update_auto_sync_enabled: false,
     upstream_model_update_last_check_time: 0,
@@ -967,6 +969,12 @@ const EditChannelModal = (props) => {
             parsedSettings.allow_inference_geo || false;
           data.allow_speed = parsedSettings.allow_speed || false;
           data.claude_beta_query = parsedSettings.claude_beta_query || false;
+          data.automatic_channel_test_disabled =
+            parsedSettings.automatic_channel_test_disabled === true;
+          data.auto_test_channel_interval_minutes =
+            Number(parsedSettings.auto_test_channel_interval_minutes) > 0
+              ? Number(parsedSettings.auto_test_channel_interval_minutes)
+              : 0;
           data.upstream_model_update_check_enabled =
             parsedSettings.upstream_model_update_check_enabled === true;
           data.upstream_model_update_auto_sync_enabled =
@@ -997,6 +1005,8 @@ const EditChannelModal = (props) => {
           data.allow_inference_geo = false;
           data.allow_speed = false;
           data.claude_beta_query = false;
+          data.automatic_channel_test_disabled = false;
+          data.auto_test_channel_interval_minutes = 0;
           data.upstream_model_update_check_enabled = false;
           data.upstream_model_update_auto_sync_enabled = false;
           data.upstream_model_update_last_check_time = 0;
@@ -1015,6 +1025,8 @@ const EditChannelModal = (props) => {
         data.allow_inference_geo = false;
         data.allow_speed = false;
         data.claude_beta_query = false;
+        data.automatic_channel_test_disabled = false;
+        data.auto_test_channel_interval_minutes = 0;
         data.upstream_model_update_check_enabled = false;
         data.upstream_model_update_auto_sync_enabled = false;
         data.upstream_model_update_last_check_time = 0;
@@ -1865,6 +1877,20 @@ const EditChannelModal = (props) => {
       }
     }
 
+    if (localInputs.automatic_channel_test_disabled === true) {
+      settings.automatic_channel_test_disabled = true;
+    } else if ('automatic_channel_test_disabled' in settings) {
+      delete settings.automatic_channel_test_disabled;
+    }
+    const autoTestChannelIntervalMinutes = Number(
+      localInputs.auto_test_channel_interval_minutes || 0,
+    );
+    if (autoTestChannelIntervalMinutes > 0) {
+      settings.auto_test_channel_interval_minutes =
+        autoTestChannelIntervalMinutes;
+    } else if ('auto_test_channel_interval_minutes' in settings) {
+      delete settings.auto_test_channel_interval_minutes;
+    }
     settings.upstream_model_update_check_enabled =
       localInputs.upstream_model_update_check_enabled === true;
     settings.upstream_model_update_auto_sync_enabled =
@@ -1910,6 +1936,8 @@ const EditChannelModal = (props) => {
     delete localInputs.allow_inference_geo;
     delete localInputs.allow_speed;
     delete localInputs.claude_beta_query;
+    delete localInputs.automatic_channel_test_disabled;
+    delete localInputs.auto_test_channel_interval_minutes;
     delete localInputs.upstream_model_update_check_enabled;
     delete localInputs.upstream_model_update_auto_sync_enabled;
     delete localInputs.upstream_model_update_last_check_time;
@@ -2273,6 +2301,45 @@ const EditChannelModal = (props) => {
           {() => {
             const advancedSettingsContent = (
               <div className='space-y-4'>
+                {/* Automatic Channel Test Section */}
+                <div className='pb-3 border-b border-gray-100'>
+                  <Text className='text-sm font-medium text-gray-500 mb-3 block'>
+                    {t('自动恢复检测')}
+                  </Text>
+
+                  <Form.InputNumber
+                    field='auto_test_channel_interval_minutes'
+                    label={t('自动测试间隔覆盖')}
+                    min={0}
+                    step={1}
+                    suffix={t('分钟')}
+                    extraText={t(
+                      '填 0 表示使用全局默认自动测试通道间隔时间',
+                    )}
+                    onChange={(value) =>
+                      handleChannelOtherSettingsChange(
+                        'auto_test_channel_interval_minutes',
+                        Number(value || 0),
+                      )
+                    }
+                  />
+                  <Form.Switch
+                    field='automatic_channel_test_disabled'
+                    label={t('禁用自动恢复检测')}
+                    checkedText={t('开')}
+                    uncheckedText={t('关')}
+                    onChange={(value) =>
+                      handleChannelOtherSettingsChange(
+                        'automatic_channel_test_disabled',
+                        value,
+                      )
+                    }
+                    extraText={t(
+                      '开启后后台定时任务会跳过该渠道，手动测试仍会执行',
+                    )}
+                  />
+                </div>
+
                 {/* Upstream Model Management Section */}
                 {MODEL_FETCHABLE_CHANNEL_TYPES.has(inputs.type) && (
                 <div className='pb-3 border-b border-gray-100'>

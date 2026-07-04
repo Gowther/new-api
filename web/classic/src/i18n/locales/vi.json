@@ -4246,7 +4246,13 @@
     "请求数": "Yêu cầu",
     "提示 Tokens": "Prompt Tokens",
     "补全 Tokens": "Completion Tokens",
-    "消耗": "Chi phí",
-    "占比": "Tỷ lệ"
+    "占比": "Tỷ lệ",
+    "自动恢复检测": "Kiểm tra khôi phục tự động",
+    "自动测试间隔覆盖": "Ghi đè khoảng kiểm tra tự động",
+    "填 0 表示使用全局默认自动测试通道间隔时间": "Nhập 0 để dùng khoảng kiểm tra kênh tự động mặc định toàn cục",
+    "禁用自动恢复检测": "Tắt kiểm tra khôi phục tự động",
+    "开启后后台定时任务会跳过该渠道，手动测试仍会执行": "Khi bật, tác vụ định kỳ nền sẽ bỏ qua kênh này, còn kiểm tra thủ công vẫn chạy",
+    "系统检查自动禁用渠道是否可恢复的默认频率，渠道可单独覆盖": "Tần suất mặc định để kiểm tra kênh bị tự động tắt có thể khôi phục hay không; từng kênh có thể ghi đè",
+    "系统测试所有渠道的默认频率，渠道可单独覆盖": "Tần suất mặc định để kiểm tra tất cả kênh; từng kênh có thể ghi đè"
   }
 }

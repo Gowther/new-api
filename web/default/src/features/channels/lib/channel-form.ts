@@ -205,6 +205,8 @@ export const channelFormSchema = z
     allow_speed: z.boolean().optional(), // Anthropic: speed mode control
     claude_beta_query: z.boolean().optional(), // Anthropic: beta query passthrough
     disable_task_polling_sleep: z.boolean().optional(),
+    automatic_channel_test_disabled: z.boolean().optional(),
+    auto_test_channel_interval_minutes: z.number().min(0).optional(),
     // Upstream model update settings (stored in settings JSON)
     upstream_model_update_check_enabled: z.boolean().optional(),
     upstream_model_update_auto_sync_enabled: z.boolean().optional(),
@@ -345,6 +347,8 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   allow_speed: false,
   claude_beta_query: false,
   disable_task_polling_sleep: false,
+  automatic_channel_test_disabled: false,
+  auto_test_channel_interval_minutes: 0,
   upstream_model_update_check_enabled: false,
   upstream_model_update_auto_sync_enabled: false,
   upstream_model_update_ignored_models: '',
@@ -401,6 +405,8 @@ export function transformChannelToFormDefaults(
   let allowSpeed = false
   let claudeBetaQuery = false
   let disableTaskPollingSleep = false
+  let automaticChannelTestDisabled = false
+  let autoTestChannelIntervalMinutes = 0
   let upstreamModelUpdateCheckEnabled = false
   let upstreamModelUpdateAutoSyncEnabled = false
   let upstreamModelUpdateIgnoredModels = ''
@@ -421,6 +427,12 @@ export function transformChannelToFormDefaults(
       allowSpeed = parsed.allow_speed === true
       claudeBetaQuery = parsed.claude_beta_query === true
       disableTaskPollingSleep = parsed.disable_task_polling_sleep === true
+      automaticChannelTestDisabled =
+        parsed.automatic_channel_test_disabled === true
+      autoTestChannelIntervalMinutes =
+        Number(parsed.auto_test_channel_interval_minutes) > 0
+          ? Number(parsed.auto_test_channel_interval_minutes)
+          : 0
       upstreamModelUpdateCheckEnabled =
         parsed.upstream_model_update_check_enabled === true
       upstreamModelUpdateAutoSyncEnabled =
@@ -479,6 +491,8 @@ export function transformChannelToFormDefaults(
     allow_speed: allowSpeed,
     claude_beta_query: claudeBetaQuery,
     disable_task_polling_sleep: disableTaskPollingSleep,
+    automatic_channel_test_disabled: automaticChannelTestDisabled,
+    auto_test_channel_interval_minutes: autoTestChannelIntervalMinutes,
     allow_safety_identifier: allowSafetyIdentifier,
     upstream_model_update_check_enabled: upstreamModelUpdateCheckEnabled,
     upstream_model_update_auto_sync_enabled: upstreamModelUpdateAutoSyncEnabled,
@@ -584,6 +598,19 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
 
   settingsObj.disable_task_polling_sleep =
     formData.disable_task_polling_sleep === true
+  if (formData.automatic_channel_test_disabled === true) {
+    settingsObj.automatic_channel_test_disabled = true
+  } else if ('automatic_channel_test_disabled' in settingsObj) {
+    delete settingsObj.automatic_channel_test_disabled
+  }
+  const autoTestIntervalMinutes = Number(
+    formData.auto_test_channel_interval_minutes || 0
+  )
+  if (autoTestIntervalMinutes > 0) {
+    settingsObj.auto_test_channel_interval_minutes = autoTestIntervalMinutes
+  } else if ('auto_test_channel_interval_minutes' in settingsObj) {
+    delete settingsObj.auto_test_channel_interval_minutes
+  }
 
   // Upstream model update settings (for model-fetchable channel types)
   if (MODEL_FETCHABLE_TYPES.has(formData.type)) {

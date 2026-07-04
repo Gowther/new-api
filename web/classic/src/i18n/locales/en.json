@@ -3859,6 +3859,13 @@
     "提示 Tokens": "Prompt Tokens",
     "补全 Tokens": "Completion Tokens",
     "消耗": "Cost",
-    "占比": "Share"
+    "占比": "Share",
+    "自动恢复检测": "Automatic recovery checks",
+    "自动测试间隔覆盖": "Auto test interval override",
+    "填 0 表示使用全局默认自动测试通道间隔时间": "Enter 0 to use the global default automatic channel test interval",
+    "禁用自动恢复检测": "Disable automatic recovery checks",
+    "开启后后台定时任务会跳过该渠道，手动测试仍会执行": "When enabled, scheduled background tasks skip this channel, while manual tests still run",
+    "系统检查自动禁用渠道是否可恢复的默认频率，渠道可单独覆盖": "Default frequency for checking whether auto-disabled channels can recover; channels can override it individually",
+    "系统测试所有渠道的默认频率，渠道可单独覆盖": "Default frequency for testing all channels; channels can override it individually"
   }
 }

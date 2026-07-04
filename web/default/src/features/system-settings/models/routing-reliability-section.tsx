@@ -444,9 +444,11 @@ export function RoutingReliabilitySection({
                     <FormDescription>
                       {channelTestMode === 'passive_recovery'
                         ? t(
-                            'How frequently the system checks auto-disabled channels for recovery'
+                            'Default frequency for checking auto-disabled channels for recovery; channel-specific overrides can run sooner or later'
                           )
-                        : t('How frequently the system tests all channels')}
+                        : t(
+                            'Default frequency for scheduled channel tests; channel-specific overrides can run sooner or later'
+                          )}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

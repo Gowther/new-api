@@ -250,6 +250,7 @@ const ADVANCED_SETTINGS_SECTION_IDS = {
   internalNotes: 'channel-section-advanced-internal-notes',
   overrideRules: 'channel-section-advanced-override-rules',
   extraSettings: 'channel-section-advanced-extra-settings',
+  automaticTesting: 'channel-section-advanced-automatic-testing',
   fieldPassthrough: 'channel-section-advanced-field-passthrough',
   upstreamModelDetection: 'channel-section-advanced-upstream-model-detection',
 } as const
@@ -288,6 +289,8 @@ const SENSITIVE_FORM_FIELDS = [
   'allow_speed',
   'claude_beta_query',
   'disable_task_polling_sleep',
+  'automatic_channel_test_disabled',
+  'auto_test_channel_interval_minutes',
   'upstream_model_update_check_enabled',
   'upstream_model_update_auto_sync_enabled',
   'upstream_model_update_ignored_models',
@@ -332,6 +335,8 @@ function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
     values.thinking_to_content ||
     values.pass_through_body_enabled ||
     values.system_prompt_override ||
+    values.automatic_channel_test_disabled ||
+    Number(values.auto_test_channel_interval_minutes || 0) > 0 ||
     values.claude_beta_query ||
     values.upstream_model_update_check_enabled ||
     values.upstream_model_update_auto_sync_enabled ||
@@ -723,6 +728,12 @@ export function ChannelMutateDrawer({
   const currentDisableTaskPollingSleep = form.watch(
     'disable_task_polling_sleep'
   )
+  const currentAutomaticChannelTestDisabled = form.watch(
+    'automatic_channel_test_disabled'
+  )
+  const currentAutoTestChannelIntervalMinutes = form.watch(
+    'auto_test_channel_interval_minutes'
+  )
   const currentProxy = form.watch('proxy')
   const currentSystemPrompt = form.watch('system_prompt')
   const currentSystemPromptOverride = form.watch('system_prompt_override')
@@ -931,6 +942,10 @@ export function ChannelMutateDrawer({
     currentSystemPrompt?.trim() ||
     currentSystemPromptOverride
   )
+  const automaticTestingConfigured = Boolean(
+    currentAutomaticChannelTestDisabled ||
+    Number(currentAutoTestChannelIntervalMinutes || 0) > 0
+  )
   let fieldPassthroughConfigured = false
   if (currentType === 1) {
     fieldPassthroughConfigured = Boolean(
@@ -958,6 +973,7 @@ export function ChannelMutateDrawer({
     internalNotesConfigured ||
     overrideRulesConfigured ||
     extraSettingsConfigured ||
+    automaticTestingConfigured ||
     fieldPassthroughConfigured ||
     upstreamModelDetectionConfigured
   )
@@ -981,6 +997,11 @@ export function ChannelMutateDrawer({
       id: ADVANCED_SETTINGS_SECTION_IDS.extraSettings,
       title: t('Channel Extra Settings'),
       configured: extraSettingsConfigured,
+    },
+    {
+      id: ADVANCED_SETTINGS_SECTION_IDS.automaticTesting,
+      title: t('Automatic Channel Testing'),
+      configured: automaticTestingConfigured,
     },
   ]
   if (currentType === 1 || currentType === 14) {
@@ -4106,6 +4127,82 @@ export function ChannelMutateDrawer({
                                     <FormDescription>
                                       {t(
                                         'Concatenate channel system prompt with user&apos;s prompt'
+                                      )}
+                                    </FormDescription>
+                                  </div>
+                                  <FormControl>
+                                    <Switch
+                                      checked={field.value}
+                                      onCheckedChange={field.onChange}
+                                    />
+                                  </FormControl>
+                                </FormItem>
+                              )}
+                            />
+                          </fieldset>
+                        </div>
+
+                        <div
+                          id={ADVANCED_SETTINGS_SECTION_IDS.automaticTesting}
+                          className={sideDrawerSectionClassName(
+                            configuredAdvancedSectionClassName(
+                              'scroll-mt-4',
+                              automaticTestingConfigured
+                            )
+                          )}
+                        >
+                          <CardHeading
+                            title={t('Automatic Channel Testing')}
+                            icon={<RefreshCw className='h-4 w-4' />}
+                          />
+                          <fieldset
+                            disabled={sensitiveLocked}
+                            className='space-y-4 disabled:opacity-60'
+                          >
+                            <FormField
+                              control={form.control}
+                              name='auto_test_channel_interval_minutes'
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>
+                                    {t('Auto test interval override (minutes)')}
+                                  </FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      type='number'
+                                      min={0}
+                                      step={1}
+                                      placeholder='0'
+                                      value={field.value ?? 0}
+                                      onChange={(event) =>
+                                        field.onChange(
+                                          Number(event.target.value || 0)
+                                        )
+                                      }
+                                    />
+                                  </FormControl>
+                                  <FormDescription>
+                                    {t(
+                                      'Use 0 to follow the global default automatic channel test interval'
+                                    )}
+                                  </FormDescription>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+
+                            <FormField
+                              control={form.control}
+                              name='automatic_channel_test_disabled'
+                              render={({ field }) => (
+                                <FormItem className='flex items-center justify-between gap-3'>
+                                  <div className='space-y-0.5'>
+                                    <FormLabel>
+                                      {t('Disable automatic recovery checks')}
+                                    </FormLabel>
+                                    <FormDescription>
+                                      {t(
+                                        'Skip this channel in scheduled automatic tests; manual tests still run'
                                       )}
                                     </FormDescription>
                                   </div>

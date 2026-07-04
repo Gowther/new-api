@@ -99,6 +99,32 @@ function getProgress(task: SystemTask): number | null {
   return Math.min(100, Math.max(0, progress))
 }
 
+function getTaskMetric(result: unknown, key: string): number {
+  if (!result || typeof result !== 'object') return 0
+  const value = (result as Record<string, unknown>)[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+function getTaskDetail(
+  task: SystemTask,
+  t: (key: string, options?: Record<string, unknown>) => string
+): string {
+  if (task.error) return task.error
+  if (task.type !== 'channel_test' || task.status !== 'succeeded') return '-'
+
+  return t(
+    'Channel test summary: {{tested}} tested, {{succeeded}} succeeded, {{failed}} failed, {{skipped}} skipped, {{disabled}} disabled, {{enabled}} enabled',
+    {
+      tested: getTaskMetric(task.result, 'tested'),
+      succeeded: getTaskMetric(task.result, 'succeeded'),
+      failed: getTaskMetric(task.result, 'failed'),
+      skipped: getTaskMetric(task.result, 'skipped'),
+      disabled: getTaskMetric(task.result, 'disabled'),
+      enabled: getTaskMetric(task.result, 'enabled'),
+    }
+  )
+}
+
 type SystemTasksTableProps = {
   tasks: SystemTask[]
 }
@@ -134,6 +160,7 @@ function SystemTasksTable(props: SystemTasksTableProps) {
         <TableBody>
           {props.tasks.map((task) => {
             const progress = getProgress(task)
+            const detail = getTaskDetail(task, t)
             return (
               <TableRow key={task.task_id} className='hover:bg-muted/30'>
                 <TableCell className='px-4 py-3 align-middle'>
@@ -189,10 +216,13 @@ function SystemTasksTable(props: SystemTasksTableProps) {
                   )}
                 </TableCell>
                 <TableCell
-                  className='text-destructive max-w-[220px] truncate py-3 pr-4 align-middle text-xs'
-                  title={task.error || undefined}
+                  className={cn(
+                    'max-w-[260px] truncate py-3 pr-4 align-middle text-xs',
+                    task.error ? 'text-destructive' : 'text-muted-foreground'
+                  )}
+                  title={detail === '-' ? undefined : detail}
                 >
-                  {task.error || '-'}
+                  {detail}
                 </TableCell>
               </TableRow>
             )

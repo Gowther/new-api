@@ -46,6 +46,12 @@ type ScheduledSystemTaskHandler interface {
 	NewPayload() any
 }
 
+// ConditionalScheduledSystemTaskHandler lets a scheduled handler skip creating
+// a task row when its coarse interval has elapsed but there is no real work.
+type ConditionalScheduledSystemTaskHandler interface {
+	ShouldSchedule(now int64) bool
+}
+
 var (
 	systemTaskHandlersMu sync.RWMutex
 	systemTaskHandlers   = map[string]SystemTaskHandler{}
@@ -287,6 +293,9 @@ func runSystemTaskScheduler() {
 			if now-latest.UpdatedAt < int64(scheduled.Interval().Seconds()) {
 				continue // not due yet
 			}
+		}
+		if conditional, ok := scheduled.(ConditionalScheduledSystemTaskHandler); ok && !conditional.ShouldSchedule(now) {
+			continue
 		}
 		if _, err := model.CreateSystemTask(scheduled.Type(), scheduled.NewPayload(), nil); err != nil {
 			activeTask, activeErr := model.GetActiveSystemTask(scheduled.Type())

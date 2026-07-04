@@ -31,10 +31,11 @@ func withSystemTaskRegistry(t *testing.T, handlers ...SystemTaskHandler) {
 }
 
 type stubScheduledHandler struct {
-	taskType string
-	enabled  bool
-	interval time.Duration
-	onRun    func(ctx context.Context, task *model.SystemTask, runnerID string)
+	taskType       string
+	enabled        bool
+	interval       time.Duration
+	shouldSchedule func(now int64) bool
+	onRun          func(ctx context.Context, task *model.SystemTask, runnerID string)
 }
 
 type stubSystemTaskRunResult struct {
@@ -54,6 +55,12 @@ func (h *stubScheduledHandler) Run(ctx context.Context, task *model.SystemTask, 
 func (h *stubScheduledHandler) Enabled() bool           { return h.enabled }
 func (h *stubScheduledHandler) Interval() time.Duration { return h.interval }
 func (h *stubScheduledHandler) NewPayload() any         { return nil }
+func (h *stubScheduledHandler) ShouldSchedule(now int64) bool {
+	if h.shouldSchedule == nil {
+		return true
+	}
+	return h.shouldSchedule(now)
+}
 
 func countSystemTasks(t *testing.T, taskType string) int64 {
 	t.Helper()
@@ -101,6 +108,21 @@ func TestSystemTaskSchedulerSkipsDisabled(t *testing.T) {
 	truncate(t)
 
 	handler := &stubScheduledHandler{taskType: "test_disabled", enabled: false, interval: time.Minute}
+	withSystemTaskRegistry(t, handler)
+
+	runSystemTaskScheduler()
+	assert.Equal(t, int64(0), countSystemTasks(t, handler.taskType))
+}
+
+func TestSystemTaskSchedulerSkipsWhenConditionalHandlerHasNoWork(t *testing.T) {
+	truncate(t)
+
+	handler := &stubScheduledHandler{
+		taskType:       "test_no_work",
+		enabled:        true,
+		interval:       time.Minute,
+		shouldSchedule: func(now int64) bool { return false },
+	}
 	withSystemTaskRegistry(t, handler)
 
 	runSystemTaskScheduler()

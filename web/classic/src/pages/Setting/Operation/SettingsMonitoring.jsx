@@ -184,8 +184,8 @@ export default function SettingsMonitoring(props) {
                   suffix={t('分钟')}
                   extraText={
                     channelTestMode === 'passive_recovery'
-                      ? t('系统检查自动禁用渠道是否可恢复的频率')
-                      : t('系统测试所有渠道的频率')
+                      ? t('系统检查自动禁用渠道是否可恢复的默认频率，渠道可单独覆盖')
+                      : t('系统测试所有渠道的默认频率，渠道可单独覆盖')
                   }
                   placeholder={''}
                   field={'monitor_setting.auto_test_channel_minutes'}

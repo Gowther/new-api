@@ -24,9 +24,9 @@ func RegisterScheduledSystemTasks() {
 	service.RegisterSystemTaskHandler(asyncTaskPollHandler{})
 }
 
-// channelTestHandler runs the scheduled "test all channels" job. Enablement and
-// cadence still come from the monitor settings; only the execution path moved
-// into the system task runner.
+// channelTestHandler runs scheduled automatic channel checks. The scheduler
+// probes frequently so per-channel shorter intervals are not blocked by the
+// global default, while ShouldSchedule avoids creating no-op task rows.
 type channelTestHandler struct{}
 
 func (channelTestHandler) Type() string { return model.SystemTaskTypeChannelTest }
@@ -36,11 +36,18 @@ func (channelTestHandler) Enabled() bool {
 }
 
 func (channelTestHandler) Interval() time.Duration {
-	minutes := operation_setting.GetMonitorSetting().AutoTestChannelMinutes
-	if minutes <= 0 {
-		minutes = 10
+	return 15 * time.Second
+}
+
+func (channelTestHandler) ShouldSchedule(now int64) bool {
+	channels, err := model.GetAllChannelTestScheduleSnapshots()
+	if err != nil {
+		common.SysLog(fmt.Sprintf("failed to load channels for scheduled channel test: %v", err))
+		return false
 	}
-	return time.Duration(minutes * float64(time.Minute))
+	mode := operation_setting.GetMonitorSetting().ChannelTestMode
+	selected, _ := selectChannelsForAutomaticTest(channels, mode, now, true)
+	return len(selected) > 0
 }
 
 func (channelTestHandler) NewPayload() any { return nil }

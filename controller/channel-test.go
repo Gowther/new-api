@@ -907,6 +907,7 @@ type channelTestSummary struct {
 	Failed    int `json:"failed"`
 	Disabled  int `json:"disabled"`
 	Enabled   int `json:"enabled"`
+	Skipped   int `json:"skipped"`
 }
 
 // performChannelTests runs the channel test loop synchronously, honoring ctx
@@ -1015,17 +1016,20 @@ func runChannelTestTask(ctx context.Context, mode string, notify bool, report fu
 	if strings.TrimSpace(mode) == "" {
 		mode = operation_setting.GetMonitorSetting().ChannelTestMode
 	}
-	selected := selectChannelsForAutomaticTest(channels, mode)
+	selected, skipped := selectChannelsForAutomaticTest(channels, mode, common.GetTimestamp(), !notify)
 	allowDisable := mode != operation_setting.ChannelTestModePassiveRecovery
 	summary := performChannelTests(ctx, selected, testUserID, allowDisable, report)
+	summary.Skipped = skipped
 	if notify && (ctx == nil || ctx.Err() == nil) {
 		service.NotifyRootUser(dto.NotifyTypeChannelTest, "通道测试完成", "所有通道测试已完成")
 	}
 	return summary, nil
 }
 
-func selectChannelsForAutomaticTest(channels []*model.Channel, mode string) []*model.Channel {
+func selectChannelsForAutomaticTest(channels []*model.Channel, mode string, now int64, applyAutomaticPolicy bool) ([]*model.Channel, int) {
 	selected := make([]*model.Channel, 0, len(channels))
+	skipped := 0
+	defaultMinutes := operation_setting.GetMonitorSetting().AutoTestChannelMinutes
 	for _, channel := range channels {
 		if channel.Status == common.ChannelStatusManuallyDisabled {
 			continue
@@ -1033,9 +1037,39 @@ func selectChannelsForAutomaticTest(channels []*model.Channel, mode string) []*m
 		if mode == operation_setting.ChannelTestModePassiveRecovery && channel.Status != common.ChannelStatusAutoDisabled {
 			continue
 		}
+		if applyAutomaticPolicy && !shouldRunAutomaticChannelTest(channel, defaultMinutes, now) {
+			skipped++
+			continue
+		}
 		selected = append(selected, channel)
 	}
-	return selected
+	return selected, skipped
+}
+
+func shouldRunAutomaticChannelTest(channel *model.Channel, defaultMinutes float64, now int64) bool {
+	settings := channel.GetOtherSettings()
+	if settings.AutomaticChannelTestDisabled {
+		return false
+	}
+	if channel.TestTime <= 0 {
+		return true
+	}
+	intervalSeconds := automaticChannelTestIntervalSeconds(settings, defaultMinutes)
+	if intervalSeconds <= 0 {
+		return true
+	}
+	return now-channel.TestTime >= intervalSeconds
+}
+
+func automaticChannelTestIntervalSeconds(settings dto.ChannelOtherSettings, defaultMinutes float64) int64 {
+	minutes := settings.AutoTestChannelIntervalMinutes
+	if minutes <= 0 {
+		minutes = defaultMinutes
+	}
+	if minutes <= 0 {
+		minutes = 10
+	}
+	return int64((time.Duration(minutes * float64(time.Minute))).Seconds())
 }
 
 // TestAllChannels enqueues a channel_test system task instead of running the

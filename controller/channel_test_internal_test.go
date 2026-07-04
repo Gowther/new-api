@@ -127,10 +127,11 @@ func TestSelectChannelsForAutomaticTestPassiveRecoveryOnlyUsesAutoDisabled(t *te
 		{Id: 3, Status: common.ChannelStatusManuallyDisabled},
 	}
 
-	selected := selectChannelsForAutomaticTest(channels, operation_setting.ChannelTestModePassiveRecovery)
+	selected, skipped := selectChannelsForAutomaticTest(channels, operation_setting.ChannelTestModePassiveRecovery, 1000, false)
 
 	require.Len(t, selected, 1)
 	require.Equal(t, 2, selected[0].Id)
+	require.Zero(t, skipped)
 }
 
 func TestSelectChannelsForAutomaticTestScheduledSkipsManualDisabled(t *testing.T) {
@@ -140,11 +141,45 @@ func TestSelectChannelsForAutomaticTestScheduledSkipsManualDisabled(t *testing.T
 		{Id: 3, Status: common.ChannelStatusManuallyDisabled},
 	}
 
-	selected := selectChannelsForAutomaticTest(channels, operation_setting.ChannelTestModeScheduledAll)
+	selected, skipped := selectChannelsForAutomaticTest(channels, operation_setting.ChannelTestModeScheduledAll, 1000, false)
 
 	require.Len(t, selected, 2)
 	require.Equal(t, 1, selected[0].Id)
 	require.Equal(t, 2, selected[1].Id)
+	require.Zero(t, skipped)
+}
+
+func TestSelectChannelsForAutomaticTestAppliesPerChannelPolicy(t *testing.T) {
+	now := int64(1000)
+	channels := []*model.Channel{
+		{Id: 1, Status: common.ChannelStatusAutoDisabled, TestTime: now - 120, OtherSettings: `{"auto_test_channel_interval_minutes":1}`},
+		{Id: 2, Status: common.ChannelStatusAutoDisabled, TestTime: now - 30, OtherSettings: `{"auto_test_channel_interval_minutes":1}`},
+		{Id: 3, Status: common.ChannelStatusAutoDisabled, OtherSettings: `{"automatic_channel_test_disabled":true}`},
+		{Id: 4, Status: common.ChannelStatusAutoDisabled, TestTime: 0},
+	}
+
+	selected, skipped := selectChannelsForAutomaticTest(channels, operation_setting.ChannelTestModePassiveRecovery, now, true)
+
+	require.Len(t, selected, 2)
+	require.Equal(t, 1, selected[0].Id)
+	require.Equal(t, 4, selected[1].Id)
+	require.Equal(t, 2, skipped)
+}
+
+func TestSelectChannelsForAutomaticTestManualBypassesPerChannelPolicy(t *testing.T) {
+	now := int64(1000)
+	channels := []*model.Channel{
+		{Id: 1, Status: common.ChannelStatusEnabled, TestTime: now - 30, OtherSettings: `{"auto_test_channel_interval_minutes":60}`},
+		{Id: 2, Status: common.ChannelStatusAutoDisabled, OtherSettings: `{"automatic_channel_test_disabled":true}`},
+		{Id: 3, Status: common.ChannelStatusManuallyDisabled},
+	}
+
+	selected, skipped := selectChannelsForAutomaticTest(channels, operation_setting.ChannelTestModeScheduledAll, now, false)
+
+	require.Len(t, selected, 2)
+	require.Equal(t, 1, selected[0].Id)
+	require.Equal(t, 2, selected[1].Id)
+	require.Zero(t, skipped)
 }
 
 func TestTestAllChannelsRejectsExistingActiveTask(t *testing.T) {

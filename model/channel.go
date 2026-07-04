@@ -365,6 +365,12 @@ func GetAllChannels(startIdx int, num int, selectAll bool, idSort bool, sortOpti
 	return channels, err
 }
 
+func GetAllChannelTestScheduleSnapshots() ([]*Channel, error) {
+	var channels []*Channel
+	err := DB.Select("id", "status", "test_time", "settings").Find(&channels).Error
+	return channels, err
+}
+
 func GetChannelsByTag(tag string, idSort bool, selectAll bool, sortOptions ...ChannelSortOptions) ([]*Channel, error) {
 	var channels []*Channel
 	order := resolveChannelSortOptions(idSort, sortOptions)

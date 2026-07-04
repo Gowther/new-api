@@ -85,9 +85,15 @@ export function CompactDateTimeRangePicker({
     setOpen(false)
   }
 
-  const applyPreset = (kind: 'today' | '7d' | 'week' | '30d' | 'month') => {
+  const applyPreset = (
+    kind: 'yesterday' | 'today' | '7d' | 'week' | '30d' | 'month'
+  ) => {
     const now = dayjs()
     const presets = {
+      yesterday: {
+        start: now.subtract(1, 'day').startOf('day').toDate(),
+        end: now.subtract(1, 'day').endOf('day').toDate(),
+      },
       today: {
         start: now.startOf('day').toDate(),
         end: now.endOf('day').toDate(),
@@ -168,6 +174,15 @@ export function CompactDateTimeRangePicker({
           </div>
 
           <div className='flex flex-wrap gap-1.5'>
+            <Button
+              type='button'
+              variant='secondary'
+              size='sm'
+              className='h-7 flex-1 px-2 text-xs'
+              onClick={() => applyPreset('yesterday')}
+            >
+              {t('Yesterday')}
+            </Button>
             <Button
               type='button'
               variant='secondary'

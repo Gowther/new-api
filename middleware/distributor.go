@@ -441,6 +441,16 @@ func getTaskOriginModelName(c *gin.Context) string {
 }
 
 func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, modelName string) *types.NewAPIError {
+	return setupContextForSelectedChannel(c, channel, modelName, nil)
+}
+
+// SetupContextForSelectedChannelWithKeyIndex prepares relay context with a
+// specific multi-key index, including disabled keys used by recovery checks.
+func SetupContextForSelectedChannelWithKeyIndex(c *gin.Context, channel *model.Channel, modelName string, keyIndex int) *types.NewAPIError {
+	return setupContextForSelectedChannel(c, channel, modelName, &keyIndex)
+}
+
+func setupContextForSelectedChannel(c *gin.Context, channel *model.Channel, modelName string, forcedKeyIndex *int) *types.NewAPIError {
 	c.Set("original_model", modelName) // for retry
 	if channel == nil {
 		return types.NewError(errors.New("channel is nil"), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
@@ -465,9 +475,19 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	common.SetContextKey(c, constant.ContextKeyChannelModelMapping, channel.GetModelMapping())
 	common.SetContextKey(c, constant.ContextKeyChannelStatusCodeMapping, channel.GetStatusCodeMapping())
 
-	key, index, newAPIError := channel.GetNextEnabledKey()
-	if newAPIError != nil {
-		return newAPIError
+	var key string
+	var index int
+	var newAPIError *types.NewAPIError
+	if forcedKeyIndex == nil {
+		key, index, newAPIError = channel.GetNextEnabledKey()
+		if newAPIError != nil {
+			return newAPIError
+		}
+	} else {
+		key, index, newAPIError = getChannelKeyByIndex(channel, *forcedKeyIndex)
+		if newAPIError != nil {
+			return newAPIError
+		}
 	}
 	if channel.ChannelInfo.IsMultiKey {
 		common.SetContextKey(c, constant.ContextKeyChannelIsMultiKey, true)
@@ -502,6 +522,23 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 		c.Set("bot_id", channel.Other)
 	}
 	return nil
+}
+
+func getChannelKeyByIndex(channel *model.Channel, keyIndex int) (string, int, *types.NewAPIError) {
+	if !channel.ChannelInfo.IsMultiKey {
+		if keyIndex == 0 {
+			return channel.Key, 0, nil
+		}
+		return "", 0, types.NewError(errors.New("key index out of range"), types.ErrorCodeChannelNoAvailableKey)
+	}
+	keys := channel.GetKeys()
+	if len(keys) == 0 {
+		return "", 0, types.NewError(errors.New("no keys available"), types.ErrorCodeChannelNoAvailableKey)
+	}
+	if keyIndex < 0 || keyIndex >= len(keys) {
+		return "", 0, types.NewError(errors.New("key index out of range"), types.ErrorCodeChannelNoAvailableKey)
+	}
+	return keys[keyIndex], keyIndex, nil
 }
 
 // extractModelNameFromGeminiPath 从 Gemini API URL 路径中提取模型名

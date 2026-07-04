@@ -134,6 +134,49 @@ func TestSelectChannelsForAutomaticTestPassiveRecoveryOnlyUsesAutoDisabled(t *te
 	require.Zero(t, skipped)
 }
 
+func TestSelectChannelsForAutomaticTestPassiveRecoveryIncludesAutoDisabledMultiKey(t *testing.T) {
+	channels := []*model.Channel{
+		{
+			Id:     1,
+			Status: common.ChannelStatusEnabled,
+			ChannelInfo: model.ChannelInfo{
+				IsMultiKey: true,
+				MultiKeyStatusList: map[int]int{
+					1: common.ChannelStatusAutoDisabled,
+				},
+			},
+		},
+		{
+			Id:     2,
+			Status: common.ChannelStatusEnabled,
+			ChannelInfo: model.ChannelInfo{
+				IsMultiKey: true,
+				MultiKeyStatusList: map[int]int{
+					1: common.ChannelStatusManuallyDisabled,
+				},
+			},
+		},
+		{Id: 3, Status: common.ChannelStatusAutoDisabled},
+		{
+			Id:     4,
+			Status: common.ChannelStatusManuallyDisabled,
+			ChannelInfo: model.ChannelInfo{
+				IsMultiKey: true,
+				MultiKeyStatusList: map[int]int{
+					1: common.ChannelStatusAutoDisabled,
+				},
+			},
+		},
+	}
+
+	selected, skipped := selectChannelsForAutomaticTest(channels, operation_setting.ChannelTestModePassiveRecovery, 1000, false)
+
+	require.Len(t, selected, 2)
+	require.Equal(t, 1, selected[0].Id)
+	require.Equal(t, 3, selected[1].Id)
+	require.Zero(t, skipped)
+}
+
 func TestSelectChannelsForAutomaticTestScheduledSkipsManualDisabled(t *testing.T) {
 	channels := []*model.Channel{
 		{Id: 1, Status: common.ChannelStatusEnabled},
@@ -147,6 +190,23 @@ func TestSelectChannelsForAutomaticTestScheduledSkipsManualDisabled(t *testing.T
 	require.Equal(t, 1, selected[0].Id)
 	require.Equal(t, 2, selected[1].Id)
 	require.Zero(t, skipped)
+}
+
+func TestAutoDisabledMultiKeyIndexesReturnsOnlyValidAutoDisabledKeys(t *testing.T) {
+	channel := &model.Channel{
+		ChannelInfo: model.ChannelInfo{
+			IsMultiKey:   true,
+			MultiKeySize: 3,
+			MultiKeyStatusList: map[int]int{
+				0: common.ChannelStatusManuallyDisabled,
+				1: common.ChannelStatusAutoDisabled,
+				2: common.ChannelStatusAutoDisabled,
+				4: common.ChannelStatusAutoDisabled,
+			},
+		},
+	}
+
+	require.Equal(t, []int{1, 2}, autoDisabledMultiKeyIndexes(channel))
 }
 
 func TestSelectChannelsForAutomaticTestAppliesPerChannelPolicy(t *testing.T) {
@@ -180,6 +240,86 @@ func TestSelectChannelsForAutomaticTestManualBypassesPerChannelPolicy(t *testing
 	require.Equal(t, 1, selected[0].Id)
 	require.Equal(t, 2, selected[1].Id)
 	require.Zero(t, skipped)
+}
+
+func TestUpdateChannelStatusByKeyIndexRecoversExactMultiKeyIndex(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	originalMemoryCacheEnabled := common.MemoryCacheEnabled
+	common.MemoryCacheEnabled = false
+	t.Cleanup(func() {
+		common.MemoryCacheEnabled = originalMemoryCacheEnabled
+	})
+
+	channel := model.Channel{
+		Type:   constant.ChannelTypeOpenAI,
+		Key:    "duplicate-key\nduplicate-key\nmanual-key",
+		Name:   "multi-key",
+		Status: common.ChannelStatusEnabled,
+		ChannelInfo: model.ChannelInfo{
+			IsMultiKey:   true,
+			MultiKeySize: 3,
+			MultiKeyStatusList: map[int]int{
+				0: common.ChannelStatusAutoDisabled,
+				1: common.ChannelStatusAutoDisabled,
+				2: common.ChannelStatusManuallyDisabled,
+			},
+			MultiKeyDisabledReason: map[int]string{
+				0: "auto disabled first duplicate",
+				1: "auto disabled second duplicate",
+				2: "manual disabled",
+			},
+			MultiKeyDisabledTime: map[int]int64{
+				0: 10,
+				1: 20,
+				2: 30,
+			},
+		},
+	}
+	require.NoError(t, db.Create(&channel).Error)
+
+	require.True(t, model.UpdateChannelStatusByKeyIndex(channel.Id, 1, common.ChannelStatusEnabled, ""))
+
+	var saved model.Channel
+	require.NoError(t, db.First(&saved, channel.Id).Error)
+	require.Equal(t, common.ChannelStatusEnabled, saved.Status)
+	require.Equal(t, common.ChannelStatusAutoDisabled, saved.ChannelInfo.MultiKeyStatusList[0])
+	require.NotContains(t, saved.ChannelInfo.MultiKeyStatusList, 1)
+	require.Equal(t, common.ChannelStatusManuallyDisabled, saved.ChannelInfo.MultiKeyStatusList[2])
+	require.NotContains(t, saved.ChannelInfo.MultiKeyDisabledReason, 1)
+	require.NotContains(t, saved.ChannelInfo.MultiKeyDisabledTime, 1)
+}
+
+func TestUpdateChannelStatusByKeyIndexEnablesAllDisabledMultiKeyChannel(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	originalMemoryCacheEnabled := common.MemoryCacheEnabled
+	common.MemoryCacheEnabled = false
+	t.Cleanup(func() {
+		common.MemoryCacheEnabled = originalMemoryCacheEnabled
+	})
+
+	channel := model.Channel{
+		Type:   constant.ChannelTypeOpenAI,
+		Key:    "first-key\nsecond-key",
+		Name:   "all-disabled-multi-key",
+		Status: common.ChannelStatusAutoDisabled,
+		ChannelInfo: model.ChannelInfo{
+			IsMultiKey:   true,
+			MultiKeySize: 2,
+			MultiKeyStatusList: map[int]int{
+				0: common.ChannelStatusAutoDisabled,
+				1: common.ChannelStatusAutoDisabled,
+			},
+		},
+	}
+	require.NoError(t, db.Create(&channel).Error)
+
+	require.True(t, model.UpdateChannelStatusByKeyIndex(channel.Id, 1, common.ChannelStatusEnabled, ""))
+
+	var saved model.Channel
+	require.NoError(t, db.First(&saved, channel.Id).Error)
+	require.Equal(t, common.ChannelStatusEnabled, saved.Status)
+	require.Equal(t, common.ChannelStatusAutoDisabled, saved.ChannelInfo.MultiKeyStatusList[0])
+	require.NotContains(t, saved.ChannelInfo.MultiKeyStatusList, 1)
 }
 
 func TestTestAllChannelsRejectsExistingActiveTask(t *testing.T) {

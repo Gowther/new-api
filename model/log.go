@@ -609,12 +609,42 @@ type ErrorLogSummaryResponse struct {
 }
 
 type ErrorLogSummaryItem struct {
-	Key                            string  `json:"key"`
-	ModelName                      string  `json:"model_name"`
+	Key                            string                       `json:"key"`
+	ModelName                      string                       `json:"model_name"`
+	ChannelId                      int                          `json:"channel"`
+	ChannelName                    string                       `json:"channel_name"`
+	ChannelStatus                  int                          `json:"channel_status"`
+	ChannelPriority                int64                        `json:"channel_priority"`
+	ChannelResponseTime            int                          `json:"channel_response_time"`
+	ChannelTestTime                int64                        `json:"channel_test_time"`
+	AutomaticChannelTestDisabled   bool                         `json:"automatic_channel_test_disabled"`
+	AutoTestChannelIntervalMinutes float64                      `json:"auto_test_channel_interval_minutes"`
+	MultiKeyTotal                  int                          `json:"multi_key_total"`
+	MultiKeyEnabled                int                          `json:"multi_key_enabled"`
+	MultiKeyAutoDisabled           int                          `json:"multi_key_auto_disabled"`
+	MultiKeyManualDisabled         int                          `json:"multi_key_manual_disabled"`
+	PeerChannels                   []ErrorLogSummaryPeerChannel `json:"peer_channels"`
+	ErrorType                      string                       `json:"error_type"`
+	ErrorCode                      string                       `json:"error_code"`
+	StatusCode                     int                          `json:"status_code"`
+	ErrorSummary                   string                       `json:"error_summary"`
+	Count                          int                          `json:"count"`
+	FirstSeen                      int64                        `json:"first_seen"`
+	LastSeen                       int64                        `json:"last_seen"`
+	SampleContent                  string                       `json:"sample_content"`
+	SampleRequestId                string                       `json:"sample_request_id"`
+	SampleUpstreamRequestId        string                       `json:"sample_upstream_request_id"`
+	SampleGroup                    string                       `json:"sample_group"`
+	MaxUseTime                     int                          `json:"max_use_time"`
+}
+
+type ErrorLogSummaryPeerChannel struct {
 	ChannelId                      int     `json:"channel"`
 	ChannelName                    string  `json:"channel_name"`
 	ChannelStatus                  int     `json:"channel_status"`
 	ChannelPriority                int64   `json:"channel_priority"`
+	ChannelWeight                  uint    `json:"channel_weight"`
+	AbilityEnabled                 bool    `json:"ability_enabled"`
 	ChannelResponseTime            int     `json:"channel_response_time"`
 	ChannelTestTime                int64   `json:"channel_test_time"`
 	AutomaticChannelTestDisabled   bool    `json:"automatic_channel_test_disabled"`
@@ -623,18 +653,9 @@ type ErrorLogSummaryItem struct {
 	MultiKeyEnabled                int     `json:"multi_key_enabled"`
 	MultiKeyAutoDisabled           int     `json:"multi_key_auto_disabled"`
 	MultiKeyManualDisabled         int     `json:"multi_key_manual_disabled"`
-	ErrorType                      string  `json:"error_type"`
-	ErrorCode                      string  `json:"error_code"`
-	StatusCode                     int     `json:"status_code"`
-	ErrorSummary                   string  `json:"error_summary"`
-	Count                          int     `json:"count"`
-	FirstSeen                      int64   `json:"first_seen"`
-	LastSeen                       int64   `json:"last_seen"`
-	SampleContent                  string  `json:"sample_content"`
-	SampleRequestId                string  `json:"sample_request_id"`
-	SampleUpstreamRequestId        string  `json:"sample_upstream_request_id"`
-	SampleGroup                    string  `json:"sample_group"`
-	MaxUseTime                     int     `json:"max_use_time"`
+	RecentErrorCount               int     `json:"recent_error_count"`
+	LastErrorTime                  int64   `json:"last_error_time"`
+	IsCurrent                      bool    `json:"is_current"`
 }
 
 const (
@@ -741,6 +762,9 @@ func GetErrorLogSummary(query ErrorLogSummaryQuery) (*ErrorLogSummaryResponse, e
 	if len(items) > query.Limit {
 		items = items[:query.Limit]
 	}
+	if err = applyErrorSummaryPeerChannels(items, logs); err != nil {
+		return nil, err
+	}
 
 	return &ErrorLogSummaryResponse{
 		Items:       items,
@@ -844,6 +868,176 @@ func applyErrorSummaryChannelInfo(item *ErrorLogSummaryItem, channel Channel) {
 	}
 	if item.MultiKeyEnabled < 0 {
 		item.MultiKeyEnabled = 0
+	}
+}
+
+type errorSummaryPeerKey struct {
+	Model string
+	Group string
+}
+
+type errorSummaryChannelErrorStats struct {
+	Count int
+	Last  int64
+}
+
+type errorSummaryPeerChannelRow struct {
+	ChannelId     int         `gorm:"column:channel_id"`
+	ChannelName   string      `gorm:"column:channel_name"`
+	ChannelStatus int         `gorm:"column:channel_status"`
+	Priority      *int64      `gorm:"column:priority"`
+	Weight        uint        `gorm:"column:weight"`
+	Enabled       bool        `gorm:"column:enabled"`
+	ResponseTime  int         `gorm:"column:response_time"`
+	TestTime      int64       `gorm:"column:test_time"`
+	ChannelInfo   ChannelInfo `gorm:"column:channel_info"`
+	Settings      string      `gorm:"column:settings"`
+}
+
+func applyErrorSummaryPeerChannels(items []*ErrorLogSummaryItem, logs []*Log) error {
+	peerKeys := make(map[errorSummaryPeerKey]struct{})
+	for _, item := range items {
+		key := errorSummaryPeerKey{
+			Model: item.ModelName,
+			Group: item.SampleGroup,
+		}
+		if key.Model == "" || key.Group == "" {
+			continue
+		}
+		peerKeys[key] = struct{}{}
+	}
+	if len(peerKeys) == 0 {
+		return nil
+	}
+
+	errorStats := make(map[errorSummaryPeerKey]map[int]errorSummaryChannelErrorStats)
+	for _, log := range logs {
+		key := errorSummaryPeerKey{
+			Model: log.ModelName,
+			Group: log.Group,
+		}
+		if key.Model == "" || key.Group == "" {
+			continue
+		}
+		if _, ok := peerKeys[key]; !ok {
+			continue
+		}
+		channelStats, ok := errorStats[key]
+		if !ok {
+			channelStats = make(map[int]errorSummaryChannelErrorStats)
+			errorStats[key] = channelStats
+		}
+		stats := channelStats[log.ChannelId]
+		stats.Count++
+		if log.CreatedAt > stats.Last {
+			stats.Last = log.CreatedAt
+		}
+		channelStats[log.ChannelId] = stats
+	}
+
+	peerChannelsByKey := make(map[errorSummaryPeerKey][]ErrorLogSummaryPeerChannel, len(peerKeys))
+	for key := range peerKeys {
+		peerChannels, err := getErrorSummaryPeerChannels(key, errorStats[key])
+		if err != nil {
+			return err
+		}
+		peerChannelsByKey[key] = peerChannels
+	}
+
+	for _, item := range items {
+		key := errorSummaryPeerKey{
+			Model: item.ModelName,
+			Group: item.SampleGroup,
+		}
+		peers := peerChannelsByKey[key]
+		if len(peers) == 0 {
+			continue
+		}
+		item.PeerChannels = make([]ErrorLogSummaryPeerChannel, len(peers))
+		copy(item.PeerChannels, peers)
+		for i := range item.PeerChannels {
+			item.PeerChannels[i].IsCurrent = item.PeerChannels[i].ChannelId == item.ChannelId
+		}
+	}
+	return nil
+}
+
+func getErrorSummaryPeerChannels(key errorSummaryPeerKey, errorStats map[int]errorSummaryChannelErrorStats) ([]ErrorLogSummaryPeerChannel, error) {
+	var rows []errorSummaryPeerChannelRow
+	err := DB.Table("abilities").
+		Select(strings.Join([]string{
+			"abilities.channel_id",
+			"abilities.enabled",
+			"abilities.priority",
+			"abilities.weight",
+			"channels.name AS channel_name",
+			"channels.status AS channel_status",
+			"channels.response_time",
+			"channels.test_time",
+			"channels.channel_info",
+			"channels.settings",
+		}, ", ")).
+		Joins("JOIN channels ON channels.id = abilities.channel_id").
+		Where("abilities."+commonGroupCol+" = ? AND abilities.model = ?", key.Group, key.Model).
+		Order("COALESCE(abilities.priority, 0) DESC").
+		Order("abilities.weight DESC").
+		Order("abilities.channel_id ASC").
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+
+	peerChannels := make([]ErrorLogSummaryPeerChannel, 0, len(rows))
+	for _, row := range rows {
+		priority := int64(0)
+		if row.Priority != nil {
+			priority = *row.Priority
+		}
+		peer := ErrorLogSummaryPeerChannel{
+			ChannelId:           row.ChannelId,
+			ChannelName:         row.ChannelName,
+			ChannelStatus:       row.ChannelStatus,
+			ChannelPriority:     priority,
+			ChannelWeight:       row.Weight,
+			AbilityEnabled:      row.Enabled,
+			ChannelResponseTime: row.ResponseTime,
+			ChannelTestTime:     row.TestTime,
+		}
+		applyErrorSummaryPeerChannelSettings(&peer, row.ChannelInfo, row.Settings)
+		if stats, ok := errorStats[row.ChannelId]; ok {
+			peer.RecentErrorCount = stats.Count
+			peer.LastErrorTime = stats.Last
+		}
+		peerChannels = append(peerChannels, peer)
+	}
+	return peerChannels, nil
+}
+
+func applyErrorSummaryPeerChannelSettings(peer *ErrorLogSummaryPeerChannel, channelInfo ChannelInfo, settingsJson string) {
+	settings := dto.ChannelOtherSettings{}
+	if settingsJson != "" {
+		_ = common.UnmarshalJsonStr(settingsJson, &settings)
+	}
+	peer.AutomaticChannelTestDisabled = settings.AutomaticChannelTestDisabled
+	peer.AutoTestChannelIntervalMinutes = settings.AutoTestChannelIntervalMinutes
+
+	if !channelInfo.IsMultiKey {
+		return
+	}
+	peer.MultiKeyTotal = channelInfo.MultiKeySize
+	peer.MultiKeyEnabled = channelInfo.MultiKeySize
+	for _, status := range channelInfo.MultiKeyStatusList {
+		switch status {
+		case common.ChannelStatusAutoDisabled:
+			peer.MultiKeyAutoDisabled++
+			peer.MultiKeyEnabled--
+		case common.ChannelStatusManuallyDisabled:
+			peer.MultiKeyManualDisabled++
+			peer.MultiKeyEnabled--
+		}
+	}
+	if peer.MultiKeyEnabled < 0 {
+		peer.MultiKeyEnabled = 0
 	}
 }
 

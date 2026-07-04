@@ -96,6 +96,48 @@ function buildUsageLogFilter(record) {
   };
 }
 
+function getSortedPeerChannels(record) {
+  return [...(record.peer_channels || [])].sort((a, b) => {
+    if (a.channel_priority !== b.channel_priority) {
+      return b.channel_priority - a.channel_priority;
+    }
+    if (a.channel_weight !== b.channel_weight) {
+      return b.channel_weight - a.channel_weight;
+    }
+    return a.channel - b.channel;
+  });
+}
+
+function getPriorityMoveTarget(record, direction) {
+  const peers = getSortedPeerChannels(record);
+  const currentIndex = peers.findIndex(
+    (peer) => peer.channel === record.channel,
+  );
+  if (currentIndex < 0 || peers.length < 2) {
+    return null;
+  }
+  if (direction === 'top') {
+    return currentIndex === 0 ? null : peers[0].channel_priority + 1;
+  }
+  if (direction === 'bottom') {
+    return currentIndex === peers.length - 1
+      ? null
+      : peers[peers.length - 1].channel_priority - 1;
+  }
+  if (direction === 'up') {
+    return currentIndex === 0
+      ? null
+      : peers[currentIndex - 1].channel_priority + 1;
+  }
+  return currentIndex === peers.length - 1
+    ? null
+    : peers[currentIndex + 1].channel_priority - 1;
+}
+
+function canMovePriority(record, direction) {
+  return getPriorityMoveTarget(record, direction) !== null;
+}
+
 export default function ErrorWorkbench() {
   const { t } = useTranslation();
   const [summary, setSummary] = useState(DEFAULT_SUMMARY);
@@ -231,15 +273,14 @@ export default function ErrorWorkbench() {
     });
   };
 
-  const updatePriority = async (record, value) => {
-    if (!record.channel || value === '' || value === undefined) {
+  const updatePriority = async (record, priority, action = 'priority') => {
+    if (!record.channel || priority === null || priority === undefined) {
       return;
     }
-    const priority = parseInt(value, 10);
     if (Number.isNaN(priority) || priority === record.channel_priority) {
       return;
     }
-    await runChannelAction(record, 'priority', async () => {
+    await runChannelAction(record, action, async () => {
       const res = await API.put('/api/channel/', {
         id: record.channel,
         priority,
@@ -250,6 +291,81 @@ export default function ErrorWorkbench() {
         showError(res.data.message || t('更新失败'));
       }
     });
+  };
+
+  const movePriority = async (record, direction) => {
+    const priority = getPriorityMoveTarget(record, direction);
+    if (priority === null) {
+      showError(t('没有同模型渠道排序上下文'));
+      return;
+    }
+    await updatePriority(record, priority, `priority-${direction}`);
+  };
+
+  const renderPeerChannels = (record) => {
+    const peers = getSortedPeerChannels(record);
+    if (peers.length === 0) {
+      return (
+        <Typography.Text type='tertiary' size='small'>
+          {t('没有同模型渠道排序上下文')}
+        </Typography.Text>
+      );
+    }
+    return (
+      <div className='mt-2 max-h-56 w-full overflow-y-auto rounded-lg border border-solid border-gray-100 bg-gray-50 p-2'>
+        <Typography.Text type='tertiary' size='small'>
+          {t('同模型渠道池')} · {t('按优先级、权重排序')}
+        </Typography.Text>
+        <Space
+          vertical
+          align='start'
+          spacing={6}
+          style={{ width: '100%', marginTop: 6 }}
+        >
+          {peers.map((peer, index) => (
+            <div
+              key={peer.channel}
+              className={
+                peer.is_current
+                  ? 'w-full rounded-md border border-solid border-yellow-200 bg-yellow-50 p-2'
+                  : 'w-full rounded-md border border-solid border-gray-100 bg-white p-2'
+              }
+            >
+              <Space spacing={4} wrap>
+                <Tag color='grey'>#{index + 1}</Tag>
+                <Typography.Text strong>
+                  {peer.channel_name || t('未知渠道')} #{peer.channel}
+                </Typography.Text>
+                {peer.is_current && <Tag color='orange'>{t('当前')}</Tag>}
+              </Space>
+              <div className='mt-1'>
+                <Space spacing={4} wrap>
+                  {renderChannelStatus(peer.channel_status)}
+                  <Tag color='grey'>
+                    {t('优先级')} {peer.channel_priority || 0}
+                  </Tag>
+                  <Tag color='grey'>
+                    {t('权重')} {peer.channel_weight || 0}
+                  </Tag>
+                  <Tag color={peer.recent_error_count > 0 ? 'red' : 'grey'}>
+                    {t('近期错误')} {peer.recent_error_count || 0}
+                  </Tag>
+                  {peer.automatic_channel_test_disabled && (
+                    <Tag color='red'>{t('跳过自动测活')}</Tag>
+                  )}
+                  {peer.multi_key_total > 0 && (
+                    <Tag color='blue'>
+                      {t('多 Key')} {peer.multi_key_enabled}/
+                      {peer.multi_key_total}
+                    </Tag>
+                  )}
+                </Space>
+              </div>
+            </div>
+          ))}
+        </Space>
+      </div>
+    );
   };
 
   const copyUsageLogFilter = async (record) => {
@@ -314,6 +430,7 @@ export default function ErrorWorkbench() {
           <Typography.Text type='tertiary' size='small'>
             {t('最近测试')} {renderTime(record.channel_test_time)}
           </Typography.Text>
+          {renderPeerChannels(record)}
         </Space>
       ),
     },
@@ -434,17 +551,48 @@ export default function ErrorWorkbench() {
               {t('复制筛选')}
             </Button>
           </Space>
-          <Space spacing={6}>
+          <Space vertical align='start' spacing={4}>
             <Typography.Text type='tertiary' size='small'>
-              {t('优先级')}
+              {t('路由排序')}
             </Typography.Text>
-            <InputNumber
-              size='small'
-              style={{ width: 92 }}
-              defaultValue={record.channel_priority || 0}
-              disabled={!record.channel}
-              onBlur={(event) => updatePriority(record, event.target.value)}
-            />
+            <Space spacing={4} wrap>
+              <Button
+                size='small'
+                theme='light'
+                loading={actionLoading[`${record.key}:priority-top`]}
+                disabled={!record.channel || !canMovePriority(record, 'top')}
+                onClick={() => movePriority(record, 'top')}
+              >
+                {t('置顶')}
+              </Button>
+              <Button
+                size='small'
+                theme='light'
+                loading={actionLoading[`${record.key}:priority-up`]}
+                disabled={!record.channel || !canMovePriority(record, 'up')}
+                onClick={() => movePriority(record, 'up')}
+              >
+                {t('上移')}
+              </Button>
+              <Button
+                size='small'
+                theme='light'
+                loading={actionLoading[`${record.key}:priority-down`]}
+                disabled={!record.channel || !canMovePriority(record, 'down')}
+                onClick={() => movePriority(record, 'down')}
+              >
+                {t('下移')}
+              </Button>
+              <Button
+                size='small'
+                theme='light'
+                loading={actionLoading[`${record.key}:priority-bottom`]}
+                disabled={!record.channel || !canMovePriority(record, 'bottom')}
+                onClick={() => movePriority(record, 'bottom')}
+              >
+                {t('降到底')}
+              </Button>
+            </Space>
           </Space>
         </Space>
       ),

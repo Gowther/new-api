@@ -72,6 +72,26 @@ type ErrorWorkbenchFilters = {
   group: string
 }
 
+type ErrorSummaryPeerChannel = {
+  channel: number
+  channel_name: string
+  channel_status: number
+  channel_priority: number
+  channel_weight: number
+  ability_enabled: boolean
+  channel_response_time: number
+  channel_test_time: number
+  automatic_channel_test_disabled: boolean
+  auto_test_channel_interval_minutes: number
+  multi_key_total: number
+  multi_key_enabled: number
+  multi_key_auto_disabled: number
+  multi_key_manual_disabled: number
+  recent_error_count: number
+  last_error_time: number
+  is_current: boolean
+}
+
 type ErrorSummaryItem = {
   key: string
   model_name: string
@@ -87,6 +107,7 @@ type ErrorSummaryItem = {
   multi_key_enabled: number
   multi_key_auto_disabled: number
   multi_key_manual_disabled: number
+  peer_channels: ErrorSummaryPeerChannel[]
   error_type: string
   error_code: string
   status_code: number
@@ -190,6 +211,53 @@ function usageLogFilter(record: ErrorSummaryItem) {
   }
 }
 
+type PriorityMoveDirection = 'top' | 'up' | 'down' | 'bottom'
+
+function getSortedPeerChannels(record: ErrorSummaryItem) {
+  return [...(record.peer_channels ?? [])].sort((a, b) => {
+    if (a.channel_priority !== b.channel_priority) {
+      return b.channel_priority - a.channel_priority
+    }
+    if (a.channel_weight !== b.channel_weight) {
+      return b.channel_weight - a.channel_weight
+    }
+    return a.channel - b.channel
+  })
+}
+
+function getPriorityMoveTarget(
+  record: ErrorSummaryItem,
+  direction: PriorityMoveDirection,
+) {
+  const peers = getSortedPeerChannels(record)
+  const currentIndex = peers.findIndex(
+    (peer) => peer.channel === record.channel,
+  )
+  if (currentIndex < 0 || peers.length < 2) return null
+
+  if (direction === 'top') {
+    if (currentIndex === 0) return null
+    return peers[0].channel_priority + 1
+  }
+  if (direction === 'bottom') {
+    if (currentIndex === peers.length - 1) return null
+    return peers[peers.length - 1].channel_priority - 1
+  }
+  if (direction === 'up') {
+    if (currentIndex === 0) return null
+    return peers[currentIndex - 1].channel_priority + 1
+  }
+  if (currentIndex === peers.length - 1) return null
+  return peers[currentIndex + 1].channel_priority - 1
+}
+
+function canMovePriority(
+  record: ErrorSummaryItem,
+  direction: PriorityMoveDirection,
+) {
+  return getPriorityMoveTarget(record, direction) !== null
+}
+
 type ChannelAction =
   | { type: 'test'; record: ErrorSummaryItem }
   | { type: 'status'; record: ErrorSummaryItem; status: number }
@@ -286,13 +354,87 @@ export function ErrorWorkbench() {
     }
   }
 
-  const updatePriority = (record: ErrorSummaryItem, value: string) => {
-    if (!value.trim()) return
-    const priority = Number(value)
-    if (!Number.isFinite(priority) || priority === record.channel_priority) {
+  const movePriority = (
+    record: ErrorSummaryItem,
+    direction: PriorityMoveDirection,
+  ) => {
+    const priority = getPriorityMoveTarget(record, direction)
+    if (priority === null) {
+      toast.info(t('No peer channel context'))
       return
     }
     actionMutation.mutate({ type: 'priority', record, priority })
+  }
+
+  const renderPeerChannels = (record: ErrorSummaryItem) => {
+    const peers = getSortedPeerChannels(record)
+    if (peers.length === 0) {
+      return (
+        <div className='text-muted-foreground mt-2 text-xs'>
+          {t('No peer channel context')}
+        </div>
+      )
+    }
+    return (
+      <div className='bg-muted/30 mt-3 max-h-56 space-y-2 overflow-y-auto rounded-lg border p-2'>
+        <div className='text-muted-foreground text-xs'>
+          {t('Same model channels')} · {t('Ordered by priority, then weight')}
+        </div>
+        {peers.map((peer, index) => (
+          <div
+            key={peer.channel}
+            className={
+              peer.is_current
+                ? 'rounded-md border border-amber-200 bg-amber-50/70 p-2'
+                : 'rounded-md border bg-background p-2'
+            }
+          >
+            <div className='flex flex-wrap items-center gap-1'>
+              <Badge variant='outline'>#{index + 1}</Badge>
+              <span className='text-sm font-medium'>
+                {peer.channel_name || t('Unknown channel')} #{peer.channel}
+              </span>
+              {peer.is_current && (
+                <Badge variant='outline' className='border-amber-200'>
+                  {t('Current')}
+                </Badge>
+              )}
+            </div>
+            <div className='mt-1 flex flex-wrap gap-1'>
+              <Badge
+                variant='outline'
+                className={channelStatusClassName(peer.channel_status)}
+              >
+                {channelStatusLabel(peer.channel_status, t)}
+              </Badge>
+              <Badge variant='outline'>
+                {t('Priority')} {peer.channel_priority || 0}
+              </Badge>
+              <Badge variant='outline'>
+                {t('Weight')} {peer.channel_weight || 0}
+              </Badge>
+              <Badge variant='outline'>
+                {t('Recent errors')} {peer.recent_error_count || 0}
+              </Badge>
+              {peer.automatic_channel_test_disabled && (
+                <Badge
+                  variant='outline'
+                  className='border-red-200 text-red-700'
+                >
+                  {t('Skipped')}
+                </Badge>
+              )}
+              {peer.multi_key_total > 0 && (
+                <Badge variant='outline'>
+                  {t('Multi-key')} {peer.multi_key_enabled}/
+                  {peer.multi_key_total}
+                </Badge>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    )
   }
 
   return (
@@ -545,6 +687,7 @@ export function ErrorWorkbench() {
                           {t('Last tested')}:{' '}
                           {formatTimestampToDate(record.channel_test_time)}
                         </div>
+                        {renderPeerChannels(record)}
                       </TableCell>
                       <TableCell className='max-w-[420px] align-top whitespace-normal'>
                         <div className='flex flex-wrap gap-1'>
@@ -667,21 +810,55 @@ export function ErrorWorkbench() {
                           </Button>
                         </div>
                         <div className='mt-2 flex justify-end gap-2'>
-                          <Label
-                            htmlFor={`priority-${record.channel}-${record.last_seen}`}
-                            className='text-muted-foreground text-xs'
-                          >
-                            {t('Priority')}
-                          </Label>
-                          <Input
-                            id={`priority-${record.channel}-${record.last_seen}`}
-                            type='number'
-                            className='h-7 w-20'
-                            defaultValue={record.channel_priority || 0}
-                            onBlur={(event) =>
-                              updatePriority(record, event.target.value)
+                          <span className='text-muted-foreground text-xs'>
+                            {t('Route order')}
+                          </span>
+                        </div>
+                        <div className='mt-1 flex flex-wrap justify-end gap-1'>
+                          <Button
+                            size='sm'
+                            variant='outline'
+                            disabled={
+                              actionMutation.isPending ||
+                              !canMovePriority(record, 'top')
                             }
-                          />
+                            onClick={() => movePriority(record, 'top')}
+                          >
+                            {t('Move top')}
+                          </Button>
+                          <Button
+                            size='sm'
+                            variant='outline'
+                            disabled={
+                              actionMutation.isPending ||
+                              !canMovePriority(record, 'up')
+                            }
+                            onClick={() => movePriority(record, 'up')}
+                          >
+                            {t('Move up')}
+                          </Button>
+                          <Button
+                            size='sm'
+                            variant='outline'
+                            disabled={
+                              actionMutation.isPending ||
+                              !canMovePriority(record, 'down')
+                            }
+                            onClick={() => movePriority(record, 'down')}
+                          >
+                            {t('Move down')}
+                          </Button>
+                          <Button
+                            size='sm'
+                            variant='outline'
+                            disabled={
+                              actionMutation.isPending ||
+                              !canMovePriority(record, 'bottom')
+                            }
+                            onClick={() => movePriority(record, 'bottom')}
+                          >
+                            {t('Move bottom')}
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>

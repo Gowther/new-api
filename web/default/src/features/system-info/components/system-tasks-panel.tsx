@@ -41,7 +41,7 @@ import type {
 import { formatTimestampRelative, formatTimestampToDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-const TASK_LIMIT = 20
+const TASK_LIMIT = 100
 const ACTIVE_POLL_INTERVAL_MS = 8000
 
 const STATUS_VARIANT: Record<SystemTaskStatus, 'secondary' | 'destructive'> = {

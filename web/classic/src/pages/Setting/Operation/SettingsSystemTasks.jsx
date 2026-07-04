@@ -36,7 +36,7 @@ import { API, showError, timestamp2string } from '../../../helpers';
 
 const { Text, Title } = Typography;
 
-const TASK_LIMIT = 20;
+const TASK_LIMIT = 100;
 const ACTIVE_POLL_INTERVAL_MS = 8000;
 
 const TYPE_LABEL = {

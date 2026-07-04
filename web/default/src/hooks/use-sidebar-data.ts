@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import {
   Activity,
+  Bug,
   Gauge,
   Box,
   CreditCard,
@@ -129,6 +130,11 @@ export function useSidebarData(): SidebarData {
             title: t('Channels'),
             url: '/channels',
             icon: Radio,
+          },
+          {
+            title: t('Error Workbench'),
+            url: '/error-workbench',
+            icon: Bug,
           },
           {
             title: t('Models'),

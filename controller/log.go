@@ -150,6 +150,27 @@ func GetLogsSelfStat(c *gin.Context) {
 	return
 }
 
+func GetErrorLogSummary(c *gin.Context) {
+	hours, _ := strconv.Atoi(c.Query("hours"))
+	limit, _ := strconv.Atoi(c.Query("limit"))
+	channel, _ := strconv.Atoi(c.Query("channel"))
+	modelName := c.Query("model_name")
+	group := c.Query("group")
+
+	summary, err := model.GetErrorLogSummary(model.ErrorLogSummaryQuery{
+		Hours:     hours,
+		Limit:     limit,
+		ModelName: modelName,
+		ChannelId: channel,
+		Group:     group,
+	})
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, summary)
+}
+
 // DeleteHistoryLogs is the legacy synchronous log cleanup endpoint (DELETE /api/log/).
 // It deletes directly instead of going through the async system task. It is kept only
 // for the classic frontend; the default frontend uses POST /api/system-task/log-cleanup.

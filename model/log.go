@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/types"
 
@@ -587,6 +589,294 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 	}
 
 	return logs, total, err
+}
+
+type ErrorLogSummaryQuery struct {
+	Hours     int
+	Limit     int
+	ModelName string
+	ChannelId int
+	Group     string
+}
+
+type ErrorLogSummaryResponse struct {
+	Items       []*ErrorLogSummaryItem `json:"items"`
+	ScannedLogs int                    `json:"scanned_logs"`
+	TotalLogs   int64                  `json:"total_logs"`
+	Truncated   bool                   `json:"truncated"`
+	StartTime   int64                  `json:"start_time"`
+	EndTime     int64                  `json:"end_time"`
+}
+
+type ErrorLogSummaryItem struct {
+	Key                            string  `json:"key"`
+	ModelName                      string  `json:"model_name"`
+	ChannelId                      int     `json:"channel"`
+	ChannelName                    string  `json:"channel_name"`
+	ChannelStatus                  int     `json:"channel_status"`
+	ChannelPriority                int64   `json:"channel_priority"`
+	ChannelResponseTime            int     `json:"channel_response_time"`
+	ChannelTestTime                int64   `json:"channel_test_time"`
+	AutomaticChannelTestDisabled   bool    `json:"automatic_channel_test_disabled"`
+	AutoTestChannelIntervalMinutes float64 `json:"auto_test_channel_interval_minutes"`
+	MultiKeyTotal                  int     `json:"multi_key_total"`
+	MultiKeyEnabled                int     `json:"multi_key_enabled"`
+	MultiKeyAutoDisabled           int     `json:"multi_key_auto_disabled"`
+	MultiKeyManualDisabled         int     `json:"multi_key_manual_disabled"`
+	ErrorType                      string  `json:"error_type"`
+	ErrorCode                      string  `json:"error_code"`
+	StatusCode                     int     `json:"status_code"`
+	ErrorSummary                   string  `json:"error_summary"`
+	Count                          int     `json:"count"`
+	FirstSeen                      int64   `json:"first_seen"`
+	LastSeen                       int64   `json:"last_seen"`
+	SampleContent                  string  `json:"sample_content"`
+	SampleRequestId                string  `json:"sample_request_id"`
+	SampleUpstreamRequestId        string  `json:"sample_upstream_request_id"`
+	SampleGroup                    string  `json:"sample_group"`
+	MaxUseTime                     int     `json:"max_use_time"`
+}
+
+const (
+	defaultErrorSummaryHours = 24
+	maxErrorSummaryHours     = 168
+	defaultErrorSummaryLimit = 50
+	maxErrorSummaryLimit     = 200
+	errorSummaryScanLimit    = 10000
+	errorSummaryTextLimit    = 180
+)
+
+func GetErrorLogSummary(query ErrorLogSummaryQuery) (*ErrorLogSummaryResponse, error) {
+	if query.Hours <= 0 {
+		query.Hours = defaultErrorSummaryHours
+	}
+	if query.Hours > maxErrorSummaryHours {
+		query.Hours = maxErrorSummaryHours
+	}
+	if query.Limit <= 0 {
+		query.Limit = defaultErrorSummaryLimit
+	}
+	if query.Limit > maxErrorSummaryLimit {
+		query.Limit = maxErrorSummaryLimit
+	}
+
+	endTime := common.GetTimestamp()
+	startTime := endTime - int64(query.Hours*3600)
+	tx := LOG_DB.Model(&Log{}).
+		Where("logs.type = ?", LogTypeError).
+		Where("logs.created_at >= ?", startTime).
+		Where("logs.created_at <= ?", endTime)
+
+	var err error
+	if tx, err = applyExplicitLogTextFilter(tx, "logs.model_name", query.ModelName); err != nil {
+		return nil, err
+	}
+	if query.ChannelId > 0 {
+		tx = tx.Where("logs.channel_id = ?", query.ChannelId)
+	}
+	if query.Group != "" {
+		tx = tx.Where("logs."+logGroupCol+" = ?", query.Group)
+	}
+
+	var total int64
+	if err = tx.Count(&total).Error; err != nil {
+		return nil, err
+	}
+
+	order := "logs.created_at desc, logs.id desc"
+	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
+		order = clickHouseLogOrder("logs.")
+	}
+	var logs []*Log
+	if err = tx.Order(order).Limit(errorSummaryScanLimit).Find(&logs).Error; err != nil {
+		return nil, err
+	}
+
+	summaryMap := make(map[string]*ErrorLogSummaryItem)
+	channelIds := make(map[int]struct{})
+	for _, log := range logs {
+		item := buildErrorLogSummaryItem(log)
+		key := item.Key
+		if existing, ok := summaryMap[key]; ok {
+			existing.Count++
+			if log.CreatedAt > existing.LastSeen {
+				existing.LastSeen = log.CreatedAt
+				existing.SampleContent = item.SampleContent
+				existing.SampleRequestId = item.SampleRequestId
+				existing.SampleUpstreamRequestId = item.SampleUpstreamRequestId
+				existing.SampleGroup = item.SampleGroup
+			}
+			if log.CreatedAt < existing.FirstSeen {
+				existing.FirstSeen = log.CreatedAt
+			}
+			if log.UseTime > existing.MaxUseTime {
+				existing.MaxUseTime = log.UseTime
+			}
+			continue
+		}
+		summaryMap[key] = item
+		if log.ChannelId != 0 {
+			channelIds[log.ChannelId] = struct{}{}
+		}
+	}
+
+	channelMap, err := getErrorSummaryChannelMap(channelIds)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]*ErrorLogSummaryItem, 0, len(summaryMap))
+	for _, item := range summaryMap {
+		if channel, ok := channelMap[item.ChannelId]; ok {
+			applyErrorSummaryChannelInfo(item, channel)
+		}
+		items = append(items, item)
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Count != items[j].Count {
+			return items[i].Count > items[j].Count
+		}
+		return items[i].LastSeen > items[j].LastSeen
+	})
+	if len(items) > query.Limit {
+		items = items[:query.Limit]
+	}
+
+	return &ErrorLogSummaryResponse{
+		Items:       items,
+		ScannedLogs: len(logs),
+		TotalLogs:   total,
+		Truncated:   total > int64(len(logs)),
+		StartTime:   startTime,
+		EndTime:     endTime,
+	}, nil
+}
+
+func buildErrorLogSummaryItem(log *Log) *ErrorLogSummaryItem {
+	other, _ := common.StrToMap(log.Other)
+	errorType := errorSummaryString(other["error_type"])
+	errorCode := errorSummaryString(other["error_code"])
+	statusCode := errorSummaryInt(other["status_code"])
+	contentSummary := normalizeErrorSummaryText(log.Content)
+	key := strings.Join([]string{
+		log.ModelName,
+		fmt.Sprintf("%d", log.ChannelId),
+		errorType,
+		errorCode,
+		fmt.Sprintf("%d", statusCode),
+		contentSummary,
+	}, "\x1f")
+
+	return &ErrorLogSummaryItem{
+		Key:                     key,
+		ModelName:               log.ModelName,
+		ChannelId:               log.ChannelId,
+		ChannelName:             errorSummaryString(other["channel_name"]),
+		ErrorType:               errorType,
+		ErrorCode:               errorCode,
+		StatusCode:              statusCode,
+		ErrorSummary:            contentSummary,
+		Count:                   1,
+		FirstSeen:               log.CreatedAt,
+		LastSeen:                log.CreatedAt,
+		SampleContent:           normalizeErrorSummaryText(log.Content),
+		SampleRequestId:         log.RequestId,
+		SampleUpstreamRequestId: log.UpstreamRequestId,
+		SampleGroup:             log.Group,
+		MaxUseTime:              log.UseTime,
+	}
+}
+
+func getErrorSummaryChannelMap(channelIds map[int]struct{}) (map[int]Channel, error) {
+	if len(channelIds) == 0 {
+		return map[int]Channel{}, nil
+	}
+	ids := make([]int, 0, len(channelIds))
+	for id := range channelIds {
+		ids = append(ids, id)
+	}
+
+	var channels []Channel
+	err := DB.Model(&Channel{}).
+		Select("id, name, status, priority, response_time, test_time, channel_info, settings").
+		Where("id IN ?", ids).
+		Find(&channels).Error
+	if err != nil {
+		return nil, err
+	}
+	channelMap := make(map[int]Channel, len(channels))
+	for _, channel := range channels {
+		channelMap[channel.Id] = channel
+	}
+	return channelMap, nil
+}
+
+func applyErrorSummaryChannelInfo(item *ErrorLogSummaryItem, channel Channel) {
+	item.ChannelName = channel.Name
+	item.ChannelStatus = channel.Status
+	item.ChannelResponseTime = channel.ResponseTime
+	item.ChannelTestTime = channel.TestTime
+	if channel.Priority != nil {
+		item.ChannelPriority = *channel.Priority
+	}
+
+	settings := dto.ChannelOtherSettings{}
+	if channel.OtherSettings != "" {
+		_ = common.UnmarshalJsonStr(channel.OtherSettings, &settings)
+	}
+	item.AutomaticChannelTestDisabled = settings.AutomaticChannelTestDisabled
+	item.AutoTestChannelIntervalMinutes = settings.AutoTestChannelIntervalMinutes
+
+	if !channel.ChannelInfo.IsMultiKey {
+		return
+	}
+	item.MultiKeyTotal = channel.ChannelInfo.MultiKeySize
+	item.MultiKeyEnabled = channel.ChannelInfo.MultiKeySize
+	for _, status := range channel.ChannelInfo.MultiKeyStatusList {
+		switch status {
+		case common.ChannelStatusAutoDisabled:
+			item.MultiKeyAutoDisabled++
+			item.MultiKeyEnabled--
+		case common.ChannelStatusManuallyDisabled:
+			item.MultiKeyManualDisabled++
+			item.MultiKeyEnabled--
+		}
+	}
+	if item.MultiKeyEnabled < 0 {
+		item.MultiKeyEnabled = 0
+	}
+}
+
+func errorSummaryString(value interface{}) string {
+	return strings.TrimSpace(common.Interface2String(value))
+}
+
+func errorSummaryInt(value interface{}) int {
+	switch v := value.(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	case float32:
+		return int(v)
+	case string:
+		var result int
+		if _, err := fmt.Sscanf(v, "%d", &result); err == nil {
+			return result
+		}
+	}
+	return 0
+}
+
+func normalizeErrorSummaryText(content string) string {
+	content = strings.Join(strings.Fields(content), " ")
+	runes := []rune(content)
+	if len(runes) <= errorSummaryTextLimit {
+		return content
+	}
+	return string(runes[:errorSummaryTextLimit]) + "..."
 }
 
 const logSearchCountLimit = 10000

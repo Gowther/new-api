@@ -40,6 +40,7 @@ const routerMap = {
   user: '/console/user',
   subscription: '/console/subscription',
   log: '/console/log',
+  error_workbench: '/console/error-workbench',
   midjourney: '/console/midjourney',
   setting: '/console/setting',
   about: '/about',
@@ -158,6 +159,12 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('渠道管理'),
         itemKey: 'channel',
         to: '/channel',
+        className: isAdmin() ? '' : 'tableHiddle',
+      },
+      {
+        text: t('错误排障'),
+        itemKey: 'error_workbench',
+        to: '/error-workbench',
         className: isAdmin() ? '' : 'tableHiddle',
       },
       {

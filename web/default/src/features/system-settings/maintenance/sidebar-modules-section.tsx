@@ -138,6 +138,10 @@ export function SidebarModulesSection({
         title: t('Channels'),
         description: t('Configure upstream providers and routing.'),
       },
+      error_workbench: {
+        title: t('Error Workbench'),
+        description: t('Summarize recent errors and adjust channels quickly.'),
+      },
       models: {
         title: t('Models'),
         description: t('Manage catalog visibility and pricing.'),

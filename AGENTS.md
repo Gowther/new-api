@@ -111,6 +111,7 @@ Do NOT directly import or call `encoding/json` in business code. `json.RawMessag
 
 ### Frontend Rules
 
+- Frontend changes MUST be kept in sync across both frontend implementations: update `web/default/` (new UI) and `web/classic/` (classic UI) for the same behavior. Do not change only `web/default/`; if one implementation cannot be updated, explain why in the response.
 - Use `bun` as the preferred package manager and script runner for the frontend (`web/default/`):
   - `bun install` for dependency installation
   - `bun run dev` for development server

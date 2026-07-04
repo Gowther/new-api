@@ -42,6 +42,7 @@ import Token from './pages/Token';
 import Redemption from './pages/Redemption';
 import TopUp from './pages/TopUp';
 import Log from './pages/Log';
+import ErrorWorkbench from './pages/ErrorWorkbench';
 import Chat from './pages/Chat';
 import Chat2Link from './pages/Chat2Link';
 import MjProxy from './pages/Midjourney';
@@ -305,6 +306,14 @@ function App() {
             <PrivateRoute>
               <Log />
             </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/error-workbench'
+          element={
+            <AdminRoute>
+              <ErrorWorkbench />
+            </AdminRoute>
           }
         />
         <Route

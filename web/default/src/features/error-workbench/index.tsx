@@ -1,0 +1,697 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
+import { RefreshCw } from 'lucide-react'
+import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+
+import { SectionPageLayout } from '@/components/layout'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
+  testChannel as testChannelRequest,
+  updateChannel,
+  updateChannelStatus,
+} from '@/features/channels/api'
+import { copyToClipboard } from '@/lib/copy-to-clipboard'
+import { formatTimestampToDate } from '@/lib/format'
+import { api } from '@/lib/api'
+
+type BackendResponse<T> = {
+  success: boolean
+  message?: string
+  data?: T
+}
+
+type ErrorWorkbenchFilters = {
+  hours: number
+  limit: number
+  modelName: string
+  channel: string
+  group: string
+}
+
+type ErrorSummaryItem = {
+  key: string
+  model_name: string
+  channel: number
+  channel_name: string
+  channel_status: number
+  channel_priority: number
+  channel_response_time: number
+  channel_test_time: number
+  automatic_channel_test_disabled: boolean
+  auto_test_channel_interval_minutes: number
+  multi_key_total: number
+  multi_key_enabled: number
+  multi_key_auto_disabled: number
+  multi_key_manual_disabled: number
+  error_type: string
+  error_code: string
+  status_code: number
+  error_summary: string
+  count: number
+  first_seen: number
+  last_seen: number
+  sample_content: string
+  sample_request_id: string
+  sample_upstream_request_id: string
+  sample_group: string
+  max_use_time: number
+}
+
+type ErrorSummaryResponse = {
+  items: ErrorSummaryItem[]
+  scanned_logs: number
+  total_logs: number
+  truncated: boolean
+  start_time: number
+  end_time: number
+}
+
+const DEFAULT_FILTERS: ErrorWorkbenchFilters = {
+  hours: 24,
+  limit: 50,
+  modelName: '',
+  channel: '',
+  group: '',
+}
+
+const EMPTY_SUMMARY: ErrorSummaryResponse = {
+  items: [],
+  scanned_logs: 0,
+  total_logs: 0,
+  truncated: false,
+  start_time: 0,
+  end_time: 0,
+}
+
+function buildSummaryParams(filters: ErrorWorkbenchFilters) {
+  const params: Record<string, number | string> = {
+    hours: filters.hours,
+    limit: filters.limit,
+  }
+  if (filters.modelName.trim()) {
+    params.model_name = filters.modelName.trim()
+  }
+  if (filters.channel.trim()) {
+    params.channel = Number(filters.channel)
+  }
+  if (filters.group.trim()) {
+    params.group = filters.group.trim()
+  }
+  return params
+}
+
+async function getErrorSummary(filters: ErrorWorkbenchFilters) {
+  const res = await api.get<BackendResponse<ErrorSummaryResponse>>(
+    '/api/log/error_summary',
+    {
+      params: buildSummaryParams(filters),
+      disableDuplicate: true,
+    },
+  )
+  if (!res.data.success) {
+    throw new Error(res.data.message || 'Failed to load error summary')
+  }
+  return res.data.data ?? EMPTY_SUMMARY
+}
+
+function channelStatusLabel(status: number, t: (key: string) => string) {
+  if (status === 1) return t('Enabled')
+  if (status === 2) return t('Manually Disabled')
+  if (status === 3) return t('Auto Disabled')
+  return t('Unknown')
+}
+
+function channelStatusClassName(status: number) {
+  if (status === 1) return 'border-emerald-200 text-emerald-700'
+  if (status === 2) return 'border-red-200 text-red-700'
+  if (status === 3) return 'border-amber-200 text-amber-700'
+  return 'border-muted-foreground/30 text-muted-foreground'
+}
+
+function statusCodeClassName(statusCode: number) {
+  if (statusCode >= 500) return 'border-red-200 text-red-700'
+  if (statusCode >= 400) return 'border-amber-200 text-amber-700'
+  if (statusCode > 0) return 'border-sky-200 text-sky-700'
+  return 'border-muted-foreground/30 text-muted-foreground'
+}
+
+function usageLogFilter(record: ErrorSummaryItem) {
+  return {
+    type: 5,
+    channel: record.channel || undefined,
+    model_name: record.model_name || undefined,
+    group: record.sample_group || undefined,
+    request_id: record.sample_request_id || undefined,
+    upstream_request_id: record.sample_upstream_request_id || undefined,
+  }
+}
+
+type ChannelAction =
+  | { type: 'test'; record: ErrorSummaryItem }
+  | { type: 'status'; record: ErrorSummaryItem; status: number }
+  | { type: 'priority'; record: ErrorSummaryItem; priority: number }
+
+export function ErrorWorkbench() {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const [filters, setFilters] = useState<ErrorWorkbenchFilters>(DEFAULT_FILTERS)
+  const [submittedFilters, setSubmittedFilters] =
+    useState<ErrorWorkbenchFilters>(DEFAULT_FILTERS)
+
+  const summaryQuery = useQuery({
+    queryKey: ['error-workbench-summary', submittedFilters],
+    queryFn: () => getErrorSummary(submittedFilters),
+  })
+  const summary = summaryQuery.data ?? EMPTY_SUMMARY
+
+  const actionMutation = useMutation({
+    mutationFn: async (action: ChannelAction) => {
+      if (!action.record.channel) {
+        throw new Error(t('This error log has no channel ID'))
+      }
+
+      if (action.type === 'test') {
+        const res = await testChannelRequest(
+          action.record.channel,
+          action.record.model_name
+            ? { model: action.record.model_name }
+            : undefined,
+        )
+        if (!res.success) {
+          throw new Error(res.message || t('Channel test failed'))
+        }
+        return t('Channel test succeeded')
+      }
+
+      if (action.type === 'status') {
+        const res = await updateChannelStatus(
+          action.record.channel,
+          action.status,
+        )
+        if (!res.success) {
+          throw new Error(res.message || t('Operation failed'))
+        }
+        return t('Operation completed successfully')
+      }
+
+      const res = await updateChannel(action.record.channel, {
+        priority: action.priority,
+      })
+      if (!res.success) {
+        throw new Error(res.message || t('Update failed'))
+      }
+      return t('Updated successfully')
+    },
+    onSuccess: (message) => {
+      toast.success(message)
+      queryClient.invalidateQueries({
+        queryKey: ['error-workbench-summary'],
+      })
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : t('Operation failed'),
+      )
+    },
+  })
+
+  const setFilterValue = (
+    key: keyof ErrorWorkbenchFilters,
+    value: string | number,
+  ) => {
+    setFilters((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const applyFilters = () => {
+    setSubmittedFilters({ ...filters })
+  }
+
+  const resetFilters = () => {
+    setFilters(DEFAULT_FILTERS)
+    setSubmittedFilters(DEFAULT_FILTERS)
+  }
+
+  const copyFilter = async (record: ErrorSummaryItem) => {
+    const ok = await copyToClipboard(
+      JSON.stringify(usageLogFilter(record), null, 2),
+    )
+    if (ok) {
+      toast.success(t('Copied to clipboard'))
+    } else {
+      toast.error(t('Failed to copy to clipboard'))
+    }
+  }
+
+  const updatePriority = (record: ErrorSummaryItem, value: string) => {
+    if (!value.trim()) return
+    const priority = Number(value)
+    if (!Number.isFinite(priority) || priority === record.channel_priority) {
+      return
+    }
+    actionMutation.mutate({ type: 'priority', record, priority })
+  }
+
+  return (
+    <SectionPageLayout>
+      <SectionPageLayout.Title>
+        <span className='flex min-w-0 items-center gap-2'>
+          <span className='truncate'>{t('Error Workbench')}</span>
+          <Badge variant='outline' className='shrink-0'>
+            Admin
+          </Badge>
+        </span>
+      </SectionPageLayout.Title>
+      <SectionPageLayout.Actions>
+        <Button
+          variant='outline'
+          render={
+            <Link to='/usage-logs/$section' params={{ section: 'common' }} />
+          }
+        >
+          {t('Open usage logs')}
+        </Button>
+        <Button variant='outline' render={<Link to='/channels' />}>
+          {t('Open channels')}
+        </Button>
+      </SectionPageLayout.Actions>
+      <SectionPageLayout.Content>
+        <div className='space-y-4'>
+          <div className='grid gap-3 md:grid-cols-3'>
+            <Card data-card-hover='false'>
+              <CardHeader className='pb-2'>
+                <CardDescription>{t('Error logs')}</CardDescription>
+                <CardTitle>{summary.total_logs}</CardTitle>
+              </CardHeader>
+              <CardContent className='text-muted-foreground text-sm'>
+                {t('Errors in the selected time range')}
+              </CardContent>
+            </Card>
+            <Card data-card-hover='false'>
+              <CardHeader className='pb-2'>
+                <CardDescription>{t('Error groups')}</CardDescription>
+                <CardTitle>{summary.items.length}</CardTitle>
+              </CardHeader>
+              <CardContent className='text-muted-foreground text-sm'>
+                {t('Grouped by model, channel, code, and message')}
+              </CardContent>
+            </Card>
+            <Card data-card-hover='false'>
+              <CardHeader className='pb-2'>
+                <CardDescription>{t('Scanned logs')}</CardDescription>
+                <CardTitle>{summary.scanned_logs}</CardTitle>
+              </CardHeader>
+              <CardContent className='text-muted-foreground text-sm'>
+                {summary.truncated
+                  ? t('Only the latest scanned logs are summarized')
+                  : t('All matching logs are summarized')}
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card data-card-hover='false'>
+            <CardHeader>
+              <CardTitle>{t('Filters')}</CardTitle>
+              <CardDescription>
+                {t('Narrow the scope before adjusting channels.')}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className='grid gap-3 md:grid-cols-6'>
+                <div className='space-y-1.5'>
+                  <Label htmlFor='error-workbench-hours'>
+                    {t('Time range')}
+                  </Label>
+                  <NativeSelect
+                    id='error-workbench-hours'
+                    value={filters.hours}
+                    onChange={(event) =>
+                      setFilterValue('hours', Number(event.target.value))
+                    }
+                  >
+                    <NativeSelectOption value={1}>
+                      {t('Last 1 hour')}
+                    </NativeSelectOption>
+                    <NativeSelectOption value={6}>
+                      {t('Last 6 hours')}
+                    </NativeSelectOption>
+                    <NativeSelectOption value={24}>
+                      {t('Last 24 hours')}
+                    </NativeSelectOption>
+                    <NativeSelectOption value={72}>
+                      {t('Last 3 days')}
+                    </NativeSelectOption>
+                    <NativeSelectOption value={168}>
+                      {t('Last 7 days')}
+                    </NativeSelectOption>
+                  </NativeSelect>
+                </div>
+                <div className='space-y-1.5'>
+                  <Label htmlFor='error-workbench-limit'>{t('Limit')}</Label>
+                  <Input
+                    id='error-workbench-limit'
+                    type='number'
+                    min={1}
+                    max={200}
+                    value={filters.limit}
+                    onChange={(event) =>
+                      setFilterValue('limit', Number(event.target.value) || 50)
+                    }
+                  />
+                </div>
+                <div className='space-y-1.5 md:col-span-2'>
+                  <Label htmlFor='error-workbench-model'>{t('Model')}</Label>
+                  <Input
+                    id='error-workbench-model'
+                    value={filters.modelName}
+                    placeholder='gpt-4o'
+                    onChange={(event) =>
+                      setFilterValue('modelName', event.target.value)
+                    }
+                  />
+                </div>
+                <div className='space-y-1.5'>
+                  <Label htmlFor='error-workbench-channel'>
+                    {t('Channel ID')}
+                  </Label>
+                  <Input
+                    id='error-workbench-channel'
+                    type='number'
+                    min={1}
+                    value={filters.channel}
+                    onChange={(event) =>
+                      setFilterValue('channel', event.target.value)
+                    }
+                  />
+                </div>
+                <div className='space-y-1.5'>
+                  <Label htmlFor='error-workbench-group'>{t('Group')}</Label>
+                  <Input
+                    id='error-workbench-group'
+                    value={filters.group}
+                    placeholder='default'
+                    onChange={(event) =>
+                      setFilterValue('group', event.target.value)
+                    }
+                  />
+                </div>
+              </div>
+              <div className='mt-4 flex flex-wrap gap-2'>
+                <Button
+                  onClick={applyFilters}
+                  disabled={summaryQuery.isFetching}
+                >
+                  {summaryQuery.isFetching && (
+                    <RefreshCw className='animate-spin' />
+                  )}
+                  {t('Refresh')}
+                </Button>
+                <Button variant='outline' onClick={resetFilters}>
+                  {t('Reset')}
+                </Button>
+                {summary.truncated && (
+                  <Badge
+                    variant='outline'
+                    className='border-amber-200 text-amber-700'
+                  >
+                    {t('Summary is limited to the latest scanned logs')}
+                  </Badge>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card data-card-hover='false'>
+            <CardHeader>
+              <CardTitle>{t('Error summary')}</CardTitle>
+              <CardDescription>
+                {t(
+                  'Use channel actions only after confirming the error pattern.',
+                )}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t('Count')}</TableHead>
+                    <TableHead>{t('Model')}</TableHead>
+                    <TableHead>{t('Channel')}</TableHead>
+                    <TableHead>{t('Error')}</TableHead>
+                    <TableHead>{t('Auto test')}</TableHead>
+                    <TableHead className='text-right'>{t('Actions')}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {summary.items.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={6}
+                        className='text-muted-foreground h-28 text-center'
+                      >
+                        {summaryQuery.isFetching
+                          ? t('Loading...')
+                          : t('No error logs found')}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {summary.items.map((record) => (
+                    <TableRow key={record.key}>
+                      <TableCell className='align-top'>
+                        <div className='font-semibold'>{record.count}</div>
+                        <div className='text-muted-foreground text-xs'>
+                          {t('First')}:{' '}
+                          {formatTimestampToDate(record.first_seen)}
+                        </div>
+                        <div className='text-muted-foreground text-xs'>
+                          {t('Latest')}:{' '}
+                          {formatTimestampToDate(record.last_seen)}
+                        </div>
+                      </TableCell>
+                      <TableCell className='align-top'>
+                        {record.model_name ? (
+                          <Badge variant='outline'>{record.model_name}</Badge>
+                        ) : (
+                          <span className='text-muted-foreground'>-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className='align-top'>
+                        <div className='font-medium'>
+                          {record.channel_name || t('Unknown channel')} #
+                          {record.channel || '-'}
+                        </div>
+                        <div className='mt-1 flex flex-wrap gap-1'>
+                          <Badge
+                            variant='outline'
+                            className={channelStatusClassName(
+                              record.channel_status,
+                            )}
+                          >
+                            {channelStatusLabel(record.channel_status, t)}
+                          </Badge>
+                          <Badge variant='outline'>
+                            {t('Priority')} {record.channel_priority || 0}
+                          </Badge>
+                          {record.channel_response_time > 0 && (
+                            <Badge variant='outline'>
+                              {record.channel_response_time} ms
+                            </Badge>
+                          )}
+                        </div>
+                        <div className='text-muted-foreground mt-1 text-xs'>
+                          {t('Last tested')}:{' '}
+                          {formatTimestampToDate(record.channel_test_time)}
+                        </div>
+                      </TableCell>
+                      <TableCell className='max-w-[420px] align-top whitespace-normal'>
+                        <div className='flex flex-wrap gap-1'>
+                          <Badge
+                            variant='outline'
+                            className={statusCodeClassName(record.status_code)}
+                          >
+                            {record.status_code || t('No status code')}
+                          </Badge>
+                          {record.error_type && (
+                            <Badge variant='outline'>{record.error_type}</Badge>
+                          )}
+                          {record.error_code && (
+                            <Badge variant='outline'>{record.error_code}</Badge>
+                          )}
+                          {record.sample_group && (
+                            <Badge variant='outline'>
+                              {record.sample_group}
+                            </Badge>
+                          )}
+                        </div>
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <p className='mt-2 line-clamp-3 cursor-help text-sm' />
+                            }
+                          >
+                            {record.error_summary || t('No error message')}
+                          </TooltipTrigger>
+                          <TooltipContent className='max-w-xl whitespace-pre-wrap'>
+                            {record.sample_content || record.error_summary}
+                          </TooltipContent>
+                        </Tooltip>
+                        {(record.sample_request_id ||
+                          record.sample_upstream_request_id) && (
+                          <div className='text-muted-foreground mt-1 text-xs'>
+                            {record.sample_request_id ||
+                              record.sample_upstream_request_id}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell className='align-top'>
+                        <div className='flex flex-wrap gap-1'>
+                          {record.automatic_channel_test_disabled ? (
+                            <Badge
+                              variant='outline'
+                              className='border-red-200 text-red-700'
+                            >
+                              {t('Skipped')}
+                            </Badge>
+                          ) : (
+                            <Badge
+                              variant='outline'
+                              className='border-emerald-200 text-emerald-700'
+                            >
+                              {t('Enabled')}
+                            </Badge>
+                          )}
+                          {record.auto_test_channel_interval_minutes > 0 && (
+                            <Badge variant='outline'>
+                              {record.auto_test_channel_interval_minutes}{' '}
+                              {t('minutes')}
+                            </Badge>
+                          )}
+                        </div>
+                        {record.multi_key_total > 0 && (
+                          <div className='text-muted-foreground mt-1 text-xs'>
+                            {t('Multi-key')}: {record.multi_key_enabled}/
+                            {record.multi_key_total}
+                            {record.multi_key_auto_disabled > 0
+                              ? `, ${t('auto disabled')} ${record.multi_key_auto_disabled}`
+                              : ''}
+                            {record.multi_key_manual_disabled > 0
+                              ? `, ${t('manual disabled')} ${record.multi_key_manual_disabled}`
+                              : ''}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell className='align-top'>
+                        <div className='flex justify-end gap-1'>
+                          <Button
+                            size='sm'
+                            variant='outline'
+                            disabled={actionMutation.isPending}
+                            onClick={() =>
+                              actionMutation.mutate({
+                                type: 'test',
+                                record,
+                              })
+                            }
+                          >
+                            {t('Test')}
+                          </Button>
+                          <Button
+                            size='sm'
+                            variant={
+                              record.channel_status === 1
+                                ? 'destructive'
+                                : 'outline'
+                            }
+                            disabled={actionMutation.isPending}
+                            onClick={() =>
+                              actionMutation.mutate({
+                                type: 'status',
+                                record,
+                                status: record.channel_status === 1 ? 2 : 1,
+                              })
+                            }
+                          >
+                            {record.channel_status === 1
+                              ? t('Disable')
+                              : t('Enable')}
+                          </Button>
+                          <Button
+                            size='sm'
+                            variant='ghost'
+                            onClick={() => copyFilter(record)}
+                          >
+                            {t('Copy filter')}
+                          </Button>
+                        </div>
+                        <div className='mt-2 flex justify-end gap-2'>
+                          <Label
+                            htmlFor={`priority-${record.channel}-${record.last_seen}`}
+                            className='text-muted-foreground text-xs'
+                          >
+                            {t('Priority')}
+                          </Label>
+                          <Input
+                            id={`priority-${record.channel}-${record.last_seen}`}
+                            type='number'
+                            className='h-7 w-20'
+                            defaultValue={record.channel_priority || 0}
+                            onBlur={(event) =>
+                              updatePriority(record, event.target.value)
+                            }
+                          />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+      </SectionPageLayout.Content>
+    </SectionPageLayout>
+  )
+}

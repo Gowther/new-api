@@ -22,6 +22,11 @@ import dayjs from 'dayjs';
 // ========== 日期预设常量 ==========
 export const DATE_RANGE_PRESETS = [
   {
+    text: '昨天',
+    start: () => dayjs().subtract(1, 'day').startOf('day').toDate(),
+    end: () => dayjs().subtract(1, 'day').endOf('day').toDate(),
+  },
+  {
     text: '今天',
     start: () => dayjs().startOf('day').toDate(),
     end: () => dayjs().endOf('day').toDate(),

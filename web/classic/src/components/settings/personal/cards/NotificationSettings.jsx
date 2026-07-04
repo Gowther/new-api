@@ -92,6 +92,7 @@ const NotificationSettings = ({
       redemption: true,
       user: true,
       setting: true,
+      system_task: true,
     },
   });
   const [adminConfig, setAdminConfig] = useState(null);
@@ -322,6 +323,11 @@ const NotificationSettings = ({
           title: t('系统设置'),
           description: t('系统参数配置'),
         },
+        {
+          key: 'system_task',
+          title: t('系统任务记录'),
+          description: t('查看后台定时任务和手动任务的执行状态'),
+        },
       ],
     },
   ]
@@ -485,7 +491,10 @@ const NotificationSettings = ({
                     checkedText={t('开')}
                     uncheckedText={t('关')}
                     onChange={(value) =>
-                      handleFormChange('upstreamModelUpdateNotifyEnabled', value)
+                      handleFormChange(
+                        'upstreamModelUpdateNotifyEnabled',
+                        value,
+                      )
                     }
                     extraText={t(
                       '仅管理员可用。开启后，当系统定时检测全部渠道发现上游模型变更或检测异常时，将按你选择的通知方式发送汇总通知；渠道或模型过多时会自动省略部分明细。',

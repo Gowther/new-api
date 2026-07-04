@@ -109,6 +109,7 @@ export default function SettingsSidebarModulesUser() {
         redemption: isSidebarModuleAllowed('admin', 'redemption'),
         user: isSidebarModuleAllowed('admin', 'user'),
         setting: isSidebarModuleAllowed('admin', 'setting'),
+        system_task: isSidebarModuleAllowed('admin', 'system_task'),
       };
     }
 
@@ -360,6 +361,11 @@ export default function SettingsSidebarModulesUser() {
           key: 'setting',
           title: t('系统设置'),
           description: t('系统参数配置'),
+        },
+        {
+          key: 'system_task',
+          title: t('系统任务记录'),
+          description: t('查看后台定时任务和手动任务的执行状态'),
         },
       ],
     },

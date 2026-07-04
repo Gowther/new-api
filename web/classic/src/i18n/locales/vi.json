@@ -4253,6 +4253,22 @@
     "禁用自动恢复检测": "Tắt kiểm tra khôi phục tự động",
     "开启后后台定时任务会跳过该渠道，手动测试仍会执行": "Khi bật, tác vụ định kỳ nền sẽ bỏ qua kênh này, còn kiểm tra thủ công vẫn chạy",
     "系统检查自动禁用渠道是否可恢复的默认频率，渠道可单独覆盖": "Tần suất mặc định để kiểm tra kênh bị tự động tắt có thể khôi phục hay không; từng kênh có thể ghi đè",
-    "系统测试所有渠道的默认频率，渠道可单独覆盖": "Tần suất mặc định để kiểm tra tất cả kênh; từng kênh có thể ghi đè"
+    "系统测试所有渠道的默认频率，渠道可单独覆盖": "Tần suất mặc định để kiểm tra tất cả kênh; từng kênh có thể ghi đè",
+    "活动任务": "Tác vụ đang hoạt động",
+    "异步任务轮询": "Thăm dò tác vụ bất đồng bộ",
+    "执行器": "Trình thực thi",
+    "暂无历史系统任务": "Chưa có lịch sử tác vụ hệ thống",
+    "暂无系统任务记录": "Chưa có bản ghi tác vụ hệ thống",
+    "查看后台定时任务和手动任务的执行状态": "Xem trạng thái thực thi của tác vụ nền định kỳ và tác vụ thủ công",
+    "加载系统任务失败": "Không tải được tác vụ hệ thống",
+    "历史任务": "Lịch sử tác vụ",
+    "绘图任务轮询": "Thăm dò tác vụ vẽ",
+    "日志清理": "Dọn dẹp nhật ký",
+    "上游模型更新": "Cập nhật mô hình upstream",
+    "刷新中": "Đang làm mới",
+    "通道测试：{{tested}} 个渠道，成功 {{succeeded}}，失败 {{failed}}，跳过 {{skipped}}，禁用 {{disabled}}，恢复 {{enabled}}；Key 测试 {{keyTested}}，恢复 {{keyRecovered}}，失败 {{keyFailed}}": "Kiểm tra kênh: {{tested}} kênh, thành công {{succeeded}}, thất bại {{failed}}, bỏ qua {{skipped}}, vô hiệu hóa {{disabled}}, khôi phục {{enabled}}; kiểm tra key {{keyTested}}, khôi phục {{keyRecovered}}, thất bại {{keyFailed}}",
+    "无运行中任务时暂停自动刷新": "Tự động làm mới tạm dừng khi không có tác vụ đang chạy",
+    "无运行中的系统任务": "Không có tác vụ hệ thống đang chạy",
+    "自动刷新中（每 {{seconds}} 秒）": "Tự động làm mới mỗi {{seconds}} giây"
   }
 }

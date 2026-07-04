@@ -204,6 +204,11 @@ export default function SettingsSidebarModulesAdmin(props) {
           title: t('系统设置'),
           description: t('系统参数配置'),
         },
+        {
+          key: 'system_task',
+          title: t('系统任务记录'),
+          description: t('查看后台定时任务和手动任务的执行状态'),
+        },
       ],
     },
   ];

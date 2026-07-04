@@ -3720,6 +3720,23 @@
     "禁用自动恢复检测": "Désactiver les vérifications de récupération automatiques",
     "开启后后台定时任务会跳过该渠道，手动测试仍会执行": "Lorsque l'option est activée, les tâches planifiées en arrière-plan ignorent ce canal, tandis que les tests manuels restent exécutés",
     "系统检查自动禁用渠道是否可恢复的默认频率，渠道可单独覆盖": "Fréquence par défaut pour vérifier si les canaux désactivés automatiquement peuvent récupérer ; chaque canal peut la remplacer",
-    "系统测试所有渠道的默认频率，渠道可单独覆盖": "Fréquence par défaut pour tester tous les canaux ; chaque canal peut la remplacer"
+    "系统测试所有渠道的默认频率，渠道可单独覆盖": "Fréquence par défaut pour tester tous les canaux ; chaque canal peut la remplacer",
+    "活动任务": "Tâches actives",
+    "异步任务轮询": "Interrogation des tâches asynchrones",
+    "执行器": "Exécuteur",
+    "暂无历史系统任务": "Aucune tâche système historique",
+    "暂无系统任务记录": "Aucun enregistrement de tâche système",
+    "查看后台定时任务和手动任务的执行状态": "Voir l'état d'exécution des tâches planifiées en arrière-plan et des tâches manuelles",
+    "加载系统任务失败": "Échec du chargement des tâches système",
+    "历史任务": "Historique des tâches",
+    "绘图任务轮询": "Interrogation des tâches de dessin",
+    "日志清理": "Nettoyage des journaux",
+    "上游模型更新": "Mise à jour des modèles amont",
+    "刷新中": "Actualisation",
+    "通道测试": "Test des canaux",
+    "通道测试：{{tested}} 个渠道，成功 {{succeeded}}，失败 {{failed}}，跳过 {{skipped}}，禁用 {{disabled}}，恢复 {{enabled}}；Key 测试 {{keyTested}}，恢复 {{keyRecovered}}，失败 {{keyFailed}}": "Test des canaux : {{tested}} canaux, {{succeeded}} réussis, {{failed}} échoués, {{skipped}} ignorés, {{disabled}} désactivés, {{enabled}} récupérés ; tests de clés {{keyTested}}, récupérées {{keyRecovered}}, échouées {{keyFailed}}",
+    "无运行中任务时暂停自动刷新": "L'actualisation automatique est suspendue sans tâche en cours",
+    "无运行中的系统任务": "Aucune tâche système en cours",
+    "自动刷新中（每 {{seconds}} 秒）": "Actualisation automatique toutes les {{seconds}} s"
   }
 }

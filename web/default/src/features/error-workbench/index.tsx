@@ -54,6 +54,7 @@ import {
   updateChannel,
   updateChannelStatus,
 } from '@/features/channels/api'
+import { useDebounce } from '@/hooks'
 import { copyToClipboard } from '@/lib/copy-to-clipboard'
 import { formatTimestampToDate } from '@/lib/format'
 import { api } from '@/lib/api'
@@ -65,7 +66,7 @@ type BackendResponse<T> = {
 }
 
 type ErrorWorkbenchFilters = {
-  hours: number
+  timeRange: string
   limit: number
   modelName: string
   channel: string
@@ -132,7 +133,7 @@ type ErrorSummaryResponse = {
 }
 
 const DEFAULT_FILTERS: ErrorWorkbenchFilters = {
-  hours: 24,
+  timeRange: '24',
   limit: 50,
   modelName: '',
   channel: '',
@@ -148,11 +149,14 @@ const EMPTY_SUMMARY: ErrorSummaryResponse = {
   end_time: 0,
 }
 
+const FILTER_INPUT_DEBOUNCE_MS = 500
+
 function buildSummaryParams(filters: ErrorWorkbenchFilters) {
   const params: Record<string, number | string> = {
-    hours: filters.hours,
     limit: filters.limit,
   }
+  const timeRange = buildTimeRangeParams(filters.timeRange)
+  Object.assign(params, timeRange)
   if (filters.modelName.trim()) {
     params.model_name = filters.modelName.trim()
   }
@@ -163,6 +167,29 @@ function buildSummaryParams(filters: ErrorWorkbenchFilters) {
     params.group = filters.group.trim()
   }
   return params
+}
+
+function buildTimeRangeParams(timeRange: string): Record<string, number> {
+  if (timeRange === 'today' || timeRange === 'yesterday') {
+    const now = new Date()
+    const todayStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    )
+    const todayStartSeconds = Math.floor(todayStart.getTime() / 1000)
+    if (timeRange === 'today') {
+      return {
+        start_time: todayStartSeconds,
+        end_time: Math.floor(now.getTime() / 1000),
+      }
+    }
+    return {
+      start_time: todayStartSeconds - 24 * 3600,
+      end_time: todayStartSeconds - 1,
+    }
+  }
+  return { hours: Number(timeRange) || Number(DEFAULT_FILTERS.timeRange) }
 }
 
 async function getErrorSummary(filters: ErrorWorkbenchFilters) {
@@ -267,12 +294,27 @@ export function ErrorWorkbench() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [filters, setFilters] = useState<ErrorWorkbenchFilters>(DEFAULT_FILTERS)
-  const [submittedFilters, setSubmittedFilters] =
-    useState<ErrorWorkbenchFilters>(DEFAULT_FILTERS)
+  const debouncedLimit = useDebounce(filters.limit, FILTER_INPUT_DEBOUNCE_MS)
+  const debouncedModelName = useDebounce(
+    filters.modelName,
+    FILTER_INPUT_DEBOUNCE_MS,
+  )
+  const debouncedChannel = useDebounce(
+    filters.channel,
+    FILTER_INPUT_DEBOUNCE_MS,
+  )
+  const debouncedGroup = useDebounce(filters.group, FILTER_INPUT_DEBOUNCE_MS)
+  const queryFilters: ErrorWorkbenchFilters = {
+    timeRange: filters.timeRange,
+    limit: debouncedLimit,
+    modelName: debouncedModelName,
+    channel: debouncedChannel,
+    group: debouncedGroup,
+  }
 
   const summaryQuery = useQuery({
-    queryKey: ['error-workbench-summary', submittedFilters],
-    queryFn: () => getErrorSummary(submittedFilters),
+    queryKey: ['error-workbench-summary', queryFilters],
+    queryFn: () => getErrorSummary(queryFilters),
   })
   const summary = summaryQuery.data ?? EMPTY_SUMMARY
 
@@ -334,13 +376,8 @@ export function ErrorWorkbench() {
     setFilters((prev) => ({ ...prev, [key]: value }))
   }
 
-  const applyFilters = () => {
-    setSubmittedFilters({ ...filters })
-  }
-
   const resetFilters = () => {
     setFilters(DEFAULT_FILTERS)
-    setSubmittedFilters(DEFAULT_FILTERS)
   }
 
   const copyFilter = async (record: ErrorSummaryItem) => {
@@ -509,24 +546,30 @@ export function ErrorWorkbench() {
                   </Label>
                   <NativeSelect
                     id='error-workbench-hours'
-                    value={filters.hours}
+                    value={filters.timeRange}
                     onChange={(event) =>
-                      setFilterValue('hours', Number(event.target.value))
+                      setFilterValue('timeRange', event.target.value)
                     }
                   >
-                    <NativeSelectOption value={1}>
+                    <NativeSelectOption value='today'>
+                      {t('Today')}
+                    </NativeSelectOption>
+                    <NativeSelectOption value='yesterday'>
+                      {t('Yesterday')}
+                    </NativeSelectOption>
+                    <NativeSelectOption value='1'>
                       {t('Last 1 hour')}
                     </NativeSelectOption>
-                    <NativeSelectOption value={6}>
+                    <NativeSelectOption value='6'>
                       {t('Last 6 hours')}
                     </NativeSelectOption>
-                    <NativeSelectOption value={24}>
+                    <NativeSelectOption value='24'>
                       {t('Last 24 hours')}
                     </NativeSelectOption>
-                    <NativeSelectOption value={72}>
+                    <NativeSelectOption value='72'>
                       {t('Last 3 days')}
                     </NativeSelectOption>
-                    <NativeSelectOption value={168}>
+                    <NativeSelectOption value='168'>
                       {t('Last 7 days')}
                     </NativeSelectOption>
                   </NativeSelect>
@@ -583,7 +626,7 @@ export function ErrorWorkbench() {
               </div>
               <div className='mt-4 flex flex-wrap gap-2'>
                 <Button
-                  onClick={applyFilters}
+                  onClick={() => summaryQuery.refetch()}
                   disabled={summaryQuery.isFetching}
                 >
                   {summaryQuery.isFetching && (

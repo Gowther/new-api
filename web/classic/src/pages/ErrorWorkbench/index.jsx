@@ -50,6 +50,16 @@ const DEFAULT_SUMMARY = {
   end_time: 0,
 };
 
+const DEFAULT_FILTERS = {
+  time_range: '24',
+  limit: 50,
+  model_name: '',
+  channel: '',
+  group: '',
+};
+
+const FILTER_INPUT_DEBOUNCE_MS = 500;
+
 const channelStatusMeta = {
   1: { color: 'green', text: '已启用' },
   2: { color: 'red', text: '手动禁用' },
@@ -94,6 +104,29 @@ function buildUsageLogFilter(record) {
     request_id: record.sample_request_id || undefined,
     upstream_request_id: record.sample_upstream_request_id || undefined,
   };
+}
+
+function buildTimeRangeParams(timeRange) {
+  if (timeRange === 'today' || timeRange === 'yesterday') {
+    const now = new Date();
+    const todayStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    );
+    const todayStartSeconds = Math.floor(todayStart.getTime() / 1000);
+    if (timeRange === 'today') {
+      return {
+        start_time: todayStartSeconds,
+        end_time: Math.floor(now.getTime() / 1000),
+      };
+    }
+    return {
+      start_time: todayStartSeconds - 24 * 3600,
+      end_time: todayStartSeconds - 1,
+    };
+  }
+  return { hours: Number(timeRange) || Number(DEFAULT_FILTERS.time_range) };
 }
 
 function getSortedPeerChannels(record) {
@@ -143,13 +176,8 @@ export default function ErrorWorkbench() {
   const [summary, setSummary] = useState(DEFAULT_SUMMARY);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState({});
-  const [filters, setFilters] = useState({
-    hours: 24,
-    limit: 50,
-    model_name: '',
-    channel: '',
-    group: '',
-  });
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [queryFilters, setQueryFilters] = useState(DEFAULT_FILTERS);
 
   const statCards = useMemo(
     () => [
@@ -185,8 +213,8 @@ export default function ErrorWorkbench() {
     setLoading(true);
     try {
       const params = {
-        hours: nextFilters.hours,
         limit: nextFilters.limit,
+        ...buildTimeRangeParams(nextFilters.time_range),
       };
       if (nextFilters.model_name?.trim()) {
         params.model_name = nextFilters.model_name.trim();
@@ -215,9 +243,47 @@ export default function ErrorWorkbench() {
   };
 
   useEffect(() => {
-    fetchSummary();
+    setQueryFilters((prev) => {
+      if (prev.time_range === filters.time_range) {
+        return prev;
+      }
+      return {
+        ...prev,
+        time_range: filters.time_range,
+      };
+    });
+  }, [filters.time_range]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setQueryFilters((prev) => {
+        if (
+          prev.limit === filters.limit &&
+          prev.model_name === filters.model_name &&
+          prev.channel === filters.channel &&
+          prev.group === filters.group
+        ) {
+          return prev;
+        }
+        return {
+          ...prev,
+          limit: filters.limit,
+          model_name: filters.model_name,
+          channel: filters.channel,
+          group: filters.group,
+        };
+      });
+    }, FILTER_INPUT_DEBOUNCE_MS);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [filters.limit, filters.model_name, filters.channel, filters.group]);
+
+  useEffect(() => {
+    fetchSummary(queryFilters);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [queryFilters]);
 
   const runChannelAction = async (record, action, runner) => {
     if (!record.channel) {
@@ -645,15 +711,17 @@ export default function ErrorWorkbench() {
                 {t('时间范围')}
               </Typography.Text>
               <Select
-                value={filters.hours}
+                value={filters.time_range}
                 style={{ width: '100%' }}
-                onChange={(value) => setFilterValue('hours', value)}
+                onChange={(value) => setFilterValue('time_range', value)}
               >
-                <Select.Option value={1}>{t('最近 1 小时')}</Select.Option>
-                <Select.Option value={6}>{t('最近 6 小时')}</Select.Option>
-                <Select.Option value={24}>{t('最近 24 小时')}</Select.Option>
-                <Select.Option value={72}>{t('最近 3 天')}</Select.Option>
-                <Select.Option value={168}>{t('最近 7 天')}</Select.Option>
+                <Select.Option value='today'>{t('今天')}</Select.Option>
+                <Select.Option value='yesterday'>{t('昨天')}</Select.Option>
+                <Select.Option value='1'>{t('最近 1 小时')}</Select.Option>
+                <Select.Option value='6'>{t('最近 6 小时')}</Select.Option>
+                <Select.Option value='24'>{t('最近 24 小时')}</Select.Option>
+                <Select.Option value='72'>{t('最近 3 天')}</Select.Option>
+                <Select.Option value='168'>{t('最近 7 天')}</Select.Option>
               </Select>
             </div>
             <div style={{ width: 120 }}>
@@ -709,15 +777,7 @@ export default function ErrorWorkbench() {
               </Button>
               <Button
                 onClick={() => {
-                  const nextFilters = {
-                    hours: 24,
-                    limit: 50,
-                    model_name: '',
-                    channel: '',
-                    group: '',
-                  };
-                  setFilters(nextFilters);
-                  fetchSummary(nextFilters);
+                  setFilters(DEFAULT_FILTERS);
                 }}
               >
                 {t('重置')}

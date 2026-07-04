@@ -153,6 +153,8 @@ func GetLogsSelfStat(c *gin.Context) {
 func GetErrorLogSummary(c *gin.Context) {
 	hours, _ := strconv.Atoi(c.Query("hours"))
 	limit, _ := strconv.Atoi(c.Query("limit"))
+	startTime, _ := strconv.ParseInt(c.Query("start_time"), 10, 64)
+	endTime, _ := strconv.ParseInt(c.Query("end_time"), 10, 64)
 	channel, _ := strconv.Atoi(c.Query("channel"))
 	modelName := c.Query("model_name")
 	group := c.Query("group")
@@ -160,6 +162,8 @@ func GetErrorLogSummary(c *gin.Context) {
 	summary, err := model.GetErrorLogSummary(model.ErrorLogSummaryQuery{
 		Hours:     hours,
 		Limit:     limit,
+		StartTime: startTime,
+		EndTime:   endTime,
 		ModelName: modelName,
 		ChannelId: channel,
 		Group:     group,

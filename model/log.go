@@ -594,6 +594,8 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 type ErrorLogSummaryQuery struct {
 	Hours     int
 	Limit     int
+	StartTime int64
+	EndTime   int64
 	ModelName string
 	ChannelId int
 	Group     string
@@ -681,8 +683,7 @@ func GetErrorLogSummary(query ErrorLogSummaryQuery) (*ErrorLogSummaryResponse, e
 		query.Limit = maxErrorSummaryLimit
 	}
 
-	endTime := common.GetTimestamp()
-	startTime := endTime - int64(query.Hours*3600)
+	startTime, endTime := resolveErrorSummaryTimeRange(query)
 	tx := LOG_DB.Model(&Log{}).
 		Where("logs.type = ?", LogTypeError).
 		Where("logs.created_at >= ?", startTime).
@@ -774,6 +775,29 @@ func GetErrorLogSummary(query ErrorLogSummaryQuery) (*ErrorLogSummaryResponse, e
 		StartTime:   startTime,
 		EndTime:     endTime,
 	}, nil
+}
+
+func resolveErrorSummaryTimeRange(query ErrorLogSummaryQuery) (int64, int64) {
+	now := common.GetTimestamp()
+	if query.StartTime <= 0 && query.EndTime <= 0 {
+		endTime := now
+		return endTime - int64(query.Hours*3600), endTime
+	}
+
+	endTime := query.EndTime
+	if endTime <= 0 || endTime > now {
+		endTime = now
+	}
+	startTime := query.StartTime
+	if startTime <= 0 || startTime > endTime {
+		startTime = endTime - int64(query.Hours*3600)
+	}
+
+	maxRangeSeconds := int64(maxErrorSummaryHours * 3600)
+	if endTime-startTime > maxRangeSeconds {
+		startTime = endTime - maxRangeSeconds
+	}
+	return startTime, endTime
 }
 
 func buildErrorLogSummaryItem(log *Log) *ErrorLogSummaryItem {

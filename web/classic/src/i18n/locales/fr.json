@@ -1586,6 +1586,7 @@
     "您需要先启用两步验证或 Passkey 才能查看敏感信息。": "Vous devez d'abord activer l'authentification à deux facteurs ou Passkey pour afficher les informations sensibles.",
     "想起来了？": "Vous vous souvenez ?",
     "成功": "Succès",
+    "成功率": "Taux de réussite",
     "成功兑换额度：": "Montant de l'échange réussi :",
     "成功后切换亲和": "Changer l'affinité en cas de succès",
     "渠道禁用后保留亲和": "Conserver l'affinité lorsque le canal est désactivé",

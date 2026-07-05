@@ -1581,6 +1581,7 @@
     "您需要先启用两步验证或 Passkey 才能查看敏感信息。": "You need to enable two-factor authentication or Passkey before you can view sensitive information.",
     "想起来了？": "Remember?",
     "成功": "Success",
+    "成功率": "Success rate",
     "成功兑换额度：": "Successful redemption amount:",
     "成功后切换亲和": "Switch Affinity on Success",
     "渠道禁用后保留亲和": "Keep Affinity When Channel Is Disabled",

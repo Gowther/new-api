@@ -46,6 +46,7 @@ import { useMinimumLoadingTime } from '../../../../../hooks/common/useMinimumLoa
 import { renderLimitedItems } from '../../../../common/ui/RenderUtils';
 import { useIsMobile } from '../../../../../hooks/common/useIsMobile';
 import { renderBoundChannelList } from '../../utils/boundChannels';
+import ModelPerformanceBadge from '../ModelPerformanceBadge';
 
 const CARD_STYLES = {
   container:
@@ -74,6 +75,7 @@ const PricingCardView = ({
   displayPrice,
   showRatio,
   t,
+  perfMap = {},
   selectedRowKeys = [],
   setSelectedRowKeys,
   openModelDetail,
@@ -194,9 +196,16 @@ const PricingCardView = ({
     }
 
     return (
-      <div className='flex items-center justify-between'>
-        <div className='flex items-center gap-2'>{billingTag}</div>
-        <div className='flex items-center gap-1'>
+      <div className='flex items-center justify-between gap-2'>
+        <div className='flex min-w-0 flex-wrap items-center gap-2'>
+          {billingTag}
+          <ModelPerformanceBadge
+            perf={perfMap[record.model_name]}
+            t={t}
+            showEmpty
+          />
+        </div>
+        <div className='flex shrink-0 items-center gap-1'>
           {customTags.length > 0 &&
             renderLimitedItems({
               items: customTags.map((tag, idx) => ({
@@ -269,11 +278,13 @@ const PricingCardView = ({
                         {model.model_name}
                       </h3>
                       <div className='flex flex-col gap-1 text-xs mt-1'>
-                        {priceData.isDynamicPricing ? (
-                          formatDynamicPriceSummary(priceData.billingExpr, t, priceData.usedGroupRatio)
-                        ) : (
-                          formatPriceInfo(priceData, t, siteDisplayType)
-                        )}
+                        {priceData.isDynamicPricing
+                          ? formatDynamicPriceSummary(
+                              priceData.billingExpr,
+                              t,
+                              priceData.usedGroupRatio,
+                            )
+                          : formatPriceInfo(priceData, t, siteDisplayType)}
                       </div>
                     </div>
                   </div>

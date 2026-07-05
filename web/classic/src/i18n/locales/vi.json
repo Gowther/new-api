@@ -1558,6 +1558,7 @@
     "您需要先启用两步验证或 Passkey 才能查看敏感信息。": "Bạn cần bật xác thực hai yếu tố hoặc Passkey trước khi có thể xem thông tin nhạy cảm.",
     "想起来了？": "Nhớ ra chưa?",
     "成功": "Thành công",
+    "成功率": "Tỷ lệ thành công",
     "成功兑换额度：": "Số tiền đổi thành công:",
     "成功后切换亲和": "Chuyển ưu ái khi thành công",
     "渠道禁用后保留亲和": "Giữ ưu ái khi kênh bị tắt",

@@ -33,6 +33,7 @@ import {
 } from '../../../../common/ui/RenderUtils';
 import { useIsMobile } from '../../../../../hooks/common/useIsMobile';
 import { renderBoundChannelList } from '../../utils/boundChannels';
+import ModelPerformanceBadge from '../ModelPerformanceBadge';
 
 function renderQuotaType(type, t) {
   switch (type) {
@@ -114,9 +115,15 @@ export const getPricingTableColumns = ({
   tokenUnit,
   displayPrice,
   showRatio,
+  perfMap = {},
 }) => {
   const isMobile = useIsMobile();
   const priceDataCache = new WeakMap();
+
+  const getSuccessRate = (record) => {
+    const successRate = Number(perfMap[record.model_name]?.success_rate);
+    return Number.isFinite(successRate) ? successRate : -1;
+  };
 
   const getPriceData = (record) => {
     let cache = priceDataCache.get(record);
@@ -174,6 +181,23 @@ export const getPricingTableColumns = ({
     sorter: (a, b) => a.quota_type - b.quota_type,
   };
 
+  const successRateColumn = {
+    title: t('成功率'),
+    dataIndex: 'success_rate',
+    width: 110,
+    render: (text, record) => {
+      return (
+        <ModelPerformanceBadge
+          perf={perfMap[record.model_name]}
+          t={t}
+          showLabel={false}
+          showEmpty
+        />
+      );
+    },
+    sorter: (a, b) => getSuccessRate(a) - getSuccessRate(b),
+  };
+
   const descriptionColumn = {
     title: t('描述'),
     dataIndex: 'description',
@@ -194,6 +218,7 @@ export const getPricingTableColumns = ({
 
   const baseColumns = [
     modelNameColumn,
+    successRateColumn,
     vendorColumn,
     descriptionColumn,
     tagsColumn,

@@ -51,6 +51,7 @@ export const useModelPricingData = () => {
   const [usableGroup, setUsableGroup] = useState({});
   const [endpointMap, setEndpointMap] = useState({});
   const [autoGroups, setAutoGroups] = useState([]);
+  const [perfMap, setPerfMap] = useState({});
 
   const [statusState] = useContext(StatusContext);
   const [userState] = useContext(UserContext);
@@ -225,6 +226,29 @@ export const useModelPricingData = () => {
     setModels(models);
   };
 
+  const loadPerformanceSummary = async () => {
+    try {
+      const res = await API.get('/api/perf-metrics/summary', {
+        params: { hours: 24 },
+      });
+      const perfModels = res.data?.data?.models;
+      if (!res.data?.success || !Array.isArray(perfModels)) {
+        setPerfMap({});
+        return;
+      }
+
+      const nextPerfMap = {};
+      perfModels.forEach((model) => {
+        if (model?.model_name) {
+          nextPerfMap[model.model_name] = model;
+        }
+      });
+      setPerfMap(nextPerfMap);
+    } catch (_) {
+      setPerfMap({});
+    }
+  };
+
   const loadPricing = async () => {
     setLoading(true);
     let url = '/api/pricing';
@@ -254,8 +278,10 @@ export const useModelPricingData = () => {
       setEndpointMap(supported_endpoint || {});
       setAutoGroups(auto_groups || []);
       setModelsFormat(data, group_ratio, vendorMap);
+      loadPerformanceSummary().then();
     } else {
       showError(message);
+      setPerfMap({});
     }
     setLoading(false);
   };
@@ -374,6 +400,7 @@ export const useModelPricingData = () => {
     usableGroup,
     endpointMap,
     autoGroups,
+    perfMap,
 
     // 计算属性
     priceRate,

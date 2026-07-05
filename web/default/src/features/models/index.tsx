@@ -31,6 +31,7 @@ import { DeploymentAccessGuard } from './components/deployment-access-guard'
 import { DeploymentsTable } from './components/deployments-table'
 import { CreateDeploymentDrawer } from './components/dialogs/create-deployment-drawer'
 import { ModelsDialogs } from './components/models-dialogs'
+import { ModelRoutingWorkbench } from './components/model-routing-workbench'
 import { ModelsPrimaryButtons } from './components/models-primary-buttons'
 import { ModelsProvider, useModels } from './components/models-provider'
 import { ModelsTable } from './components/models-table'
@@ -47,6 +48,9 @@ const route = getRouteApi('/_authenticated/models/$section')
 const SECTION_META: Record<ModelsSectionId, { titleKey: string }> = {
   metadata: {
     titleKey: 'Metadata',
+  },
+  routing: {
+    titleKey: 'Routing',
   },
   deployments: {
     titleKey: 'Deployments',
@@ -90,12 +94,12 @@ function ModelsContent() {
         <SectionPageLayout.Actions>
           {activeSection === 'metadata' ? (
             <ModelsPrimaryButtons />
-          ) : (
+          ) : activeSection === 'deployments' ? (
             <Button onClick={() => setCreateDeploymentOpen(true)} size='sm'>
               <Plus className='h-4 w-4' />
               {t('Create deployment')}
             </Button>
-          )}
+          ) : null}
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
           <div className='flex h-full min-h-0 flex-col gap-4'>
@@ -109,11 +113,9 @@ function ModelsContent() {
               </TabsList>
             </Tabs>
             <div className='min-h-0 flex-1'>
-              {activeSection === 'metadata' ? (
-                <ModelsTable />
-              ) : (
-                <DeploymentsSection />
-              )}
+              {activeSection === 'metadata' && <ModelsTable />}
+              {activeSection === 'routing' && <ModelRoutingWorkbench />}
+              {activeSection === 'deployments' && <DeploymentsSection />}
             </div>
           </div>
         </SectionPageLayout.Content>

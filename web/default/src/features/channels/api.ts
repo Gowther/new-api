@@ -25,6 +25,8 @@ import type {
   BatchSetTagParams,
   Channel,
   ChannelBalanceResponse,
+  ChannelModelOverlapRequest,
+  ChannelModelOverlapResponse,
   ChannelOpsResponse,
   ChannelTestResponse,
   CopyChannelParams,
@@ -110,6 +112,20 @@ export async function getChannel(id: number): Promise<GetChannelResponse> {
  */
 export async function getChannelOps(): Promise<ChannelOpsResponse> {
   const res = await api.get('/api/channel/ops', channelActionConfig())
+  return res.data
+}
+
+/**
+ * Check duplicated models assigned to logical channels sharing one upstream.
+ */
+export async function checkChannelModelOverlap(
+  data: ChannelModelOverlapRequest = {}
+): Promise<ChannelModelOverlapResponse> {
+  const res = await api.post(
+    '/api/channel/model_overlap',
+    data,
+    channelActionConfig()
+  )
   return res.data
 }
 

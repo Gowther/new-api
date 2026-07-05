@@ -121,6 +121,7 @@ import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
 import {
+  checkChannelModelOverlap,
   fetchModels,
   getAllModels,
   getChannel,
@@ -146,6 +147,8 @@ import {
   channelFormSchema,
   channelsQueryKeys,
   getAdvancedCustomStats,
+  transformFormDataToCreatePayload,
+  transformFormDataToUpdatePayload,
   transformChannelToFormDefaults,
   type ChannelFormValues,
   deduplicateKeys,
@@ -164,7 +167,11 @@ import {
   collectInvalidStatusCodeEntries,
   collectNewDisallowedStatusCodeRedirects,
 } from '../../lib/status-code-risk-guard'
-import type { Channel } from '../../types'
+import type {
+  Channel,
+  ChannelModelOverlapItem,
+  ChannelModelOverlapRequest,
+} from '../../types'
 import { useChannels } from '../channels-provider'
 import { AdvancedCustomEditorDialog } from '../dialogs/advanced-custom-editor-dialog'
 import { FetchModelsDialog } from '../dialogs/fetch-models-dialog'
@@ -172,6 +179,7 @@ import {
   MissingModelsConfirmationDialog,
   type MissingModelsAction,
 } from '../dialogs/missing-models-confirmation-dialog'
+import { ModelOverlapConfirmDialog } from '../dialogs/model-overlap-dialog'
 import { ParamOverrideEditorDialog } from '../dialogs/param-override-editor-dialog'
 import { StatusCodeRiskDialog } from '../dialogs/status-code-risk-dialog'
 import { ModelMappingEditor } from '../model-mapping-editor'
@@ -619,6 +627,14 @@ export function ChannelMutateDrawer({
   const missingModelsResolveRef = useRef<
     ((action: MissingModelsAction) => void) | null
   >(null)
+  const [modelOverlapDialogOpen, setModelOverlapDialogOpen] = useState(false)
+  const [modelOverlapItems, setModelOverlapItems] = useState<
+    ChannelModelOverlapItem[]
+  >([])
+  const [isCheckingModelOverlap, setIsCheckingModelOverlap] = useState(false)
+  const modelOverlapResolveRef = useRef<((confirmed: boolean) => void) | null>(
+    null
+  )
   const channelFormRef = useRef<HTMLFormElement>(null)
   const advancedNavScrollPendingRef = useRef(false)
   const [activeEditorSectionId, setActiveEditorSectionId] = useState<string>(
@@ -1526,11 +1542,95 @@ export function ChannelMutateDrawer({
     }
   }, [])
 
+  const buildModelOverlapRequest = useCallback(
+    (data: ChannelFormValues): ChannelModelOverlapRequest => {
+      if (isEditing && currentRow) {
+        return {
+          channel: transformFormDataToUpdatePayload(data, currentRow.id),
+        }
+      }
+
+      const payload = transformFormDataToCreatePayload(data)
+      if (payload.mode === 'single') {
+        return { channel: payload.channel }
+      }
+
+      const keys = String(payload.channel.key || '')
+        .split('\n')
+        .map((key) => key.trim())
+        .filter(Boolean)
+      if (keys.length === 0) {
+        return { channel: payload.channel }
+      }
+      return {
+        channels: keys.map((key) => ({
+          ...payload.channel,
+          key,
+        })),
+      }
+    },
+    [currentRow, isEditing]
+  )
+
+  const confirmModelOverlap = useCallback(
+    (items: ChannelModelOverlapItem[]): Promise<boolean> =>
+      new Promise((resolve) => {
+        modelOverlapResolveRef.current = resolve
+        setModelOverlapItems(items)
+        setModelOverlapDialogOpen(true)
+      }),
+    []
+  )
+
+  const handleModelOverlapAction = useCallback((confirmed: boolean) => {
+    setModelOverlapDialogOpen(false)
+    setModelOverlapItems([])
+    if (modelOverlapResolveRef.current) {
+      modelOverlapResolveRef.current(confirmed)
+      modelOverlapResolveRef.current = null
+    }
+  }, [])
+
+  const checkModelOverlapBeforeSubmit = useCallback(
+    async (data: ChannelFormValues): Promise<boolean> => {
+      setIsCheckingModelOverlap(true)
+      try {
+        const response = await checkChannelModelOverlap(
+          buildModelOverlapRequest(data)
+        )
+        if (!response.success) {
+          toast.error(response.message || t('Check failed'))
+          return false
+        }
+        const items = response.data?.items || []
+        if (items.length === 0) {
+          return true
+        }
+        return await confirmModelOverlap(items)
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : t('Check failed'))
+        return false
+      } finally {
+        setIsCheckingModelOverlap(false)
+      }
+    },
+    [buildModelOverlapRequest, confirmModelOverlap, t]
+  )
+
   useEffect(() => {
     return () => {
       if (statusCodeRiskResolveRef.current) {
         statusCodeRiskResolveRef.current(false)
         statusCodeRiskResolveRef.current = null
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (modelOverlapResolveRef.current) {
+        modelOverlapResolveRef.current(false)
+        modelOverlapResolveRef.current = null
       }
     }
   }, [])
@@ -1542,7 +1642,7 @@ export function ChannelMutateDrawer({
     onSuccess: handleSuccess,
   })
 
-  const isSubmitting = channelMutation.isPending
+  const isSubmitting = channelMutation.isPending || isCheckingModelOverlap
 
   // Submit handler
   const onSubmit = useCallback(
@@ -1643,6 +1743,9 @@ export function ChannelMutateDrawer({
         }
       }
 
+      const canContinue = await checkModelOverlapBeforeSubmit(data)
+      if (!canContinue) return
+
       await channelMutation.mutateAsync(data)
     },
     [
@@ -1651,6 +1754,7 @@ export function ChannelMutateDrawer({
       form,
       confirmMissingModelMappings,
       confirmStatusCodeRisk,
+      checkModelOverlapBeforeSubmit,
       channelMutation,
       t,
     ]
@@ -4703,6 +4807,16 @@ export function ChannelMutateDrawer({
         }}
         detailItems={statusCodeRiskDetailItems}
         onConfirm={() => handleStatusCodeRiskAction(true)}
+      />
+
+      <ModelOverlapConfirmDialog
+        open={modelOverlapDialogOpen}
+        onOpenChange={(v) => {
+          if (!v) handleModelOverlapAction(false)
+        }}
+        items={modelOverlapItems}
+        isLoading={channelMutation.isPending}
+        onConfirm={() => handleModelOverlapAction(true)}
       />
     </>
   )

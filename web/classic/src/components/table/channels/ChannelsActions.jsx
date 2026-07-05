@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   Button,
   Dropdown,
@@ -26,7 +26,12 @@ import {
   Typography,
   Select,
 } from '@douyinfe/semi-ui';
+import { showError } from '../../../helpers';
 import CompactModeToggle from '../../common/ui/CompactModeToggle';
+import {
+  checkChannelModelOverlap,
+  showModelOverlapResult,
+} from './modelOverlapCheck';
 
 const ChannelsActions = ({
   enableBatchDelete,
@@ -60,6 +65,19 @@ const ChannelsActions = ({
   t,
 }) => {
   const dropdownRef = useRef(null);
+  const [checkingModelOverlap, setCheckingModelOverlap] = useState(false);
+
+  const handleCheckModelOverlap = async () => {
+    setCheckingModelOverlap(true);
+    try {
+      const items = await checkChannelModelOverlap();
+      showModelOverlapResult(items, t);
+    } catch (error) {
+      showError(error?.message || t('模型重叠检查失败'));
+    } finally {
+      setCheckingModelOverlap(false);
+    }
+  };
 
   return (
     <div className='flex flex-col gap-2'>
@@ -100,6 +118,17 @@ const ChannelsActions = ({
             className='w-full md:w-auto'
           >
             {t('模型优先级管理')}
+          </Button>
+
+          <Button
+            size='small'
+            type='tertiary'
+            loading={checkingModelOverlap}
+            disabled={checkingModelOverlap}
+            onClick={handleCheckModelOverlap}
+            className='w-full md:w-auto'
+          >
+            {t('模型重叠检查')}
           </Button>
 
           <Dropdown

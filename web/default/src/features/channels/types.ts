@@ -203,6 +203,35 @@ export interface FetchModelsResponse {
   data?: string[]
 }
 
+export interface ChannelModelOverlapUpstream {
+  type: number
+  base_url: string
+  openai_organization: string
+  key_fingerprint: string
+}
+
+export interface ChannelModelOverlapChannel {
+  id: number
+  name: string
+  group: string
+  priority?: number | null
+  status: number
+}
+
+export interface ChannelModelOverlapItem {
+  upstream: ChannelModelOverlapUpstream
+  model: string
+  channels: ChannelModelOverlapChannel[]
+}
+
+export interface ChannelModelOverlapResponse {
+  success: boolean
+  message?: string
+  data?: {
+    items: ChannelModelOverlapItem[]
+  }
+}
+
 export interface CopyChannelResponse {
   success: boolean
   message?: string
@@ -374,4 +403,9 @@ export interface AddChannelRequest {
   multi_key_mode?: 'random' | 'polling'
   batch_add_set_key_prefix_2_name?: boolean
   channel: Partial<Channel>
+}
+
+export interface ChannelModelOverlapRequest {
+  channel?: Partial<Channel>
+  channels?: Partial<Channel>[]
 }

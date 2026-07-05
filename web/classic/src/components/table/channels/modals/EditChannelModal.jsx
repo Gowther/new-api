@@ -65,6 +65,10 @@ import JSONEditor from '../../../common/ui/JSONEditor';
 import SecureVerificationModal from '../../../common/modals/SecureVerificationModal';
 import StatusCodeRiskGuardModal from './StatusCodeRiskGuardModal';
 import ChannelKeyDisplay from '../../../common/ui/ChannelKeyDisplay';
+import {
+  checkChannelModelOverlap,
+  confirmModelOverlap,
+} from '../modelOverlapCheck';
 import { useSecureVerification } from '../../../../hooks/common/useSecureVerification';
 import { parseChannelConnectionString } from '../../../../helpers/token';
 import { createApiCalls } from '../../../../services/secureVerification';
@@ -112,6 +116,25 @@ const normalizeChannelModels = (models) =>
         .filter(Boolean),
     ),
   );
+
+const buildModelOverlapCheckRequest = (channel, mode) => {
+  if (mode === 'single') {
+    return { channel };
+  }
+  const keys = String(channel.key || '')
+    .split('\n')
+    .map((key) => key.trim())
+    .filter(Boolean);
+  if (keys.length === 0) {
+    return { channel };
+  }
+  return {
+    channels: keys.map((key) => ({
+      ...channel,
+      key,
+    })),
+  };
+};
 
 const PARAM_OVERRIDE_LEGACY_TEMPLATE = {
   temperature: 0,
@@ -1952,6 +1975,25 @@ const EditChannelModal = (props) => {
     let mode = 'single';
     if (batch) {
       mode = multiToSingle ? 'multi_to_single' : 'batch';
+    }
+
+    try {
+      const overlapRequest = isEdit
+        ? {
+            channel: {
+              ...localInputs,
+              id: parseInt(channelId),
+            },
+          }
+        : buildModelOverlapCheckRequest(localInputs, mode);
+      const overlapItems = await checkChannelModelOverlap(overlapRequest);
+      const confirmed = await confirmModelOverlap(overlapItems, t);
+      if (!confirmed) {
+        return;
+      }
+    } catch (error) {
+      showError(error?.message || t('模型重叠检查失败'));
+      return;
     }
 
     if (isEdit) {

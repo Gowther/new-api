@@ -30,9 +30,11 @@ import {
   RefreshCw,
   ArrowUpFromLine,
   ListTree,
+  SearchCheck,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Button } from '@/components/ui/button'
@@ -65,7 +67,10 @@ import {
   handleTestAllChannels,
   handleUpdateAllBalances,
 } from '../lib'
+import { checkChannelModelOverlap } from '../api'
+import type { ChannelModelOverlapItem } from '../types'
 import { useChannels } from './channels-provider'
+import { ModelOverlapDialog } from './dialogs/model-overlap-dialog'
 
 export function ChannelsPrimaryButtons() {
   const { t } = useTranslation()
@@ -83,7 +88,12 @@ export function ChannelsPrimaryButtons() {
   const queryClient = useQueryClient()
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [showConsistencyDialog, setShowConsistencyDialog] = useState(false)
+  const [showModelOverlapDialog, setShowModelOverlapDialog] = useState(false)
+  const [modelOverlapItems, setModelOverlapItems] = useState<
+    ChannelModelOverlapItem[]
+  >([])
   const [isRepairingConsistency, setIsRepairingConsistency] = useState(false)
+  const [isCheckingModelOverlap, setIsCheckingModelOverlap] = useState(false)
   const currentUser = useAuthStore((s) => s.auth.user)
   const canEditSensitive = hasPermission(
     currentUser,
@@ -103,6 +113,23 @@ export function ChannelsPrimaryButtons() {
 
   const handleBatchModeToggle = (checked: boolean) => {
     setBatchMode(checked)
+  }
+
+  const handleCheckModelOverlap = async () => {
+    setIsCheckingModelOverlap(true)
+    try {
+      const response = await checkChannelModelOverlap()
+      if (!response.success) {
+        toast.error(response.message || t('Check failed'))
+        return
+      }
+      setModelOverlapItems(response.data?.items || [])
+      setShowModelOverlapDialog(true)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('Check failed'))
+    } finally {
+      setIsCheckingModelOverlap(false)
+    }
   }
 
   return (
@@ -268,6 +295,21 @@ export function ChannelsPrimaryButtons() {
             <DropdownMenuItem
               onSelect={(e) => {
                 e.preventDefault()
+                void handleCheckModelOverlap()
+              }}
+              disabled={isCheckingModelOverlap}
+            >
+              {t('Model Overlap Check')}
+              <DropdownMenuShortcut>
+                <SearchCheck className='h-4 w-4' />
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator />
+
+            <DropdownMenuItem
+              onSelect={(e) => {
+                e.preventDefault()
                 setShowConsistencyDialog(true)
               }}
             >
@@ -336,6 +378,12 @@ export function ChannelsPrimaryButtons() {
             setIsRepairingConsistency(false)
           }
         }}
+      />
+
+      <ModelOverlapDialog
+        open={showModelOverlapDialog}
+        onOpenChange={setShowModelOverlapDialog}
+        items={modelOverlapItems}
       />
     </>
   )

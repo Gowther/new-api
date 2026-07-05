@@ -22,8 +22,16 @@ import { Tag, Tooltip } from '@douyinfe/semi-ui';
 
 const signalBars = [{ height: 5 }, { height: 8 }, { height: 11 }];
 
-const formatSuccessRate = (value) => {
+const toFiniteRate = (value) => {
+  if (value == null || value === '') {
+    return Number.NaN;
+  }
   const rate = Number(value);
+  return Number.isFinite(rate) ? rate : Number.NaN;
+};
+
+const formatSuccessRate = (value) => {
+  const rate = toFiniteRate(value);
   if (!Number.isFinite(rate)) {
     return '-';
   }
@@ -31,7 +39,7 @@ const formatSuccessRate = (value) => {
 };
 
 const getSuccessRateColor = (value) => {
-  const rate = Number(value);
+  const rate = toFiniteRate(value);
   if (!Number.isFinite(rate)) {
     return 'white';
   }
@@ -45,7 +53,7 @@ const getSuccessRateColor = (value) => {
 };
 
 const getSignalColor = (value) => {
-  const rate = Number(value);
+  const rate = toFiniteRate(value);
   if (!Number.isFinite(rate)) {
     return 'var(--semi-color-fill-1)';
   }
@@ -60,9 +68,7 @@ const getSignalColor = (value) => {
 
 const getSignalRates = (perf, successRate) => {
   const recentRates =
-    perf?.recent_success_rates?.filter((rate) =>
-      Number.isFinite(Number(rate)),
-    ) ?? [];
+    perf?.recent_success_rates?.map(toFiniteRate).filter(Number.isFinite) ?? [];
   const rates =
     recentRates.length > 0
       ? recentRates.slice(-3)
@@ -103,8 +109,7 @@ const ModelPerformanceBadge = ({
   fallback = null,
 }) => {
   const rawSuccessRate = perf?.success_rate;
-  const successRate =
-    rawSuccessRate == null ? Number.NaN : Number(rawSuccessRate);
+  const successRate = toFiniteRate(rawSuccessRate);
   if (!Number.isFinite(successRate)) {
     if (showEmpty) {
       const label = showLabel ? `${t('成功率')} -` : '-';

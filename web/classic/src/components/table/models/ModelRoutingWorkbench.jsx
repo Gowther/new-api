@@ -478,21 +478,31 @@ const ModelRoutingWorkbench = () => {
       render: (_, record) => {
         const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
         return (
-          <div className='min-w-0'>
-            <div className='flex items-center gap-2'>
-              <Text
-                strong
-                ellipsis
-                style={{
-                  textDecoration: isEnabled ? 'none' : 'line-through',
-                }}
-              >
-                {record.name}
-              </Text>
-              <Text type='tertiary' size='small'>
-                ID: {record.id}
-              </Text>
+          <div className='flex min-w-0 items-center justify-between gap-2'>
+            <div className='min-w-0'>
+              <div className='flex min-w-0 items-center gap-2'>
+                <Text
+                  strong
+                  ellipsis
+                  style={{
+                    textDecoration: isEnabled ? 'none' : 'line-through',
+                  }}
+                >
+                  {record.name}
+                </Text>
+                <Text type='tertiary' size='small'>
+                  ID: {record.id}
+                </Text>
+              </div>
             </div>
+            <Button
+              type='tertiary'
+              size='small'
+              icon={<IconEdit />}
+              onClick={() => openChannelEditor(record)}
+            >
+              {t('编辑')}
+            </Button>
           </div>
         );
       },
@@ -583,21 +593,6 @@ const ModelRoutingWorkbench = () => {
           />
         );
       },
-    },
-    {
-      title: t('操作'),
-      dataIndex: 'actions',
-      width: 110,
-      render: (_, record) => (
-        <Button
-          type='tertiary'
-          size='small'
-          icon={<IconEdit />}
-          onClick={() => openChannelEditor(record)}
-        >
-          {t('编辑')}
-        </Button>
-      ),
     },
   ];
 

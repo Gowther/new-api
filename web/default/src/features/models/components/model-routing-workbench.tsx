@@ -214,6 +214,7 @@ export function ModelRoutingWorkbench() {
     Record<number, boolean>
   >({})
   const [editingChannel, setEditingChannel] = useState<Channel | null>(null)
+  const [channelEditorOpen, setChannelEditorOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
   const pricingQuery = useQuery({
@@ -358,6 +359,18 @@ export function ModelRoutingWorkbench() {
     setSelectedProviderKey(providerKey)
     setModelSearch('')
     setSelectedModelName(null)
+  }
+
+  const openChannelEditor = (channel: Channel) => {
+    setEditingChannel(channel)
+    setChannelEditorOpen(true)
+  }
+
+  const handleChannelEditorOpenChange = (open: boolean) => {
+    setChannelEditorOpen(open)
+    if (open) return
+    void channelsQuery.refetch()
+    void pricingQuery.refetch()
   }
 
   const handleRoutingFieldChange = (
@@ -735,7 +748,6 @@ export function ModelRoutingWorkbench() {
                     <TableHead>{t('Status')}</TableHead>
                     <TableHead className='w-28'>{t('Priority')}</TableHead>
                     <TableHead className='w-28'>{t('Weight')}</TableHead>
-                    <TableHead className='w-24'>{t('Actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -758,18 +770,30 @@ export function ModelRoutingWorkbench() {
                         className={!isEnabled ? 'bg-muted/30 opacity-75' : ''}
                       >
                         <TableCell className='min-w-[15rem]'>
-                          <div className='min-w-0 space-y-1'>
-                            <div
-                              className={cn(
-                                'truncate font-medium',
-                                !isEnabled && 'line-through'
-                              )}
+                          <div className='flex min-w-0 items-start justify-between gap-2'>
+                            <div className='min-w-0 space-y-1'>
+                              <div
+                                className={cn(
+                                  'truncate font-medium',
+                                  !isEnabled && 'line-through'
+                                )}
+                              >
+                                {channel.name}
+                              </div>
+                              <div className='text-muted-foreground text-xs'>
+                                ID: {channel.id}
+                              </div>
+                            </div>
+                            <Button
+                              type='button'
+                              variant='ghost'
+                              size='sm'
+                              className='shrink-0'
+                              onClick={() => openChannelEditor(channel)}
                             >
-                              {channel.name}
-                            </div>
-                            <div className='text-muted-foreground text-xs'>
-                              ID: {channel.id}
-                            </div>
+                              <Pencil className='size-4' />
+                              {t('Edit')}
+                            </Button>
                           </div>
                         </TableCell>
                         <TableCell>{t(channelType)}</TableCell>
@@ -841,17 +865,6 @@ export function ModelRoutingWorkbench() {
                             aria-label={t('Weight')}
                           />
                         </TableCell>
-                        <TableCell>
-                          <Button
-                            type='button'
-                            variant='ghost'
-                            size='sm'
-                            onClick={() => setEditingChannel(channel)}
-                          >
-                            <Pencil className='size-4' />
-                            {t('Edit')}
-                          </Button>
-                        </TableCell>
                       </TableRow>
                     )
                   })}
@@ -863,14 +876,9 @@ export function ModelRoutingWorkbench() {
       </div>
       <ChannelsProvider>
         <ChannelMutateDrawer
-          open={Boolean(editingChannel)}
+          open={channelEditorOpen}
           currentRow={editingChannel}
-          onOpenChange={(open) => {
-            if (open) return
-            setEditingChannel(null)
-            void channelsQuery.refetch()
-            void pricingQuery.refetch()
-          }}
+          onOpenChange={handleChannelEditorOpenChange}
         />
       </ChannelsProvider>
     </div>

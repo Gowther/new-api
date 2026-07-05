@@ -150,6 +150,7 @@ const EMPTY_SUMMARY: ErrorSummaryResponse = {
 }
 
 const FILTER_INPUT_DEBOUNCE_MS = 500
+const CHANNEL_STATUS_ENABLED = 1
 
 function buildSummaryParams(filters: ErrorWorkbenchFilters) {
   const params: Record<string, number | string> = {
@@ -240,23 +241,63 @@ function usageLogFilter(record: ErrorSummaryItem) {
 
 type PriorityMoveDirection = 'top' | 'up' | 'down' | 'bottom'
 
-function getSortedPeerChannels(record: ErrorSummaryItem) {
-  return [...(record.peer_channels ?? [])].sort((a, b) => {
-    if (a.channel_priority !== b.channel_priority) {
-      return b.channel_priority - a.channel_priority
+function comparePeerChannels(
+  a: ErrorSummaryPeerChannel,
+  b: ErrorSummaryPeerChannel,
+) {
+  if (a.channel_priority !== b.channel_priority) {
+    return b.channel_priority - a.channel_priority
+  }
+  if (a.channel_weight !== b.channel_weight) {
+    return b.channel_weight - a.channel_weight
+  }
+  return a.channel - b.channel
+}
+
+function isRoutablePeerChannel(peer: ErrorSummaryPeerChannel) {
+  return peer.channel_status === CHANNEL_STATUS_ENABLED && peer.ability_enabled
+}
+
+function getRoutablePeerChannels(record: ErrorSummaryItem) {
+  return (record.peer_channels ?? [])
+    .filter(isRoutablePeerChannel)
+    .sort(comparePeerChannels)
+}
+
+function getPeerChannelDisplayRows(record: ErrorSummaryItem) {
+  const routablePeers: ErrorSummaryPeerChannel[] = []
+  const contextPeers: ErrorSummaryPeerChannel[] = []
+
+  for (const peer of record.peer_channels ?? []) {
+    if (isRoutablePeerChannel(peer)) {
+      routablePeers.push(peer)
+    } else {
+      contextPeers.push(peer)
     }
-    if (a.channel_weight !== b.channel_weight) {
-      return b.channel_weight - a.channel_weight
-    }
-    return a.channel - b.channel
-  })
+  }
+
+  routablePeers.sort(comparePeerChannels)
+  contextPeers.sort(comparePeerChannels)
+
+  return [
+    ...routablePeers.map((peer, index) => ({
+      peer,
+      routeRank: index + 1,
+      isRoutable: true,
+    })),
+    ...contextPeers.map((peer) => ({
+      peer,
+      routeRank: null,
+      isRoutable: false,
+    })),
+  ]
 }
 
 function getPriorityMoveTarget(
   record: ErrorSummaryItem,
   direction: PriorityMoveDirection,
 ) {
-  const peers = getSortedPeerChannels(record)
+  const peers = getRoutablePeerChannels(record)
   const currentIndex = peers.findIndex(
     (peer) => peer.channel === record.channel,
   )
@@ -404,8 +445,8 @@ export function ErrorWorkbench() {
   }
 
   const renderPeerChannels = (record: ErrorSummaryItem) => {
-    const peers = getSortedPeerChannels(record)
-    if (peers.length === 0) {
+    const peerRows = getPeerChannelDisplayRows(record)
+    if (peerRows.length === 0) {
       return (
         <div className='text-muted-foreground mt-2 text-xs'>
           {t('No peer channel context')}
@@ -417,17 +458,22 @@ export function ErrorWorkbench() {
         <div className='text-muted-foreground text-xs'>
           {t('Same model channels')} · {t('Ordered by priority, then weight')}
         </div>
-        {peers.map((peer, index) => (
+        {peerRows.map(({ peer, routeRank, isRoutable }) => (
           <div
             key={peer.channel}
-            className={
+            className={[
               peer.is_current
                 ? 'rounded-md border border-amber-200 bg-amber-50/70 p-2'
-                : 'rounded-md border bg-background p-2'
-            }
+                : 'rounded-md border bg-background p-2',
+              isRoutable ? '' : 'opacity-60',
+            ]
+              .filter(Boolean)
+              .join(' ')}
           >
             <div className='flex flex-wrap items-center gap-1'>
-              <Badge variant='outline'>#{index + 1}</Badge>
+              <Badge variant='outline'>
+                {routeRank === null ? '-' : `#${routeRank}`}
+              </Badge>
               <span className='text-sm font-medium'>
                 {peer.channel_name || t('Unknown channel')} #{peer.channel}
               </span>

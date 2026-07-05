@@ -59,6 +59,7 @@ const DEFAULT_FILTERS = {
 };
 
 const FILTER_INPUT_DEBOUNCE_MS = 500;
+const CHANNEL_STATUS_ENABLED = 1;
 
 const channelStatusMeta = {
   1: { color: 'green', text: '已启用' },
@@ -129,20 +130,57 @@ function buildTimeRangeParams(timeRange) {
   return { hours: Number(timeRange) || Number(DEFAULT_FILTERS.time_range) };
 }
 
-function getSortedPeerChannels(record) {
-  return [...(record.peer_channels || [])].sort((a, b) => {
-    if (a.channel_priority !== b.channel_priority) {
-      return b.channel_priority - a.channel_priority;
+function comparePeerChannels(a, b) {
+  if (a.channel_priority !== b.channel_priority) {
+    return b.channel_priority - a.channel_priority;
+  }
+  if (a.channel_weight !== b.channel_weight) {
+    return b.channel_weight - a.channel_weight;
+  }
+  return a.channel - b.channel;
+}
+
+function isRoutablePeerChannel(peer) {
+  return peer.channel_status === CHANNEL_STATUS_ENABLED && peer.ability_enabled;
+}
+
+function getRoutablePeerChannels(record) {
+  return (record.peer_channels || [])
+    .filter(isRoutablePeerChannel)
+    .sort(comparePeerChannels);
+}
+
+function getPeerChannelDisplayRows(record) {
+  const routablePeers = [];
+  const contextPeers = [];
+
+  for (const peer of record.peer_channels || []) {
+    if (isRoutablePeerChannel(peer)) {
+      routablePeers.push(peer);
+    } else {
+      contextPeers.push(peer);
     }
-    if (a.channel_weight !== b.channel_weight) {
-      return b.channel_weight - a.channel_weight;
-    }
-    return a.channel - b.channel;
-  });
+  }
+
+  routablePeers.sort(comparePeerChannels);
+  contextPeers.sort(comparePeerChannels);
+
+  return [
+    ...routablePeers.map((peer, index) => ({
+      peer,
+      routeRank: index + 1,
+      isRoutable: true,
+    })),
+    ...contextPeers.map((peer) => ({
+      peer,
+      routeRank: null,
+      isRoutable: false,
+    })),
+  ];
 }
 
 function getPriorityMoveTarget(record, direction) {
-  const peers = getSortedPeerChannels(record);
+  const peers = getRoutablePeerChannels(record);
   const currentIndex = peers.findIndex(
     (peer) => peer.channel === record.channel,
   );
@@ -369,8 +407,8 @@ export default function ErrorWorkbench() {
   };
 
   const renderPeerChannels = (record) => {
-    const peers = getSortedPeerChannels(record);
-    if (peers.length === 0) {
+    const peerRows = getPeerChannelDisplayRows(record);
+    if (peerRows.length === 0) {
       return (
         <Typography.Text type='tertiary' size='small'>
           {t('没有同模型渠道排序上下文')}
@@ -388,17 +426,20 @@ export default function ErrorWorkbench() {
           spacing={6}
           style={{ width: '100%', marginTop: 6 }}
         >
-          {peers.map((peer, index) => (
+          {peerRows.map(({ peer, routeRank, isRoutable }) => (
             <div
               key={peer.channel}
               className={
-                peer.is_current
+                (peer.is_current
                   ? 'w-full rounded-md border border-solid border-yellow-200 bg-yellow-50 p-2'
-                  : 'w-full rounded-md border border-solid border-gray-100 bg-white p-2'
+                  : 'w-full rounded-md border border-solid border-gray-100 bg-white p-2') +
+                (isRoutable ? '' : ' opacity-60')
               }
             >
               <Space spacing={4} wrap>
-                <Tag color='grey'>#{index + 1}</Tag>
+                <Tag color='grey'>
+                  {routeRank === null ? '-' : `#${routeRank}`}
+                </Tag>
                 <Typography.Text strong>
                   {peer.channel_name || t('未知渠道')} #{peer.channel}
                 </Typography.Text>

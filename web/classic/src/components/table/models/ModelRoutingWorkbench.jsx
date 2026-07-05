@@ -30,7 +30,12 @@ import {
   Tag,
   Typography,
 } from '@douyinfe/semi-ui';
-import { IconRefresh, IconSave, IconSearch } from '@douyinfe/semi-icons';
+import {
+  IconEdit,
+  IconRefresh,
+  IconSave,
+  IconSearch,
+} from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
 
 import { CHANNEL_OPTIONS } from '../../../constants';
@@ -42,6 +47,7 @@ import {
   showInfo,
   showSuccess,
 } from '../../../helpers';
+import EditChannelModal from '../channels/modals/EditChannelModal';
 
 const { Text } = Typography;
 
@@ -82,6 +88,10 @@ const getRoutingModelNames = (model) => {
   return model ? [model.model_name] : [];
 };
 
+const getModelInitial = (modelName) => {
+  return (modelName || '').trim().charAt(0).toUpperCase() || '?';
+};
+
 const channelSupportsModel = (channel, modelNames) => {
   if (modelNames.length === 0) return false;
   const channelModels = new Set(splitCsv(channel.models));
@@ -119,8 +129,20 @@ const fetchPricingRoutingData = async () => {
   if (!success) {
     throw new Error(message || '获取模型列表失败');
   }
+  const vendorMap = {};
+  (vendors || []).forEach((vendor) => {
+    vendorMap[vendor.id] = vendor;
+  });
   return {
-    models: data || [],
+    models: (data || []).map((model) => {
+      const vendor = model.vendor_id ? vendorMap[model.vendor_id] : null;
+      return {
+        ...model,
+        vendor_name: vendor?.name,
+        vendor_icon: vendor?.icon,
+        vendor_description: vendor?.description,
+      };
+    }),
     vendors: vendors || [],
   };
 };
@@ -163,6 +185,8 @@ const ModelRoutingWorkbench = () => {
   const [selectedModelName, setSelectedModelName] = useState(null);
   const [routingChanges, setRoutingChanges] = useState({});
   const [statusUpdatingIds, setStatusUpdatingIds] = useState({});
+  const [editingChannel, setEditingChannel] = useState({ id: undefined });
+  const [showEditChannel, setShowEditChannel] = useState(false);
 
   const loadRoutingData = useCallback(async () => {
     setLoading(true);
@@ -303,6 +327,16 @@ const ModelRoutingWorkbench = () => {
     setSelectedProviderKey(providerKey);
     setSelectedModelName(null);
     setModelSearch('');
+  };
+
+  const openChannelEditor = (channel) => {
+    setEditingChannel(channel);
+    setShowEditChannel(true);
+  };
+
+  const closeChannelEditor = () => {
+    setShowEditChannel(false);
+    setEditingChannel({ id: undefined });
   };
 
   const handleRoutingFieldChange = (channel, field, value) => {
@@ -550,6 +584,21 @@ const ModelRoutingWorkbench = () => {
         );
       },
     },
+    {
+      title: t('操作'),
+      dataIndex: 'actions',
+      width: 110,
+      render: (_, record) => (
+        <Button
+          type='tertiary'
+          size='small'
+          icon={<IconEdit />}
+          onClick={() => openChannelEditor(record)}
+        >
+          {t('编辑')}
+        </Button>
+      ),
+    },
   ];
 
   return (
@@ -678,7 +727,16 @@ const ModelRoutingWorkbench = () => {
                     }}
                   >
                     <div className='flex w-full min-w-0 items-center justify-between gap-2'>
-                      <Text ellipsis>{model.model_name}</Text>
+                      <div className='flex min-w-0 items-center gap-2'>
+                        {model.icon || model.vendor_icon ? (
+                          getLobeHubIcon(model.icon || model.vendor_icon, 16)
+                        ) : (
+                          <span className='flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[var(--semi-color-fill-0)] text-[10px] font-semibold text-[var(--semi-color-text-2)]'>
+                            {getModelInitial(model.model_name)}
+                          </span>
+                        )}
+                        <Text ellipsis>{model.model_name}</Text>
+                      </div>
                       <Tag color='grey' shape='circle' size='small'>
                         {model.bound_channels?.length || 0}
                       </Tag>
@@ -730,6 +788,12 @@ const ModelRoutingWorkbench = () => {
           </div>
         </section>
       </div>
+      <EditChannelModal
+        refresh={loadRoutingData}
+        visible={showEditChannel}
+        handleClose={closeChannelEditor}
+        editingChannel={editingChannel}
+      />
     </div>
   );
 };

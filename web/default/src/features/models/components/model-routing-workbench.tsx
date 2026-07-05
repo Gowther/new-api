@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2, RefreshCw, Save, Search } from 'lucide-react'
+import { Loader2, Pencil, RefreshCw, Save, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -44,11 +44,14 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
+import { getLobeIcon } from '@/lib/lobe-icon'
 import {
   getChannels,
   updateChannel,
   updateChannelStatus,
 } from '@/features/channels/api'
+import { ChannelsProvider } from '@/features/channels/components/channels-provider'
+import { ChannelMutateDrawer } from '@/features/channels/components/drawers/channel-mutate-drawer'
 import {
   CHANNEL_STATUS,
   CHANNEL_STATUS_CONFIG,
@@ -93,8 +96,17 @@ async function fetchPricingRoutingData(): Promise<PricingRoutingData> {
   if (!response.success) {
     throw new Error(response.message || 'Failed to load models')
   }
+  const vendorMap = new Map((response.vendors ?? []).map((v) => [v.id, v]))
   return {
-    models: response.data ?? [],
+    models: (response.data ?? []).map((model) => {
+      const vendor = model.vendor_id ? vendorMap.get(model.vendor_id) : null
+      return {
+        ...model,
+        vendor_name: vendor?.name,
+        vendor_icon: vendor?.icon,
+        vendor_description: vendor?.description,
+      }
+    }),
     vendors: response.vendors ?? [],
   }
 }
@@ -139,6 +151,10 @@ function getProviderKey(model: Pick<PricingModel, 'vendor_id'>): string {
 
 function getRoutingModelNames(model: PricingModel | null): string[] {
   return model ? [model.model_name] : []
+}
+
+function getModelInitial(modelName: string): string {
+  return modelName.trim().charAt(0).toUpperCase() || '?'
 }
 
 function channelSupportsModel(channel: Channel, modelNames: string[]): boolean {
@@ -197,6 +213,7 @@ export function ModelRoutingWorkbench() {
   const [statusUpdatingIds, setStatusUpdatingIds] = useState<
     Record<number, boolean>
   >({})
+  const [editingChannel, setEditingChannel] = useState<Channel | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
   const pricingQuery = useQuery({
@@ -652,8 +669,26 @@ export function ModelRoutingWorkbench() {
                         : 'hover:bg-muted'
                     )}
                   >
-                    <span className='min-w-0 flex-1 truncate font-mono'>
-                      {model.model_name}
+                    <span className='flex min-w-0 flex-1 items-center gap-2'>
+                      <span className='bg-muted/40 flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full'>
+                        {model.icon || model.vendor_icon ? (
+                          getLobeIcon(model.icon || model.vendor_icon, 16)
+                        ) : (
+                          <span
+                            className={cn(
+                              'text-[10px] font-semibold',
+                              selectedModelName === model.model_name
+                                ? 'text-primary-foreground'
+                                : 'text-muted-foreground'
+                            )}
+                          >
+                            {getModelInitial(model.model_name)}
+                          </span>
+                        )}
+                      </span>
+                      <span className='min-w-0 flex-1 truncate font-mono'>
+                        {model.model_name}
+                      </span>
                     </span>
                     <span className='text-muted-foreground shrink-0 text-xs tabular-nums'>
                       {model.bound_channels?.length ?? 0}
@@ -700,6 +735,7 @@ export function ModelRoutingWorkbench() {
                     <TableHead>{t('Status')}</TableHead>
                     <TableHead className='w-28'>{t('Priority')}</TableHead>
                     <TableHead className='w-28'>{t('Weight')}</TableHead>
+                    <TableHead className='w-24'>{t('Actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -805,6 +841,17 @@ export function ModelRoutingWorkbench() {
                             aria-label={t('Weight')}
                           />
                         </TableCell>
+                        <TableCell>
+                          <Button
+                            type='button'
+                            variant='ghost'
+                            size='sm'
+                            onClick={() => setEditingChannel(channel)}
+                          >
+                            <Pencil className='size-4' />
+                            {t('Edit')}
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     )
                   })}
@@ -814,6 +861,18 @@ export function ModelRoutingWorkbench() {
           </div>
         </section>
       </div>
+      <ChannelsProvider>
+        <ChannelMutateDrawer
+          open={Boolean(editingChannel)}
+          currentRow={editingChannel}
+          onOpenChange={(open) => {
+            if (open) return
+            setEditingChannel(null)
+            void channelsQuery.refetch()
+            void pricingQuery.refetch()
+          }}
+        />
+      </ChannelsProvider>
     </div>
   )
 }

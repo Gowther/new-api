@@ -79,10 +79,7 @@ const getProviderKey = (model) =>
   model.vendor_id ? String(model.vendor_id) : UNASSIGNED_PROVIDER_KEY;
 
 const getRoutingModelNames = (model) => {
-  if (!model) return [];
-  const names = new Set([model.model_name]);
-  (model.matched_models || []).forEach((name) => names.add(name));
-  return Array.from(names);
+  return model ? [model.model_name] : [];
 };
 
 const channelSupportsModel = (channel, modelNames) => {
@@ -116,29 +113,16 @@ const getChangedCount = (changes) =>
     (change) => change.priority !== undefined || change.weight !== undefined,
   ).length;
 
-const fetchAllModels = async () => {
-  const models = [];
-  let page = 1;
-  let hasMore = true;
-
-  while (hasMore) {
-    const res = await API.get(
-      `/api/models/?p=${page}&page_size=${ROUTING_PAGE_SIZE}`,
-    );
-    const { success, message, data } = res.data || {};
-    if (!success) {
-      throw new Error(message || '获取模型列表失败');
-    }
-
-    const items = data?.items || [];
-    models.push(...items);
-
-    const total = data?.total || models.length;
-    hasMore = models.length < total && items.length > 0;
-    page += 1;
+const fetchPricingRoutingData = async () => {
+  const res = await API.get('/api/pricing');
+  const { success, message, data, vendors } = res.data || {};
+  if (!success) {
+    throw new Error(message || '获取模型列表失败');
   }
-
-  return models;
+  return {
+    models: data || [],
+    vendors: vendors || [],
+  };
 };
 
 const fetchAllChannels = async () => {
@@ -166,16 +150,6 @@ const fetchAllChannels = async () => {
   return sortRoutingChannels(channels);
 };
 
-const fetchVendors = async () => {
-  const res = await API.get('/api/vendors/?page_size=1000');
-  const { success, message, data } = res.data || {};
-  if (!success) {
-    throw new Error(message || '获取供应商列表失败');
-  }
-  const items = data?.items || data || [];
-  return Array.isArray(items) ? items : [];
-};
-
 const ModelRoutingWorkbench = () => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
@@ -193,13 +167,12 @@ const ModelRoutingWorkbench = () => {
   const loadRoutingData = useCallback(async () => {
     setLoading(true);
     try {
-      const [vendorItems, modelItems, channelItems] = await Promise.all([
-        fetchVendors(),
-        fetchAllModels(),
+      const [pricingData, channelItems] = await Promise.all([
+        fetchPricingRoutingData(),
         fetchAllChannels(),
       ]);
-      setVendors(vendorItems);
-      setModels(modelItems);
+      setVendors(pricingData.vendors);
+      setModels(pricingData.models);
       setChannels(channelItems);
       setRoutingChanges({});
     } catch (error) {
@@ -734,13 +707,6 @@ const ModelRoutingWorkbench = () => {
                   </div>
                 ) : null}
               </div>
-              {selectedModel?.matched_count ? (
-                <Tag color='blue' shape='circle'>
-                  {t('匹配 {{count}} 个模型', {
-                    count: selectedModel.matched_count,
-                  })}
-                </Tag>
-              ) : null}
             </div>
           </div>
           <div className='min-h-0 flex-1 overflow-auto p-2'>

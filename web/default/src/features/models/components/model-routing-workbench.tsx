@@ -58,19 +58,23 @@ import {
 } from '@/features/channels/constants'
 import { channelsQueryKeys } from '@/features/channels/lib'
 import type { Channel } from '@/features/channels/types'
-
-import { getModels, getVendors } from '../api'
-import type { Model, Vendor } from '../types'
+import { getPricing } from '@/features/pricing/api'
+import type {
+  PricingModel,
+  PricingVendor,
+} from '@/features/pricing/types'
 
 const ROUTING_PAGE_SIZE = 100
 const UNASSIGNED_PROVIDER_KEY = '__unassigned__'
+const EMPTY_PRICING_MODELS: PricingModel[] = []
+const EMPTY_PRICING_VENDORS: PricingVendor[] = []
 
 type ProviderOption = {
   key: string
   label: string
   icon?: string
   modelCount: number
-  vendor?: Vendor
+  vendor?: PricingVendor
 }
 
 type RoutingField = 'priority' | 'weight'
@@ -79,30 +83,20 @@ type RoutingChange = Partial<Record<RoutingField, number>>
 
 type RoutingChanges = Record<number, RoutingChange>
 
-async function fetchAllModels(): Promise<Model[]> {
-  const models: Model[] = []
-  let page = 1
-  let hasMore = true
+type PricingRoutingData = {
+  models: PricingModel[]
+  vendors: PricingVendor[]
+}
 
-  while (hasMore) {
-    const response = await getModels({
-      p: page,
-      page_size: ROUTING_PAGE_SIZE,
-    })
-
-    if (!response.success) {
-      throw new Error(response.message || 'Failed to load models')
-    }
-
-    const items = response.data?.items ?? []
-    models.push(...items)
-
-    const total = response.data?.total ?? models.length
-    hasMore = models.length < total && items.length > 0
-    page += 1
+async function fetchPricingRoutingData(): Promise<PricingRoutingData> {
+  const response = await getPricing()
+  if (!response.success) {
+    throw new Error(response.message || 'Failed to load models')
   }
-
-  return models
+  return {
+    models: response.data ?? [],
+    vendors: response.vendors ?? [],
+  }
 }
 
 async function fetchAllChannels(): Promise<Channel[]> {
@@ -139,16 +133,12 @@ function splitCsv(value?: string | null): string[] {
     .filter(Boolean)
 }
 
-function getProviderKey(model: Model): string {
+function getProviderKey(model: Pick<PricingModel, 'vendor_id'>): string {
   return model.vendor_id ? String(model.vendor_id) : UNASSIGNED_PROVIDER_KEY
 }
 
-function getRoutingModelNames(model: Model | null): string[] {
-  if (!model) return []
-  const names = new Set<string>()
-  names.add(model.model_name)
-  model.matched_models?.forEach((name) => names.add(name))
-  return Array.from(names)
+function getRoutingModelNames(model: PricingModel | null): string[] {
+  return model ? [model.model_name] : []
 }
 
 function channelSupportsModel(channel: Channel, modelNames: string[]): boolean {
@@ -209,16 +199,10 @@ export function ModelRoutingWorkbench() {
   >({})
   const [isSaving, setIsSaving] = useState(false)
 
-  const vendorsQuery = useQuery({
-    queryKey: ['model-routing', 'vendors'],
-    queryFn: () => getVendors({ page_size: 1000 }),
+  const pricingQuery = useQuery({
+    queryKey: ['model-routing', 'pricing'],
+    queryFn: fetchPricingRoutingData,
     staleTime: 5 * 60 * 1000,
-  })
-
-  const modelsQuery = useQuery({
-    queryKey: ['model-routing', 'models'],
-    queryFn: fetchAllModels,
-    staleTime: 60 * 1000,
   })
 
   const channelsQuery = useQuery({
@@ -227,11 +211,8 @@ export function ModelRoutingWorkbench() {
     staleTime: 30 * 1000,
   })
 
-  const vendors = useMemo(() => {
-    return vendorsQuery.data?.data?.items ?? []
-  }, [vendorsQuery.data?.data?.items])
-
-  const models = modelsQuery.data ?? []
+  const vendors = pricingQuery.data?.vendors ?? EMPTY_PRICING_VENDORS
+  const models = pricingQuery.data?.models ?? EMPTY_PRICING_MODELS
 
   useEffect(() => {
     if (channelsQuery.data) {
@@ -320,10 +301,8 @@ export function ModelRoutingWorkbench() {
     return sortRoutingChannels(matchingChannels, routingChanges)
   }, [channels, routingChanges, selectedModelNames])
 
-  const isLoading =
-    vendorsQuery.isLoading || modelsQuery.isLoading || channelsQuery.isLoading
-  const isFetching =
-    vendorsQuery.isFetching || modelsQuery.isFetching || channelsQuery.isFetching
+  const isLoading = pricingQuery.isLoading || channelsQuery.isLoading
+  const isFetching = pricingQuery.isFetching || channelsQuery.isFetching
   const changedCount = getChangedCount(routingChanges)
 
   useEffect(() => {
@@ -355,12 +334,8 @@ export function ModelRoutingWorkbench() {
   }, [providerModels, selectedModelName, selectedProviderKey])
 
   const refreshRoutingData = useCallback(async () => {
-    await Promise.all([
-      vendorsQuery.refetch(),
-      modelsQuery.refetch(),
-      channelsQuery.refetch(),
-    ])
-  }, [channelsQuery, modelsQuery, vendorsQuery])
+    await Promise.all([pricingQuery.refetch(), channelsQuery.refetch()])
+  }, [channelsQuery, pricingQuery])
 
   const handleProviderSelect = (providerKey: string) => {
     setSelectedProviderKey(providerKey)
@@ -428,6 +403,9 @@ export function ModelRoutingWorkbench() {
         updateLocalChannel(channel.id, { status })
         await queryClient.invalidateQueries({
           queryKey: channelsQueryKeys.lists(),
+        })
+        await queryClient.invalidateQueries({
+          queryKey: ['model-routing', 'pricing'],
         })
         toast.success(
           t(checked ? SUCCESS_MESSAGES.ENABLED : SUCCESS_MESSAGES.DISABLED)
@@ -505,6 +483,9 @@ export function ModelRoutingWorkbench() {
         })
         await queryClient.invalidateQueries({
           queryKey: ['model-routing', 'channels'],
+        })
+        await queryClient.invalidateQueries({
+          queryKey: ['model-routing', 'pricing'],
         })
         toast.success(
           t('{{count}} channel(s) updated', {
@@ -662,7 +643,7 @@ export function ModelRoutingWorkbench() {
                 {filteredModels.map((model) => (
                   <button
                     type='button'
-                    key={model.id}
+                    key={model.model_name}
                     onClick={() => setSelectedModelName(model.model_name)}
                     className={cn(
                       'flex w-full min-w-0 items-center justify-between gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors',
@@ -698,15 +679,6 @@ export function ModelRoutingWorkbench() {
                 </div>
               ) : null}
             </div>
-            {selectedModel?.matched_count ? (
-              <StatusBadge
-                label={t('{{count}} matched model(s)', {
-                  count: selectedModel.matched_count,
-                })}
-                variant='info'
-                copyable={false}
-              />
-            ) : null}
           </div>
 
           <div className='min-h-0 flex-1 overflow-auto'>

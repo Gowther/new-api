@@ -179,6 +179,24 @@ function getPeerChannelDisplayRows(record) {
   ];
 }
 
+function occupiedPeerPriorities(peers, currentChannel) {
+  const priorities = new Set();
+  for (const peer of peers) {
+    if (peer.channel !== currentChannel) {
+      priorities.add(peer.channel_priority);
+    }
+  }
+  return priorities;
+}
+
+function nextAvailablePriority(priority, occupiedPriorities, step) {
+  let nextPriority = priority;
+  while (occupiedPriorities.has(nextPriority)) {
+    nextPriority += step;
+  }
+  return nextPriority;
+}
+
 function getPriorityMoveTarget(record, direction) {
   const peers = getRoutablePeerChannels(record);
   const currentIndex = peers.findIndex(
@@ -187,22 +205,53 @@ function getPriorityMoveTarget(record, direction) {
   if (currentIndex < 0 || peers.length < 2) {
     return null;
   }
+  const currentPeer = peers[currentIndex];
+  const otherPeers = peers.filter((peer) => peer.channel !== record.channel);
+  const occupiedPriorities = occupiedPeerPriorities(peers, record.channel);
   if (direction === 'top') {
-    return currentIndex === 0 ? null : peers[0].channel_priority + 1;
+    const highestOtherPriority = Math.max(
+      ...otherPeers.map((peer) => peer.channel_priority),
+    );
+    if (currentPeer.channel_priority > highestOtherPriority) {
+      return null;
+    }
+    return nextAvailablePriority(
+      highestOtherPriority + 1,
+      occupiedPriorities,
+      1,
+    );
   }
   if (direction === 'bottom') {
-    return currentIndex === peers.length - 1
-      ? null
-      : peers[peers.length - 1].channel_priority - 1;
+    const lowestOtherPriority = Math.min(
+      ...otherPeers.map((peer) => peer.channel_priority),
+    );
+    if (currentPeer.channel_priority < lowestOtherPriority) {
+      return null;
+    }
+    return nextAvailablePriority(
+      lowestOtherPriority - 1,
+      occupiedPriorities,
+      -1,
+    );
   }
   if (direction === 'up') {
-    return currentIndex === 0
-      ? null
-      : peers[currentIndex - 1].channel_priority + 1;
+    if (currentIndex === 0) {
+      return null;
+    }
+    return nextAvailablePriority(
+      peers[currentIndex - 1].channel_priority + 1,
+      occupiedPriorities,
+      1,
+    );
   }
-  return currentIndex === peers.length - 1
-    ? null
-    : peers[currentIndex + 1].channel_priority - 1;
+  if (currentIndex === peers.length - 1) {
+    return null;
+  }
+  return nextAvailablePriority(
+    peers[currentIndex + 1].channel_priority - 1,
+    occupiedPriorities,
+    -1,
+  );
 }
 
 function canMovePriority(record, direction) {
@@ -493,12 +542,14 @@ export default function ErrorWorkbench() {
       sorter: (a, b) => a.count - b.count,
       render: (_, record) => (
         <div>
-          <Typography.Text strong>{record.count}</Typography.Text>
-          <div className='text-xs text-gray-500'>
-            {t('首次')} {renderTime(record.first_seen)}
+          <div className='text-2xl font-semibold leading-none text-red-600 tabular-nums'>
+            {record.count}
+          </div>
+          <div className='mt-2 text-xs text-gray-500'>
+            {t('最近')} {renderTime(record.last_seen)}
           </div>
           <div className='text-xs text-gray-500'>
-            {t('最近')} {renderTime(record.last_seen)}
+            {t('首次')} {renderTime(record.first_seen)}
           </div>
         </div>
       ),
@@ -507,11 +558,22 @@ export default function ErrorWorkbench() {
       title: t('模型'),
       dataIndex: 'model_name',
       width: 180,
-      render: (modelName) =>
-        modelName ? (
-          <Tag color='light-blue' type='light'>
-            {modelName}
-          </Tag>
+      render: (_, record) =>
+        record.model_name ? (
+          <Space vertical align='start' spacing={4}>
+            <Typography.Text
+              strong
+              ellipsis={{ showTooltip: true }}
+              className='max-w-[170px] font-mono'
+            >
+              {record.model_name}
+            </Typography.Text>
+            {record.sample_group && (
+              <Tag color='violet' type='light'>
+                {record.sample_group}
+              </Tag>
+            )}
+          </Space>
         ) : (
           <Typography.Text type='tertiary'>{t('未记录')}</Typography.Text>
         ),
@@ -522,12 +584,19 @@ export default function ErrorWorkbench() {
       width: 260,
       render: (_, record) => (
         <Space vertical align='start' spacing={4}>
-          <Typography.Text strong>
-            {record.channel_name || t('未知渠道')} #{record.channel || '-'}
+          <Typography.Text
+            strong
+            ellipsis={{ showTooltip: true }}
+            className='max-w-[240px]'
+          >
+            {record.channel_name || t('未知渠道')}
+          </Typography.Text>
+          <Typography.Text type='tertiary' size='small'>
+            #{record.channel || '-'}
           </Typography.Text>
           <Space spacing={4} wrap>
             {renderChannelStatus(record.channel_status)}
-            <Tag color='grey'>
+            <Tag color='light-blue' type='light'>
               {t('优先级')} {record.channel_priority || 0}
             </Tag>
             {record.channel_response_time > 0 && (
@@ -550,9 +619,6 @@ export default function ErrorWorkbench() {
             {renderStatusCode(record.status_code)}
             {record.error_type && <Tag color='red'>{record.error_type}</Tag>}
             {record.error_code && <Tag color='orange'>{record.error_code}</Tag>}
-            {record.sample_group && (
-              <Tag color='violet'>{record.sample_group}</Tag>
-            )}
           </Space>
           <Tooltip
             position='topLeft'
@@ -563,6 +629,7 @@ export default function ErrorWorkbench() {
             }
           >
             <Typography.Text
+              strong
               ellipsis={{ showTooltip: false }}
               style={{ maxWidth: 460 }}
             >
@@ -570,7 +637,7 @@ export default function ErrorWorkbench() {
             </Typography.Text>
           </Tooltip>
           {(record.sample_request_id || record.sample_upstream_request_id) && (
-            <Typography.Text type='tertiary' size='small'>
+            <Typography.Text type='tertiary' size='small' className='font-mono'>
               {record.sample_request_id || record.sample_upstream_request_id}
             </Typography.Text>
           )}
@@ -585,9 +652,13 @@ export default function ErrorWorkbench() {
         <Space vertical align='start' spacing={4}>
           <Space spacing={4} wrap>
             {record.automatic_channel_test_disabled ? (
-              <Tag color='red'>{t('跳过自动测活')}</Tag>
+              <Tag color='red' type='light'>
+                {t('跳过自动测活')}
+              </Tag>
             ) : (
-              <Tag color='green'>{t('参与自动测活')}</Tag>
+              <Tag color='green' type='light'>
+                {t('参与自动测活')}
+              </Tag>
             )}
             {record.auto_test_channel_interval_minutes > 0 && (
               <Tag color='blue'>
@@ -596,15 +667,24 @@ export default function ErrorWorkbench() {
             )}
           </Space>
           {record.multi_key_total > 0 && (
-            <Typography.Text type='tertiary' size='small'>
-              {t('多 Key')} {record.multi_key_enabled}/{record.multi_key_total}
-              {record.multi_key_auto_disabled > 0
-                ? `, ${t('自动禁用')} ${record.multi_key_auto_disabled}`
-                : ''}
-              {record.multi_key_manual_disabled > 0
-                ? `, ${t('手动禁用')} ${record.multi_key_manual_disabled}`
-                : ''}
-            </Typography.Text>
+            <div className='rounded-md border border-solid border-gray-100 bg-gray-50 p-2'>
+              <Typography.Text strong className='tabular-nums'>
+                {record.multi_key_enabled}/{record.multi_key_total}
+              </Typography.Text>
+              <div className='text-xs text-gray-500'>{t('多 Key')}</div>
+              <Space spacing={4} wrap className='mt-1'>
+                {record.multi_key_auto_disabled > 0 && (
+                  <Tag color='orange' type='light'>
+                    {t('自动禁用')} {record.multi_key_auto_disabled}
+                  </Tag>
+                )}
+                {record.multi_key_manual_disabled > 0 && (
+                  <Tag color='red' type='light'>
+                    {t('手动禁用')} {record.multi_key_manual_disabled}
+                  </Tag>
+                )}
+              </Space>
+            </div>
           )}
         </Space>
       ),

@@ -293,6 +293,31 @@ function getPeerChannelDisplayRows(record: ErrorSummaryItem) {
   ]
 }
 
+function occupiedPeerPriorities(
+  peers: ErrorSummaryPeerChannel[],
+  currentChannel: number,
+) {
+  const priorities = new Set<number>()
+  for (const peer of peers) {
+    if (peer.channel !== currentChannel) {
+      priorities.add(peer.channel_priority)
+    }
+  }
+  return priorities
+}
+
+function nextAvailablePriority(
+  priority: number,
+  occupiedPriorities: Set<number>,
+  step: 1 | -1,
+) {
+  let nextPriority = priority
+  while (occupiedPriorities.has(nextPriority)) {
+    nextPriority += step
+  }
+  return nextPriority
+}
+
 function getPriorityMoveTarget(
   record: ErrorSummaryItem,
   direction: PriorityMoveDirection,
@@ -303,20 +328,46 @@ function getPriorityMoveTarget(
   )
   if (currentIndex < 0 || peers.length < 2) return null
 
+  const currentPeer = peers[currentIndex]
+  const otherPeers = peers.filter((peer) => peer.channel !== record.channel)
+  const occupiedPriorities = occupiedPeerPriorities(peers, record.channel)
+
   if (direction === 'top') {
-    if (currentIndex === 0) return null
-    return peers[0].channel_priority + 1
+    const highestOtherPriority = Math.max(
+      ...otherPeers.map((peer) => peer.channel_priority),
+    )
+    if (currentPeer.channel_priority > highestOtherPriority) return null
+    return nextAvailablePriority(
+      highestOtherPriority + 1,
+      occupiedPriorities,
+      1,
+    )
   }
   if (direction === 'bottom') {
-    if (currentIndex === peers.length - 1) return null
-    return peers[peers.length - 1].channel_priority - 1
+    const lowestOtherPriority = Math.min(
+      ...otherPeers.map((peer) => peer.channel_priority),
+    )
+    if (currentPeer.channel_priority < lowestOtherPriority) return null
+    return nextAvailablePriority(
+      lowestOtherPriority - 1,
+      occupiedPriorities,
+      -1,
+    )
   }
   if (direction === 'up') {
     if (currentIndex === 0) return null
-    return peers[currentIndex - 1].channel_priority + 1
+    return nextAvailablePriority(
+      peers[currentIndex - 1].channel_priority + 1,
+      occupiedPriorities,
+      1,
+    )
   }
   if (currentIndex === peers.length - 1) return null
-  return peers[currentIndex + 1].channel_priority - 1
+  return nextAvailablePriority(
+    peers[currentIndex + 1].channel_priority - 1,
+    occupiedPriorities,
+    -1,
+  )
 }
 
 function canMovePriority(
@@ -708,11 +759,11 @@ export function ErrorWorkbench() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>{t('Count')}</TableHead>
-                    <TableHead>{t('Model')}</TableHead>
-                    <TableHead>{t('Channel')}</TableHead>
+                    <TableHead className='w-[120px]'>{t('Count')}</TableHead>
+                    <TableHead className='w-[190px]'>{t('Model')}</TableHead>
+                    <TableHead className='w-[300px]'>{t('Channel')}</TableHead>
                     <TableHead>{t('Error')}</TableHead>
-                    <TableHead>{t('Auto test')}</TableHead>
+                    <TableHead className='w-[210px]'>{t('Auto test')}</TableHead>
                     <TableHead className='text-right'>{t('Actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -732,27 +783,42 @@ export function ErrorWorkbench() {
                   {summary.items.map((record) => (
                     <TableRow key={record.key}>
                       <TableCell className='align-top'>
-                        <div className='font-semibold'>{record.count}</div>
-                        <div className='text-muted-foreground text-xs'>
-                          {t('First')}:{' '}
-                          {formatTimestampToDate(record.first_seen)}
+                        <div className='text-2xl font-semibold leading-none text-red-600 tabular-nums'>
+                          {record.count}
                         </div>
-                        <div className='text-muted-foreground text-xs'>
-                          {t('Latest')}:{' '}
-                          {formatTimestampToDate(record.last_seen)}
+                        <div className='text-muted-foreground mt-2 space-y-1 text-xs'>
+                          <div>
+                            {t('Latest')}:{' '}
+                            {formatTimestampToDate(record.last_seen)}
+                          </div>
+                          <div>
+                            {t('First')}:{' '}
+                            {formatTimestampToDate(record.first_seen)}
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell className='align-top'>
                         {record.model_name ? (
-                          <Badge variant='outline'>{record.model_name}</Badge>
+                          <div className='space-y-1.5'>
+                            <div className='max-w-[180px] truncate font-mono text-sm font-semibold'>
+                              {record.model_name}
+                            </div>
+                            {record.sample_group && (
+                              <Badge variant='outline'>
+                                {record.sample_group}
+                              </Badge>
+                            )}
+                          </div>
                         ) : (
                           <span className='text-muted-foreground'>-</span>
                         )}
                       </TableCell>
                       <TableCell className='align-top'>
-                        <div className='font-medium'>
-                          {record.channel_name || t('Unknown channel')} #
-                          {record.channel || '-'}
+                        <div className='max-w-[280px] truncate font-semibold'>
+                          {record.channel_name || t('Unknown channel')}
+                        </div>
+                        <div className='text-muted-foreground text-xs'>
+                          #{record.channel || '-'}
                         </div>
                         <div className='mt-1 flex flex-wrap gap-1'>
                           <Badge
@@ -763,7 +829,10 @@ export function ErrorWorkbench() {
                           >
                             {channelStatusLabel(record.channel_status, t)}
                           </Badge>
-                          <Badge variant='outline'>
+                          <Badge
+                            variant='outline'
+                            className='border-sky-200 font-medium text-sky-700'
+                          >
                             {t('Priority')} {record.channel_priority || 0}
                           </Badge>
                           {record.channel_response_time > 0 && (
@@ -779,30 +848,37 @@ export function ErrorWorkbench() {
                         {renderPeerChannels(record)}
                       </TableCell>
                       <TableCell className='max-w-[420px] align-top whitespace-normal'>
-                        <div className='flex flex-wrap gap-1'>
+                        <div className='flex flex-wrap items-center gap-1'>
                           <Badge
                             variant='outline'
-                            className={statusCodeClassName(record.status_code)}
+                            className={[
+                              statusCodeClassName(record.status_code),
+                              'font-semibold',
+                            ].join(' ')}
                           >
                             {record.status_code || t('No status code')}
                           </Badge>
                           {record.error_type && (
-                            <Badge variant='outline'>{record.error_type}</Badge>
+                            <Badge
+                              variant='outline'
+                              className='border-red-200 text-red-700'
+                            >
+                              {record.error_type}
+                            </Badge>
                           )}
                           {record.error_code && (
-                            <Badge variant='outline'>{record.error_code}</Badge>
-                          )}
-                          {record.sample_group && (
-                            <Badge variant='outline'>
-                              {record.sample_group}
+                            <Badge
+                              variant='outline'
+                              className='border-amber-200 text-amber-700'
+                            >
+                              {record.error_code}
                             </Badge>
                           )}
                         </div>
                         <Tooltip>
                           <TooltipTrigger
-                            render={
-                              <p className='mt-2 line-clamp-3 cursor-help text-sm' />
-                            }
+                            render={<p className='mt-2 line-clamp-3' />}
+                            className='cursor-help text-sm font-medium leading-5'
                           >
                             {record.error_summary || t('No error message')}
                           </TooltipTrigger>
@@ -813,47 +889,70 @@ export function ErrorWorkbench() {
                         {(record.sample_request_id ||
                           record.sample_upstream_request_id) && (
                           <div className='text-muted-foreground mt-1 text-xs'>
-                            {record.sample_request_id ||
-                              record.sample_upstream_request_id}
+                            <span className='font-mono'>
+                              {record.sample_request_id ||
+                                record.sample_upstream_request_id}
+                            </span>
                           </div>
                         )}
                       </TableCell>
                       <TableCell className='align-top'>
-                        <div className='flex flex-wrap gap-1'>
-                          {record.automatic_channel_test_disabled ? (
-                            <Badge
-                              variant='outline'
-                              className='border-red-200 text-red-700'
-                            >
-                              {t('Skipped')}
-                            </Badge>
-                          ) : (
-                            <Badge
-                              variant='outline'
-                              className='border-emerald-200 text-emerald-700'
-                            >
-                              {t('Enabled')}
-                            </Badge>
-                          )}
-                          {record.auto_test_channel_interval_minutes > 0 && (
-                            <Badge variant='outline'>
-                              {record.auto_test_channel_interval_minutes}{' '}
-                              {t('minutes')}
-                            </Badge>
+                        <div className='space-y-2'>
+                          <div className='flex flex-wrap gap-1'>
+                            {record.automatic_channel_test_disabled ? (
+                              <Badge
+                                variant='outline'
+                                className='border-red-200 font-medium text-red-700'
+                              >
+                                {t('Skipped')}
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant='outline'
+                                className='border-emerald-200 font-medium text-emerald-700'
+                              >
+                                {t('Enabled')}
+                              </Badge>
+                            )}
+                            {record.auto_test_channel_interval_minutes > 0 && (
+                              <Badge variant='outline'>
+                                {record.auto_test_channel_interval_minutes}{' '}
+                                {t('minutes')}
+                              </Badge>
+                            )}
+                          </div>
+                          {record.multi_key_total > 0 && (
+                            <div className='rounded-md border bg-muted/30 p-2'>
+                              <div className='font-semibold tabular-nums'>
+                                {record.multi_key_enabled}/
+                                {record.multi_key_total}
+                              </div>
+                              <div className='text-muted-foreground text-xs'>
+                                {t('Multi-key')}
+                              </div>
+                              <div className='mt-1 flex flex-wrap gap-1'>
+                                {record.multi_key_auto_disabled > 0 && (
+                                  <Badge
+                                    variant='outline'
+                                    className='border-amber-200 text-amber-700'
+                                  >
+                                    {t('auto disabled')}{' '}
+                                    {record.multi_key_auto_disabled}
+                                  </Badge>
+                                )}
+                                {record.multi_key_manual_disabled > 0 && (
+                                  <Badge
+                                    variant='outline'
+                                    className='border-red-200 text-red-700'
+                                  >
+                                    {t('manual disabled')}{' '}
+                                    {record.multi_key_manual_disabled}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
                           )}
                         </div>
-                        {record.multi_key_total > 0 && (
-                          <div className='text-muted-foreground mt-1 text-xs'>
-                            {t('Multi-key')}: {record.multi_key_enabled}/
-                            {record.multi_key_total}
-                            {record.multi_key_auto_disabled > 0
-                              ? `, ${t('auto disabled')} ${record.multi_key_auto_disabled}`
-                              : ''}
-                            {record.multi_key_manual_disabled > 0
-                              ? `, ${t('manual disabled')} ${record.multi_key_manual_disabled}`
-                              : ''}
-                          </div>
-                        )}
                       </TableCell>
                       <TableCell className='align-top'>
                         <div className='flex justify-end gap-1'>

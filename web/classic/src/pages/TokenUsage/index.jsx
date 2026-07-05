@@ -51,6 +51,13 @@ const API_KEY_COLORS = [
   '#0ea5e9',
 ];
 
+const TOKEN_COUNT_UNITS = [
+  { value: 1000000000000, suffix: 'T' },
+  { value: 1000000000, suffix: 'B' },
+  { value: 1000000, suffix: 'M' },
+  { value: 1000, suffix: 'K' },
+];
+
 const emptyUsage = {
   summary: {
     total_requests: 0,
@@ -73,6 +80,37 @@ function formatInteger(value) {
   return Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
     value || 0,
   );
+}
+
+function toFiniteNumber(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function formatCompactTokenCount(value) {
+  const numeric = toFiniteNumber(value);
+  const abs = Math.abs(numeric);
+  const unit = TOKEN_COUNT_UNITS.find((item) => abs >= item.value);
+
+  if (!unit) {
+    return formatInteger(numeric);
+  }
+
+  const scaled = numeric / unit.value;
+  return `${Intl.NumberFormat(undefined, {
+    maximumFractionDigits: Math.abs(scaled) < 10 ? 1 : 0,
+  }).format(scaled)}${unit.suffix}`;
+}
+
+function formatCompactWithFullValue(value) {
+  const numeric = toFiniteNumber(value);
+  const compact = formatCompactTokenCount(numeric);
+  const full = formatInteger(numeric);
+  return compact === full ? full : `${compact} (${full})`;
+}
+
+function formatChartTokenLabel(value, datum) {
+  return formatCompactTokenCount(datum?.tokens ?? value);
 }
 
 function getCacheTokenParts(row) {
@@ -145,8 +183,7 @@ function nextHourTimestamp(timestamp) {
 function startOfTodayTimestamp() {
   const now = new Date();
   return Math.floor(
-    new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() /
-      1000,
+    new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000,
   );
 }
 
@@ -195,13 +232,26 @@ function buildParams(rangeValue, customRange) {
   };
 }
 
-function StatCard({ title, value, icon: Icon }) {
+function StatCard({ title, value, detail, icon: Icon }) {
   return (
     <Card {...CARD_PROPS} className='!rounded-xl'>
       <div className='flex items-center justify-between gap-3'>
         <div className='min-w-0'>
           <div className='text-xs text-gray-500'>{title}</div>
-          <div className='mt-1 truncate text-xl font-semibold'>{value}</div>
+          <div
+            className='mt-1 truncate text-xl font-semibold'
+            title={detail || value}
+          >
+            {value}
+          </div>
+          {detail && detail !== value && (
+            <div
+              className='mt-0.5 truncate text-xs text-gray-500'
+              title={detail}
+            >
+              {detail}
+            </div>
+          )}
         </div>
         <div className='flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-800'>
           <Icon size={16} />
@@ -232,15 +282,16 @@ function buildApiKeyColorScale(values) {
     type: 'ordinal',
     domain: values.map((item) => item.key),
     range: values.map((item) => item.color),
-    specified: Object.fromEntries(
-      values.map((item) => [item.key, item.color]),
-    ),
+    specified: Object.fromEntries(values.map((item) => [item.key, item.color])),
   };
 }
 
-function RankMetric({ label, value }) {
+function RankMetric({ label, value, fullValue }) {
   return (
-    <div className='min-w-0 rounded-md border border-gray-200 bg-white px-2.5 py-2 shadow-sm dark:border-gray-700 dark:bg-gray-900'>
+    <div
+      className='min-w-0 rounded-md border border-gray-200 bg-white px-2.5 py-2 shadow-sm dark:border-gray-700 dark:bg-gray-900'
+      title={fullValue || value}
+    >
       <div className='truncate text-[11px] font-medium text-gray-600 dark:text-gray-300'>
         {label}
       </div>
@@ -319,15 +370,18 @@ function TokenRankList({ items, colorByKey, t }) {
               />
               <RankMetric
                 label={t('总 Tokens')}
-                value={formatInteger(item.total_tokens)}
+                value={formatCompactTokenCount(item.total_tokens)}
+                fullValue={formatInteger(item.total_tokens)}
               />
               <RankMetric
                 label={t('输入')}
-                value={formatInteger(item.prompt_tokens)}
+                value={formatCompactTokenCount(item.prompt_tokens)}
+                fullValue={formatInteger(item.prompt_tokens)}
               />
               <RankMetric
                 label={t('输出')}
-                value={formatInteger(item.completion_tokens)}
+                value={formatCompactTokenCount(item.completion_tokens)}
+                fullValue={formatInteger(item.completion_tokens)}
               />
             </div>
           </div>
@@ -451,9 +505,37 @@ const TokenUsage = () => {
           orient: 'bottom',
           label: { autoRotate: true, autoHide: true, autoLimit: true },
         },
-        { orient: 'left', label: { formatMethod: formatInteger } },
+        {
+          orient: 'left',
+          title: { visible: true, text: 'Tokens' },
+          label: { formatMethod: formatCompactTokenCount },
+        },
       ],
+      label: {
+        visible: apiKeyValues.length > 0 && apiKeyValues.length <= 12,
+        position: 'outside',
+        formatMethod: formatChartTokenLabel,
+        style: { fontSize: 11 },
+      },
       legends: { visible: apiKeyValues.length <= 12, orient: 'bottom' },
+      tooltip: {
+        mark: {
+          content: [
+            {
+              key: 'Tokens',
+              value: (datum) => formatCompactWithFullValue(datum?.tokens),
+            },
+            {
+              key: t('请求数'),
+              value: (datum) => formatCompactWithFullValue(datum?.requests),
+            },
+            {
+              key: t('消耗'),
+              value: (datum) => renderQuota(toFiniteNumber(datum?.cost)),
+            },
+          ],
+        },
+      },
       title:
         !loading && apiKeyValues.length === 0
           ? { visible: true, text: t('暂无用量数据') }
@@ -474,7 +556,25 @@ const TokenUsage = () => {
       innerRadius: 0.52,
       padAngle: 0.8,
       legends: { visible: true, orient: 'bottom' },
-      label: { visible: false },
+      label: {
+        visible: apiKeyShareValues.length > 0 && apiKeyShareValues.length <= 8,
+        formatMethod: formatChartTokenLabel,
+        style: { fontSize: 11 },
+      },
+      tooltip: {
+        mark: {
+          content: [
+            {
+              key: 'Tokens',
+              value: (datum) => formatCompactWithFullValue(datum?.tokens),
+            },
+            {
+              key: t('请求数'),
+              value: (datum) => formatCompactWithFullValue(datum?.requests),
+            },
+          ],
+        },
+      },
       title:
         !loading && apiKeyShareValues.length === 0
           ? { visible: true, text: t('暂无用量数据') }
@@ -569,7 +669,9 @@ const TokenUsage = () => {
                   type='datetime-local'
                   step={3600}
                   value={customRange.end}
-                  onChange={(event) => handleCustomEndChange(event.target.value)}
+                  onChange={(event) =>
+                    handleCustomEndChange(event.target.value)
+                  }
                   className='h-8 w-[180px] rounded-md border px-2 text-sm outline-none focus:border-blue-500'
                   style={dateTimeInputStyle}
                 />
@@ -592,12 +694,14 @@ const TokenUsage = () => {
           <div className='grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4'>
             <StatCard
               title={t('总请求数')}
-              value={formatInteger(usage.summary.total_requests)}
+              value={formatCompactTokenCount(usage.summary.total_requests)}
+              detail={formatInteger(usage.summary.total_requests)}
               icon={BarChart3}
             />
             <StatCard
               title={t('总 Tokens')}
-              value={formatInteger(usage.summary.total_tokens)}
+              value={formatCompactTokenCount(usage.summary.total_tokens)}
+              detail={`${formatInteger(usage.summary.total_tokens)} Tokens`}
               icon={Sparkles}
             />
             <StatCard

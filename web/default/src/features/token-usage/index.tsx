@@ -96,6 +96,13 @@ const API_KEY_COLORS = [
   '#0ea5e9',
 ]
 
+const TOKEN_COUNT_UNITS = [
+  { value: 1000000000000, suffix: 'T' },
+  { value: 1000000000, suffix: 'B' },
+  { value: 1000000, suffix: 'M' },
+  { value: 1000, suffix: 'K' },
+]
+
 function emptyTokenUsage(): TokenUsageSelfResponse {
   return {
     summary: {
@@ -120,6 +127,40 @@ function formatInteger(value: number) {
   return Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
     value || 0
   )
+}
+
+function toFiniteNumber(value: unknown) {
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? numeric : 0
+}
+
+function formatCompactTokenCount(value: unknown) {
+  const numeric = toFiniteNumber(value)
+  const abs = Math.abs(numeric)
+  const unit = TOKEN_COUNT_UNITS.find((item) => abs >= item.value)
+
+  if (!unit) {
+    return formatInteger(numeric)
+  }
+
+  const scaled = numeric / unit.value
+  return `${Intl.NumberFormat(undefined, {
+    maximumFractionDigits: Math.abs(scaled) < 10 ? 1 : 0,
+  }).format(scaled)}${unit.suffix}`
+}
+
+function formatCompactWithFullValue(value: unknown) {
+  const numeric = toFiniteNumber(value)
+  const compact = formatCompactTokenCount(numeric)
+  const full = formatInteger(numeric)
+  return compact === full ? full : `${compact} (${full})`
+}
+
+function formatChartTokenLabel(
+  value: unknown,
+  datum?: { tokens?: unknown }
+) {
+  return formatCompactTokenCount(datum?.tokens ?? value)
 }
 
 function cacheTokenParts(row: TokenUsageDetailItem) {
@@ -212,10 +253,12 @@ function buildParams(
 function StatCard({
   title,
   value,
+  detail,
   icon: Icon,
 }: {
   title: string
   value: string
+  detail?: string
   icon: LucideIcon
 }) {
   return (
@@ -223,7 +266,20 @@ function StatCard({
       <CardContent className='flex items-center justify-between gap-3'>
         <div className='min-w-0'>
           <div className='text-muted-foreground text-xs'>{title}</div>
-          <div className='mt-1 truncate text-xl font-semibold'>{value}</div>
+          <div
+            className='mt-1 truncate text-xl font-semibold'
+            title={detail ?? value}
+          >
+            {value}
+          </div>
+          {detail && detail !== value && (
+            <div
+              className='text-muted-foreground mt-0.5 truncate text-xs'
+              title={detail}
+            >
+              {detail}
+            </div>
+          )}
         </div>
         <div className='bg-muted flex size-9 shrink-0 items-center justify-center rounded-lg'>
           <Icon className='text-muted-foreground size-4' />
@@ -263,9 +319,20 @@ function buildApiKeyColorScale(values: { key: string; color: string }[]) {
   }
 }
 
-function RankMetric({ label, value }: { label: string; value: string }) {
+function RankMetric({
+  label,
+  value,
+  fullValue,
+}: {
+  label: string
+  value: string
+  fullValue?: string
+}) {
   return (
-    <div className='bg-background min-w-0 rounded-md border px-2.5 py-2 shadow-sm'>
+    <div
+      className='bg-background min-w-0 rounded-md border px-2.5 py-2 shadow-sm'
+      title={fullValue ?? value}
+    >
       <div className='text-foreground/70 truncate text-[11px] font-medium'>
         {label}
       </div>
@@ -353,15 +420,18 @@ function TokenRankList({
               />
               <RankMetric
                 label={t('Total Tokens')}
-                value={formatInteger(item.total_tokens)}
+                value={formatCompactTokenCount(item.total_tokens)}
+                fullValue={formatInteger(item.total_tokens)}
               />
               <RankMetric
                 label={t('Input')}
-                value={formatInteger(item.prompt_tokens)}
+                value={formatCompactTokenCount(item.prompt_tokens)}
+                fullValue={formatInteger(item.prompt_tokens)}
               />
               <RankMetric
                 label={t('Output')}
-                value={formatInteger(item.completion_tokens)}
+                value={formatCompactTokenCount(item.completion_tokens)}
+                fullValue={formatInteger(item.completion_tokens)}
               />
             </div>
           </div>
@@ -534,9 +604,40 @@ export function TokenUsage() {
           orient: 'bottom',
           label: { autoRotate: true, autoHide: true, autoLimit: true },
         },
-        { orient: 'left', label: { formatMethod: formatInteger } },
+        {
+          orient: 'left',
+          title: { visible: true, text: t('Tokens') },
+          label: { formatMethod: formatCompactTokenCount },
+        },
       ],
+      label: {
+        visible: apiKeyValues.length > 0 && apiKeyValues.length <= 12,
+        position: 'outside',
+        formatMethod: formatChartTokenLabel,
+        style: { fontSize: 11 },
+      },
       legends: { visible: apiKeyValues.length <= 12, orient: 'bottom' },
+      tooltip: {
+        mark: {
+          content: [
+            {
+              key: t('Tokens'),
+              value: (datum: Record<string, unknown>) =>
+                formatCompactWithFullValue(datum?.tokens),
+            },
+            {
+              key: t('Requests'),
+              value: (datum: Record<string, unknown>) =>
+                formatCompactWithFullValue(datum?.requests),
+            },
+            {
+              key: t('Cost'),
+              value: (datum: Record<string, unknown>) =>
+                formatQuotaWithCurrency(toFiniteNumber(datum?.cost)),
+            },
+          ],
+        },
+      },
       title: loading
         ? undefined
         : apiKeyValues.length === 0
@@ -559,7 +660,27 @@ export function TokenUsage() {
       innerRadius: 0.52,
       padAngle: 0.8,
       legends: { visible: true, orient: 'bottom' },
-      label: { visible: false },
+      label: {
+        visible: apiKeyShareValues.length > 0 && apiKeyShareValues.length <= 8,
+        formatMethod: formatChartTokenLabel,
+        style: { fontSize: 11 },
+      },
+      tooltip: {
+        mark: {
+          content: [
+            {
+              key: t('Tokens'),
+              value: (datum: Record<string, unknown>) =>
+                formatCompactWithFullValue(datum?.tokens),
+            },
+            {
+              key: t('Requests'),
+              value: (datum: Record<string, unknown>) =>
+                formatCompactWithFullValue(datum?.requests),
+            },
+          ],
+        },
+      },
       title: loading
         ? undefined
         : apiKeyShareValues.length === 0
@@ -631,12 +752,14 @@ export function TokenUsage() {
           <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
             <StatCard
               title={t('Total Requests')}
-              value={formatInteger(data.summary.total_requests)}
+              value={formatCompactTokenCount(data.summary.total_requests)}
+              detail={formatInteger(data.summary.total_requests)}
               icon={BarChart3}
             />
             <StatCard
               title={t('Total Tokens')}
-              value={formatInteger(data.summary.total_tokens)}
+              value={formatCompactTokenCount(data.summary.total_tokens)}
+              detail={`${formatInteger(data.summary.total_tokens)} ${t('Tokens')}`}
               icon={Sparkles}
             />
             <StatCard
@@ -645,7 +768,7 @@ export function TokenUsage() {
               icon={Clock}
             />
             <StatCard
-              title={t('Tokens Used')}
+              title={t('API Keys Used')}
               value={formatInteger(data.summary.api_key_count)}
               icon={Key}
             />

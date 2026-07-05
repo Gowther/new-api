@@ -54,14 +54,14 @@ func TestUpsertPerfMetricAggregatesExistingBucket(t *testing.T) {
 }
 
 func TestPerfMetricExistingColumnQualifiesPostgreSQLUpsertColumns(t *testing.T) {
-	oldUsingPostgreSQL := common.UsingPostgreSQL
+	oldMainDatabaseType := common.MainDatabaseType()
 	t.Cleanup(func() {
-		common.UsingPostgreSQL = oldUsingPostgreSQL
+		common.SetMainDatabaseType(oldMainDatabaseType)
 	})
 
-	common.UsingPostgreSQL = true
+	common.SetMainDatabaseType(common.DatabaseTypePostgreSQL)
 	require.Equal(t, `"perf_metrics"."generation_ms"`, perfMetricExistingColumn("generation_ms"))
 
-	common.UsingPostgreSQL = false
+	common.SetMainDatabaseType(common.DatabaseTypeSQLite)
 	require.Equal(t, "generation_ms", perfMetricExistingColumn("generation_ms"))
 }

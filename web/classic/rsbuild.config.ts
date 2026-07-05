@@ -1,3 +1,4 @@
+import fs from 'node:fs'
 import path from 'path'
 import { createRequire } from 'module'
 import { fileURLToPath } from 'url'
@@ -5,11 +6,26 @@ import { defineConfig, loadEnv } from '@rsbuild/core'
 import { pluginReact } from '@rsbuild/plugin-react'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const require = createRequire(import.meta.url)
-const semiUiDir = path.resolve(
-  path.dirname(require.resolve('@douyinfe/semi-ui')),
-  '../..',
+const workspaceRequire = createRequire(path.resolve(__dirname, '../package.json'))
+const resolveWorkspacePackageDir = (packageName: string) => {
+  let current = path.dirname(workspaceRequire.resolve(packageName))
+  while (current !== path.dirname(current)) {
+    if (fs.existsSync(path.join(current, 'package.json'))) {
+      return current
+    }
+    current = path.dirname(current)
+  }
+  throw new Error(`Unable to resolve package root for ${packageName}`)
+}
+const semiUiDir = resolveWorkspacePackageDir('@douyinfe/semi-ui')
+const semiFoundationDir = resolveWorkspacePackageDir('@douyinfe/semi-foundation')
+const semiDateFnsDir = path.resolve(
+  semiFoundationDir,
+  'node_modules/date-fns',
 )
+const reactDir = resolveWorkspacePackageDir('react')
+const reactDomDir = resolveWorkspacePackageDir('react-dom')
+const lobehubIconsDir = resolveWorkspacePackageDir('@lobehub/icons')
 
 export default defineConfig(({ envMode }) => {
   const env = loadEnv({ mode: envMode, prefixes: ['VITE_'] })
@@ -47,6 +63,11 @@ export default defineConfig(({ envMode }) => {
           semiUiDir,
           'dist/css/semi.css',
         ),
+        '@douyinfe/semi-ui': semiUiDir,
+        '@lobehub/icons': lobehubIconsDir,
+        'date-fns': semiDateFnsDir,
+        react: reactDir,
+        'react-dom': reactDomDir,
       },
     },
     html: {
@@ -54,7 +75,7 @@ export default defineConfig(({ envMode }) => {
     },
     server: {
       host: '0.0.0.0',
-      strictPort: true,
+      strictPort: false,
       proxy: devProxy,
     },
     output: {

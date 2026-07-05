@@ -81,15 +81,15 @@ func TestRecordTokenUsageDataAggregatesHourlyAndIgnoresZeroToken(t *testing.T) {
 }
 
 func TestTokenUsageExistingColumnQualifiesPostgreSQLUpsertColumns(t *testing.T) {
-	oldUsingPostgreSQL := common.UsingPostgreSQL
+	oldMainDatabaseType := common.MainDatabaseType()
 	t.Cleanup(func() {
-		common.UsingPostgreSQL = oldUsingPostgreSQL
+		common.SetMainDatabaseType(oldMainDatabaseType)
 	})
 
-	common.UsingPostgreSQL = true
+	common.SetMainDatabaseType(common.DatabaseTypePostgreSQL)
 	require.Equal(t, `"token_usage_data"."completion_tokens"`, tokenUsageExistingColumn("completion_tokens"))
 
-	common.UsingPostgreSQL = false
+	common.SetMainDatabaseType(common.DatabaseTypeSQLite)
 	require.Equal(t, "completion_tokens", tokenUsageExistingColumn("completion_tokens"))
 }
 

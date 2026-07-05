@@ -20,6 +20,8 @@ For commercial licensing, please contact support@quantumnous.com
 import React from 'react';
 import { Tag, Tooltip } from '@douyinfe/semi-ui';
 
+const signalBars = [{ height: 5 }, { height: 8 }, { height: 11 }];
+
 const formatSuccessRate = (value) => {
   const rate = Number(value);
   if (!Number.isFinite(rate)) {
@@ -42,6 +44,57 @@ const getSuccessRateColor = (value) => {
   return 'red';
 };
 
+const getSignalColor = (value) => {
+  const rate = Number(value);
+  if (!Number.isFinite(rate)) {
+    return 'var(--semi-color-fill-1)';
+  }
+  if (rate >= 99) {
+    return 'var(--semi-color-success)';
+  }
+  if (rate >= 95) {
+    return 'var(--semi-color-warning)';
+  }
+  return 'var(--semi-color-danger)';
+};
+
+const getSignalRates = (perf, successRate) => {
+  const recentRates =
+    perf?.recent_success_rates?.filter((rate) =>
+      Number.isFinite(Number(rate)),
+    ) ?? [];
+  const rates =
+    recentRates.length > 0
+      ? recentRates.slice(-3)
+      : Number.isFinite(successRate)
+        ? [successRate]
+        : [];
+  return [...Array(Math.max(0, 3 - rates.length)).fill(null), ...rates].slice(
+    -3,
+  );
+};
+
+const SuccessRateSignal = ({ rates }) => {
+  return (
+    <span aria-hidden={true} className='inline-flex h-3.5 items-end gap-0.5'>
+      {signalBars.map((bar, index) => {
+        const rate = rates[index];
+        return (
+          <span
+            key={index}
+            className='w-1 rounded-sm'
+            style={{
+              height: bar.height,
+              backgroundColor: getSignalColor(rate),
+              opacity: rate == null ? 0.55 : 1,
+            }}
+          />
+        );
+      })}
+    </span>
+  );
+};
+
 const ModelPerformanceBadge = ({
   perf,
   t,
@@ -58,7 +111,10 @@ const ModelPerformanceBadge = ({
       return (
         <Tooltip content={`${t('成功率')}：-`}>
           <Tag color='white' shape='circle' size='small'>
-            {label}
+            <span className='inline-flex items-center gap-1.5'>
+              <SuccessRateSignal rates={getSignalRates(perf, successRate)} />
+              <span>{label}</span>
+            </span>
           </Tag>
         </Tooltip>
       );
@@ -72,7 +128,10 @@ const ModelPerformanceBadge = ({
   return (
     <Tooltip content={`${t('成功率')}：${formattedRate}`}>
       <Tag color={getSuccessRateColor(successRate)} shape='circle' size='small'>
-        {label}
+        <span className='inline-flex items-center gap-1.5'>
+          <SuccessRateSignal rates={getSignalRates(perf, successRate)} />
+          <span>{label}</span>
+        </span>
       </Tag>
     </Tooltip>
   );

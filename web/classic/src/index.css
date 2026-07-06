@@ -72,12 +72,6 @@ body {
   min-width: 0;
 }
 
-.classic-frontend-deprecation-close {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-}
-
 @media (max-width: 767px) {
   .classic-frontend-deprecation-banner {
     padding: 8px 8px 0;

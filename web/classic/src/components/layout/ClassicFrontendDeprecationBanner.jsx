@@ -18,8 +18,8 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useContext, useState } from 'react';
-import { Banner, Button, Modal } from '@douyinfe/semi-ui';
-import { IconAlertTriangle, IconClose } from '@douyinfe/semi-icons';
+import { Banner, Button } from '@douyinfe/semi-ui';
+import { IconAlertTriangle } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
 import { UserContext } from '../../context/User';
 import { confirmSwitchToDefaultFrontend } from '../../helpers';
@@ -44,24 +44,11 @@ const ClassicFrontendDeprecationBanner = () => {
 
   const isRootUser = userState?.user?.role >= 100;
 
-  const confirmClose = () => {
-    Modal.confirm({
-      title: t('确认关闭提示'),
-      content: t(
-        '关闭后将不再显示此提示（仅对当前浏览器生效）。确定要关闭吗？',
-      ),
-      okText: t('关闭提示'),
-      cancelText: t('取消'),
-      okButtonProps: {
-        type: 'danger',
-      },
-      onOk: () => {
-        try {
-          localStorage.setItem(DISMISS_STORAGE_KEY, '1');
-        } catch (_) {}
-        setVisible(false);
-      },
-    });
+  const closeBanner = () => {
+    try {
+      localStorage.setItem(DISMISS_STORAGE_KEY, '1');
+    } catch (_) {}
+    setVisible(false);
   };
 
   const switchFrontend = () => {
@@ -75,7 +62,7 @@ const ClassicFrontendDeprecationBanner = () => {
       <div className='classic-frontend-deprecation-banner-inner'>
         <Banner
           type='warning'
-          closeIcon={null}
+          onClose={closeBanner}
           icon={
             <IconAlertTriangle
               size='large'
@@ -107,15 +94,6 @@ const ClassicFrontendDeprecationBanner = () => {
               ) : null}
             </div>
           }
-        />
-        <Button
-          theme='borderless'
-          size='small'
-          type='tertiary'
-          icon={<IconClose aria-hidden={true} />}
-          onClick={confirmClose}
-          className='classic-frontend-deprecation-close'
-          aria-label={t('关闭')}
         />
       </div>
     </div>

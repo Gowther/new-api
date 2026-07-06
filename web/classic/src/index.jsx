@@ -1,4 +1,4 @@
-import '@douyinfe/semi-ui/react19-adapter';
+import '@douyinfe/semi-ui/lib/es/react19-adapter';
 
 /*
 Copyright (C) 2025 QuantumNous

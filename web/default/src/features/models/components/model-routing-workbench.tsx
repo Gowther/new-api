@@ -254,6 +254,7 @@ export function ModelRoutingWorkbench() {
         modelCount: modelCounts.get(String(vendor.id)) ?? 0,
         vendor,
       }))
+      .filter((provider) => provider.modelCount > 0)
       .sort((a, b) => a.label.localeCompare(b.label))
 
     const unassignedCount = modelCounts.get(UNASSIGNED_PROVIDER_KEY) ?? 0

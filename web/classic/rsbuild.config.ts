@@ -7,8 +7,11 @@ import { pluginReact } from '@rsbuild/plugin-react'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const workspaceRequire = createRequire(path.resolve(__dirname, '../package.json'))
-const resolveWorkspacePackageDir = (packageName: string) => {
-  let current = path.dirname(workspaceRequire.resolve(packageName))
+const resolveWorkspacePackageDir = (
+  packageName: string,
+  resolver = workspaceRequire,
+) => {
+  let current = path.dirname(resolver.resolve(packageName))
   while (current !== path.dirname(current)) {
     if (fs.existsSync(path.join(current, 'package.json'))) {
       return current
@@ -19,9 +22,12 @@ const resolveWorkspacePackageDir = (packageName: string) => {
 }
 const semiUiDir = resolveWorkspacePackageDir('@douyinfe/semi-ui')
 const semiFoundationDir = resolveWorkspacePackageDir('@douyinfe/semi-foundation')
-const semiDateFnsDir = path.resolve(
-  semiFoundationDir,
-  'node_modules/date-fns',
+const semiFoundationRequire = createRequire(
+  path.join(semiFoundationDir, 'package.json'),
+)
+const semiDateFnsDir = resolveWorkspacePackageDir(
+  'date-fns',
+  semiFoundationRequire,
 )
 const reactDir = resolveWorkspacePackageDir('react')
 const reactDomDir = resolveWorkspacePackageDir('react-dom')

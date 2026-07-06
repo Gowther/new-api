@@ -104,6 +104,10 @@ export type SystemTaskListResponse = {
   success: boolean
   message: string
   data?: SystemTask[]
+  total?: number
+  page?: number
+  page_size?: number
+  total_pages?: number
 }
 
 export type SiteSettings = {

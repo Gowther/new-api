@@ -4043,6 +4043,8 @@
     "刷新分组预览": "Refresh group preview",
     "保存时会按模型管理中的精确、前缀、后缀、包含规则匹配供应商，并为每个供应商创建一个渠道。": "On save, providers are matched using the exact, prefix, suffix, and contains rules from model management, and one channel is created for each provider.",
     "暂无分组预览": "No group preview yet",
-    "未匹配供应商": "Unmatched provider"
+    "未匹配供应商": "Unmatched provider",
+    "模型路由": "Model Routing",
+    "配置模型路由优先级和权重": "Configure model routing priority and weights"
   }
 }

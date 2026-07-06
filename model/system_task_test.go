@@ -257,6 +257,30 @@ func TestGetLatestSystemTasks(t *testing.T) {
 	assert.Nil(t, tasks["missing"])
 }
 
+func TestListSystemTasksReturnsPaginatedHistoryAndTotal(t *testing.T) {
+	truncateTables(t)
+
+	created := make([]*SystemTask, 0, 5)
+	for i := 0; i < 5; i++ {
+		taskID, err := GenerateSystemTaskID()
+		require.NoError(t, err)
+		task := &SystemTask{
+			TaskID: taskID,
+			Type:   SystemTaskTypeLogCleanup,
+			Status: SystemTaskStatusSucceeded,
+		}
+		require.NoError(t, DB.Create(task).Error)
+		created = append(created, task)
+	}
+
+	tasks, total, err := ListSystemTasks(&common.PageInfo{Page: 2, PageSize: 2})
+	require.NoError(t, err)
+	require.Len(t, tasks, 2)
+	assert.Equal(t, int64(5), total)
+	assert.Equal(t, created[2].TaskID, tasks[0].TaskID)
+	assert.Equal(t, created[1].TaskID, tasks[1].TaskID)
+}
+
 func TestRenewSystemTaskLock(t *testing.T) {
 	truncateTables(t)
 

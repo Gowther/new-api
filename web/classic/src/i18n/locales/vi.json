@@ -4314,6 +4314,8 @@
     "刷新分组预览": "Làm mới bản xem trước nhóm",
     "保存时会按模型管理中的精确、前缀、后缀、包含规则匹配供应商，并为每个供应商创建一个渠道。": "Khi lưu, nhà cung cấp sẽ được khớp bằng các quy tắc chính xác, tiền tố, hậu tố và chứa trong quản lý mô hình, rồi tạo một kênh cho từng nhà cung cấp.",
     "暂无分组预览": "Chưa có bản xem trước nhóm",
-    "未匹配供应商": "Nhà cung cấp chưa khớp"
+    "未匹配供应商": "Nhà cung cấp chưa khớp",
+    "模型路由": "Định tuyến mô hình",
+    "配置模型路由优先级和权重": "Cấu hình ưu tiên và trọng số định tuyến mô hình"
   }
 }

@@ -106,6 +106,7 @@ export default function SettingsSidebarModulesUser() {
         channel: isSidebarModuleAllowed('admin', 'channel'),
         error_workbench: isSidebarModuleAllowed('admin', 'error_workbench'),
         models: isSidebarModuleAllowed('admin', 'models'),
+        model_routing: isSidebarModuleAllowed('admin', 'model_routing'),
         deployment: isSidebarModuleAllowed('admin', 'deployment'),
         redemption: isSidebarModuleAllowed('admin', 'redemption'),
         user: isSidebarModuleAllowed('admin', 'user'),
@@ -352,6 +353,11 @@ export default function SettingsSidebarModulesUser() {
           description: t('查看错误聚合并快速调整渠道'),
         },
         { key: 'models', title: t('模型管理'), description: t('AI模型配置') },
+        {
+          key: 'model_routing',
+          title: t('模型路由'),
+          description: t('配置模型路由优先级和权重'),
+        },
         {
           key: 'deployment',
           title: t('模型部署'),

@@ -175,16 +175,17 @@ func FindEarliestPendingSystemTasks(taskTypes []string) (map[string]*SystemTask,
 	return tasksByType, nil
 }
 
-func ListSystemTasks(limit int) ([]*SystemTask, error) {
-	if limit <= 0 {
-		limit = 20
-	}
-	if limit > 100 {
-		limit = 100
-	}
+func ListSystemTasks(pageInfo *common.PageInfo) ([]*SystemTask, int64, error) {
 	var tasks []*SystemTask
-	err := DB.Order("id desc").Limit(limit).Find(&tasks).Error
-	return tasks, err
+	var total int64
+	if err := DB.Model(&SystemTask{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err := DB.Order("id desc").
+		Limit(pageInfo.GetPageSize()).
+		Offset(pageInfo.GetStartIdx()).
+		Find(&tasks).Error
+	return tasks, total, err
 }
 
 // GetLatestSystemTask returns the most recent task row of the given type

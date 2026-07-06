@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
 import { ListChecks, RefreshCw } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { ErrorState } from '@/components/error-state'
@@ -235,24 +236,38 @@ function SystemTasksTable(props: SystemTasksTableProps) {
 
 export function SystemTasksPanel() {
   const { t } = useTranslation()
+  const [currentPage, setCurrentPage] = useState(1)
   const tasksQuery = useQuery({
-    queryKey: ['system-info', 'system-tasks'],
+    queryKey: ['system-info', 'system-tasks', currentPage, TASK_LIMIT],
     queryFn: async () => {
-      const res = await listSystemTasks(TASK_LIMIT)
+      const res = await listSystemTasks({
+        page: currentPage,
+        limit: TASK_LIMIT,
+      })
       if (!res.success || !Array.isArray(res.data)) {
         throw new Error(res.message || t('We could not load system tasks.'))
       }
-      return res.data
+      const total = res.total ?? res.data.length
+      return {
+        tasks: res.data,
+        total,
+        page: res.page ?? currentPage,
+        pageSize: res.page_size ?? TASK_LIMIT,
+        totalPages:
+          res.total_pages ?? Math.max(1, Math.ceil(total / TASK_LIMIT)),
+      }
     },
     staleTime: 30 * 1000,
     retry: false,
     refetchInterval: (query) =>
-      query.state.data?.some((task) => isActiveStatus(task.status))
+      query.state.data?.tasks.some((task) => isActiveStatus(task.status))
         ? ACTIVE_POLL_INTERVAL_MS
         : false,
   })
 
-  const tasks = tasksQuery.data ?? []
+  const pageData = tasksQuery.data
+  const tasks = pageData?.tasks ?? []
+  const totalPages = Math.max(1, pageData?.totalPages ?? 1)
   const loading = tasksQuery.isLoading
   const refreshing = tasksQuery.isFetching && !tasksQuery.isLoading
   const hasActiveTasks = tasks.some((task) => isActiveStatus(task.status))
@@ -384,6 +399,43 @@ export function SystemTasksPanel() {
                 </div>
               )}
             </div>
+
+            {totalPages > 1 ? (
+              <div className='flex flex-col gap-2 border-t pt-4 sm:flex-row sm:items-center sm:justify-between'>
+                <div className='text-muted-foreground text-sm'>
+                  {t('Page {{current}} of {{total}}', {
+                    current: pageData?.page ?? currentPage,
+                    total: totalPages,
+                  })}
+                </div>
+                <div className='flex items-center gap-2'>
+                  <Button
+                    type='button'
+                    variant='outline'
+                    size='sm'
+                    onClick={() =>
+                      setCurrentPage((page) => Math.max(1, page - 1))
+                    }
+                    disabled={currentPage <= 1 || tasksQuery.isFetching}
+                  >
+                    {t('Previous')}
+                  </Button>
+                  <Button
+                    type='button'
+                    variant='outline'
+                    size='sm'
+                    onClick={() =>
+                      setCurrentPage((page) => Math.min(totalPages, page + 1))
+                    }
+                    disabled={
+                      currentPage >= totalPages || tasksQuery.isFetching
+                    }
+                  >
+                    {t('Next')}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </div>
         )}
       </div>

@@ -189,6 +189,11 @@ export default function SettingsSidebarModulesAdmin(props) {
         },
         { key: 'models', title: t('模型管理'), description: t('AI模型配置') },
         {
+          key: 'model_routing',
+          title: t('模型路由'),
+          description: t('配置模型路由优先级和权重'),
+        },
+        {
           key: 'deployment',
           title: t('模型部署'),
           description: t('模型部署管理'),

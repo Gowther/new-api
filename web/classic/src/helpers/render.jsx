@@ -80,6 +80,7 @@ import {
   Settings,
   CircleUser,
   Package,
+  Route as RouteIcon,
   Server,
   CalendarClock,
 } from 'lucide-react';
@@ -151,6 +152,8 @@ export function getLucideIcon(key, selected = false) {
       return <User {...commonProps} color={iconColor} />;
     case 'models':
       return <Package {...commonProps} color={iconColor} />;
+    case 'model_routing':
+      return <RouteIcon {...commonProps} color={iconColor} />;
     case 'deployment':
       return <Server {...commonProps} color={iconColor} />;
     case 'subscription':

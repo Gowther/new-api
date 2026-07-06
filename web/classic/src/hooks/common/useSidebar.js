@@ -50,6 +50,7 @@ export const DEFAULT_ADMIN_CONFIG = {
     channel: true,
     error_workbench: true,
     models: true,
+    model_routing: true,
     deployment: true,
     redemption: true,
     user: true,

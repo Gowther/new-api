@@ -77,9 +77,16 @@ export async function getSystemTask(taskId: string) {
   return res.data
 }
 
-export async function listSystemTasks(limit = 100) {
+export type ListSystemTasksParams = {
+  page?: number
+  limit?: number
+}
+
+export async function listSystemTasks(params: ListSystemTasksParams = {}) {
+  const page = params.page ?? 1
+  const limit = params.limit ?? 100
   const res = await api.get<SystemTaskListResponse>('/api/system-task/list', {
-    params: { limit },
+    params: { page, limit },
   })
   return res.data
 }

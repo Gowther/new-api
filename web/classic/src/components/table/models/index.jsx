@@ -17,7 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Banner, Button, Modal, Tabs, TabPane } from '@douyinfe/semi-ui';
 import { IconAlertTriangle, IconClose } from '@douyinfe/semi-icons';
 import CardPro from '../../common/ui/CardPro';
@@ -38,7 +39,10 @@ const MARKETPLACE_DISPLAY_NOTICE_STORAGE_KEY =
 const ModelsPage = () => {
   const modelsData = useModelsData();
   const isMobile = useIsMobile();
-  const [activeView, setActiveView] = useState('metadata');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const viewFromSearch =
+    searchParams.get('tab') === 'routing' ? 'routing' : 'metadata';
+  const [activeView, setActiveView] = useState(viewFromSearch);
 
   const {
     // Edit state
@@ -89,6 +93,23 @@ const ModelsPage = () => {
       }
     });
 
+  useEffect(() => {
+    if (activeView !== viewFromSearch) {
+      setActiveView(viewFromSearch);
+    }
+  }, [activeView, viewFromSearch]);
+
+  const handleViewChange = (view) => {
+    setActiveView(view);
+    const nextSearchParams = new URLSearchParams(searchParams);
+    if (view === 'routing') {
+      nextSearchParams.set('tab', 'routing');
+    } else {
+      nextSearchParams.delete('tab');
+    }
+    setSearchParams(nextSearchParams, { replace: true });
+  };
+
   const confirmCloseMarketplaceDisplayNotice = () => {
     Modal.confirm({
       title: t('确认关闭提示'),
@@ -134,7 +155,7 @@ const ModelsPage = () => {
 
       <Tabs
         activeKey={activeView}
-        onChange={setActiveView}
+        onChange={handleViewChange}
         type='line'
         className='mb-3'
       >

@@ -3783,6 +3783,8 @@
     "刷新分组预览": "Actualiser l’aperçu des groupes",
     "保存时会按模型管理中的精确、前缀、后缀、包含规则匹配供应商，并为每个供应商创建一个渠道。": "À l’enregistrement, les fournisseurs sont associés avec les règles exactes, préfixe, suffixe et contient de la gestion des modèles, puis un canal est créé pour chacun.",
     "暂无分组预览": "Aucun aperçu de groupe pour le moment",
-    "未匹配供应商": "Fournisseur non associé"
+    "未匹配供应商": "Fournisseur non associé",
+    "模型路由": "Routage des modèles",
+    "配置模型路由优先级和权重": "Configurer les priorités et les poids du routage des modèles"
   }
 }

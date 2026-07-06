@@ -66,9 +66,23 @@ func GetCurrentSystemTask(c *gin.Context) {
 }
 
 func ListSystemTasks(c *gin.Context) {
-	limit, _ := strconv.Atoi(c.Query("limit"))
+	pageInfo := common.GetPageQuery(c)
+	if page, err := strconv.Atoi(c.Query("page")); err == nil && page > 0 {
+		pageInfo.Page = page
+	}
+	if limit, err := strconv.Atoi(c.Query("limit")); err == nil && limit > 0 {
+		pageInfo.PageSize = limit
+	} else if c.Query("page_size") == "" && c.Query("ps") == "" && c.Query("size") == "" {
+		pageInfo.PageSize = 100
+	}
+	if pageInfo.PageSize <= 0 {
+		pageInfo.PageSize = 100
+	}
+	if pageInfo.PageSize > 100 {
+		pageInfo.PageSize = 100
+	}
 
-	tasks, err := model.ListSystemTasks(limit)
+	tasks, total, err := model.ListSystemTasks(pageInfo)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -79,10 +93,19 @@ func ListSystemTasks(c *gin.Context) {
 		responses = append(responses, task.ToResponse())
 	}
 
+	totalPages := int64(0)
+	if pageInfo.GetPageSize() > 0 {
+		totalPages = (total + int64(pageInfo.GetPageSize()) - 1) / int64(pageInfo.GetPageSize())
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    responses,
+		"success":     true,
+		"message":     "",
+		"data":        responses,
+		"total":       total,
+		"page":        pageInfo.GetPage(),
+		"page_size":   pageInfo.GetPageSize(),
+		"total_pages": totalPages,
 	})
 }
 

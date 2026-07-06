@@ -29,6 +29,7 @@ import {
   ListTodo,
   MessageSquare,
   Radio,
+  Route as RouteIcon,
   ServerCog,
   Settings,
   Ticket,
@@ -140,6 +141,11 @@ export function useSidebarData(): SidebarData {
             title: t('Models'),
             url: '/models/metadata',
             icon: Box,
+          },
+          {
+            title: t('Model Routing'),
+            url: '/models/routing',
+            icon: RouteIcon,
           },
           {
             title: t('Users'),

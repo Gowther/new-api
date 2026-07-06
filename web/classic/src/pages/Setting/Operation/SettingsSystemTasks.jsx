@@ -21,6 +21,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Button,
   Empty,
+  Pagination,
   Progress,
   Space,
   Spin,
@@ -212,12 +213,19 @@ export default function SettingsSystemTasks() {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(TASK_LIMIT);
+  const [total, setTotal] = useState(0);
 
   const activeTasks = tasks.filter((task) => isActiveStatus(task.status));
   const historyTasks = tasks.filter((task) => !isActiveStatus(task.status));
   const hasActiveTasks = activeTasks.length > 0;
 
-  async function loadTasks(showInlineRefreshing = false) {
+  async function loadTasks(
+    showInlineRefreshing = false,
+    page = currentPage,
+    size = pageSize,
+  ) {
     if (showInlineRefreshing) {
       setRefreshing(true);
     } else {
@@ -225,7 +233,7 @@ export default function SettingsSystemTasks() {
     }
     try {
       const res = await API.get('/api/system-task/list', {
-        params: { limit: TASK_LIMIT },
+        params: { page, limit: size },
         disableDuplicate: true,
       });
       const { success, message, data } = res.data;
@@ -234,6 +242,9 @@ export default function SettingsSystemTasks() {
         return;
       }
       setTasks(data);
+      setTotal(res.data.total ?? data.length);
+      setCurrentPage(res.data.page ?? page);
+      setPageSize(res.data.page_size ?? size);
     } catch (error) {
       showError(t('加载系统任务失败'));
     } finally {
@@ -243,16 +254,27 @@ export default function SettingsSystemTasks() {
   }
 
   useEffect(() => {
-    loadTasks();
+    loadTasks(false, 1, pageSize);
   }, []);
 
   useEffect(() => {
     if (!hasActiveTasks) return undefined;
     const timer = window.setInterval(() => {
-      loadTasks(true);
+      loadTasks(true, currentPage, pageSize);
     }, ACTIVE_POLL_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [hasActiveTasks]);
+  }, [currentPage, hasActiveTasks, pageSize]);
+
+  const handlePageChange = (page) => {
+    setCurrentPage(page);
+    loadTasks(false, page, pageSize);
+  };
+
+  const handlePageSizeChange = (size) => {
+    setPageSize(size);
+    setCurrentPage(1);
+    loadTasks(false, 1, size);
+  };
 
   return (
     <Spin spinning={loading}>
@@ -279,7 +301,7 @@ export default function SettingsSystemTasks() {
           <Button
             icon={<IconRefresh />}
             loading={refreshing}
-            onClick={() => loadTasks(true)}
+            onClick={() => loadTasks(true, currentPage, pageSize)}
           >
             {refreshing ? t('刷新中') : t('刷新')}
           </Button>
@@ -320,6 +342,21 @@ export default function SettingsSystemTasks() {
               <Empty title={t('暂无历史系统任务')} />
             )}
           </div>
+
+          {total > 0 ? (
+            <div className='flex justify-end'>
+              <Pagination
+                currentPage={currentPage}
+                pageSize={pageSize}
+                total={total}
+                pageSizeOpts={[20, 50, 100]}
+                showSizeChanger
+                showTotal
+                onPageChange={handlePageChange}
+                onPageSizeChange={handlePageSizeChange}
+              />
+            </div>
+          ) : null}
         </div>
       )}
     </Spin>

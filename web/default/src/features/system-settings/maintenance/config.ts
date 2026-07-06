@@ -78,6 +78,7 @@ export const SIDEBAR_MODULES_DEFAULT: SidebarModulesAdminConfig = {
     channel: true,
     error_workbench: true,
     models: true,
+    model_routing: true,
     redemption: true,
     user: true,
     setting: true,

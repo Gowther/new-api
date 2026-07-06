@@ -48,6 +48,7 @@ const routerMap = {
   pricing: '/pricing',
   task: '/console/task',
   models: '/console/models',
+  model_routing: '/console/models?tab=routing',
   deployment: '/console/deployment',
   playground: '/console/playground',
   personal: '/console/personal',
@@ -180,6 +181,12 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         className: isAdmin() ? '' : 'tableHiddle',
       },
       {
+        text: t('模型路由'),
+        itemKey: 'model_routing',
+        to: '/console/models?tab=routing',
+        className: isAdmin() ? '' : 'tableHiddle',
+      },
+      {
         text: t('模型部署'),
         itemKey: 'deployment',
         to: '/deployment',
@@ -298,9 +305,19 @@ const SiderBar = ({ onNavigate = () => {} }) => {
   // 根据当前路径设置选中的菜单项
   useEffect(() => {
     const currentPath = location.pathname;
-    let matchingKey = Object.keys(routerMapState).find(
-      (key) => routerMapState[key] === currentPath,
-    );
+    const currentUrl = `${location.pathname}${location.search}`;
+    let matchingKey =
+      currentPath === '/console/models' &&
+      new URLSearchParams(location.search).get('tab') === 'routing'
+        ? 'model_routing'
+        : Object.keys(routerMapState).find(
+            (key) => routerMapState[key] === currentUrl,
+          );
+    if (!matchingKey) {
+      matchingKey = Object.keys(routerMapState).find(
+        (key) => routerMapState[key].split('?')[0] === currentPath,
+      );
+    }
 
     // 处理聊天路由
     if (!matchingKey && currentPath.startsWith('/console/chat/')) {
@@ -316,7 +333,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
     if (matchingKey) {
       setSelectedKeys([matchingKey]);
     }
-  }, [location.pathname, routerMapState]);
+  }, [location.pathname, location.search, routerMapState]);
 
   // 监控折叠状态变化以更新 body class
   useEffect(() => {

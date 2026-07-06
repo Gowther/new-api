@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   API,
@@ -117,23 +117,98 @@ const normalizeChannelModels = (models) =>
     ),
   );
 
-const buildModelOverlapCheckRequest = (channel, mode) => {
-  if (mode === 'single') {
-    return { channel };
+const formatModelVendorSplitChannelName = (name, vendorName) => {
+  const trimmedName = String(name || '').trim();
+  const trimmedVendor = String(vendorName || '').trim() || '未匹配供应商';
+  return trimmedName ? `${trimmedName} - ${trimmedVendor}` : trimmedVendor;
+};
+
+const filterModelMappingByModels = (modelMapping, models) => {
+  const trimmed = String(modelMapping || '').trim();
+  if (!trimmed) return '';
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return '';
+    }
+    const modelSet = new Set(models.map((model) => String(model).trim()));
+    const filtered = Object.entries(parsed).reduce((acc, [source, target]) => {
+      const model = String(source || '').trim();
+      if (model && modelSet.has(model)) {
+        acc[model] = target;
+      }
+      return acc;
+    }, {});
+    return Object.keys(filtered).length > 0
+      ? JSON.stringify(filtered, null, 2)
+      : '';
+  } catch {
+    return '';
   }
+};
+
+const buildModelVendorSplitCandidates = (channel, modelVendorGroups) => {
+  const groups = Array.isArray(modelVendorGroups) ? modelVendorGroups : [];
+  return groups
+    .filter((group) => Array.isArray(group.models) && group.models.length > 0)
+    .map((group) => ({
+      ...channel,
+      name:
+        groups.length > 1
+          ? formatModelVendorSplitChannelName(channel.name, group.vendor_name)
+          : channel.name,
+      models: group.models.join(','),
+      model_mapping: filterModelMappingByModels(
+        channel.model_mapping,
+        group.models,
+      ),
+    }));
+};
+
+const buildModelOverlapCheckRequest = (
+  channel,
+  mode,
+  { splitByModelVendor = false, modelVendorGroups = [] } = {},
+) => {
+  const baseChannels = [];
   const keys = String(channel.key || '')
     .split('\n')
     .map((key) => key.trim())
     .filter(Boolean);
-  if (keys.length === 0) {
-    return { channel };
+  if (mode === 'batch' && keys.length > 0) {
+    keys.forEach((key) => {
+      baseChannels.push({
+        ...channel,
+        key,
+      });
+    });
+  } else {
+    baseChannels.push(channel);
   }
-  return {
-    channels: keys.map((key) => ({
-      ...channel,
-      key,
-    })),
-  };
+
+  if (splitByModelVendor && modelVendorGroups.length > 0) {
+    return {
+      channels: baseChannels.flatMap((baseChannel) =>
+        buildModelVendorSplitCandidates(baseChannel, modelVendorGroups),
+      ),
+    };
+  }
+
+  return baseChannels.length === 1
+    ? { channel: baseChannels[0] }
+    : { channels: baseChannels };
+};
+
+const modelVendorGroupsMatchModels = (groups, models) => {
+  const groupedModels = (Array.isArray(groups) ? groups : []).flatMap((group) =>
+    Array.isArray(group.models) ? group.models : [],
+  );
+  const normalizedGroups = normalizeChannelModels(groupedModels);
+  const normalizedModels = normalizeChannelModels(models);
+  if (normalizedGroups.length !== normalizedModels.length) return false;
+  return normalizedModels.every(
+    (model, index) => normalizedGroups[index] === model,
+  );
 };
 
 const PARAM_OVERRIDE_LEGACY_TEMPLATE = {
@@ -261,6 +336,9 @@ const EditChannelModal = (props) => {
   const [basicModels, setBasicModels] = useState([]);
   const [fullModels, setFullModels] = useState([]);
   const [modelGroups, setModelGroups] = useState([]);
+  const [splitByModelVendor, setSplitByModelVendor] = useState(false);
+  const [modelVendorGroups, setModelVendorGroups] = useState([]);
+  const [modelVendorGroupLoading, setModelVendorGroupLoading] = useState(false);
   const [customModel, setCustomModel] = useState('');
   const [modelSearchValue, setModelSearchValue] = useState('');
   const [draggedModel, setDraggedModel] = useState('');
@@ -377,6 +455,10 @@ const EditChannelModal = (props) => {
     () =>
       `test-model-${testModelOptions.map((option) => option.value).join('|')}`,
     [testModelOptions],
+  );
+  const selectedModelKey = useMemo(
+    () => normalizeChannelModels(selectedModels).join(','),
+    [selectedModels],
   );
   const paramOverrideMeta = useMemo(() => {
     const raw =
@@ -1291,6 +1373,41 @@ const EditChannelModal = (props) => {
     }
   };
 
+  const fetchModelVendorGroups = useCallback(
+    async (models, { silent = false, updateState = true } = {}) => {
+      const normalizedModels = normalizeChannelModels(models);
+      if (normalizedModels.length === 0) {
+        if (updateState) {
+          setModelVendorGroups([]);
+        }
+        return [];
+      }
+
+      try {
+        const res = await API.post('/api/channel/model_vendor_groups', {
+          models: normalizedModels,
+        });
+        if (res?.data?.success) {
+          const groups = res.data.data || [];
+          if (updateState) {
+            setModelVendorGroups(groups);
+          }
+          return groups;
+        }
+        throw new Error(res?.data?.message || t('模型供应商分组失败'));
+      } catch (error) {
+        if (updateState) {
+          setModelVendorGroups([]);
+        }
+        if (!silent) {
+          showError(error.message || t('模型供应商分组失败'));
+        }
+        return [];
+      }
+    },
+    [t],
+  );
+
   // 查看渠道密钥（透明验证）
   const handleShow2FAModal = async () => {
     try {
@@ -1392,6 +1509,45 @@ const EditChannelModal = (props) => {
   }, [originModelOptions, selectedModels, t]);
 
   useEffect(() => {
+    if (!props.visible || isEdit || !splitByModelVendor) {
+      setModelVendorGroupLoading(false);
+      setModelVendorGroups([]);
+      return;
+    }
+
+    const models = selectedModelKey ? selectedModelKey.split(',') : [];
+    if (models.length === 0) {
+      setModelVendorGroupLoading(false);
+      setModelVendorGroups([]);
+      return;
+    }
+
+    let cancelled = false;
+    setModelVendorGroupLoading(true);
+    const timer = setTimeout(async () => {
+      const groups = await fetchModelVendorGroups(models, {
+        silent: true,
+        updateState: false,
+      });
+      if (!cancelled) {
+        setModelVendorGroups(groups);
+        setModelVendorGroupLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [
+    props.visible,
+    isEdit,
+    splitByModelVendor,
+    selectedModelKey,
+    fetchModelVendorGroups,
+  ]);
+
+  useEffect(() => {
     fetchModels().then();
     fetchGroups().then();
     if (!isEdit) {
@@ -1428,6 +1584,8 @@ const EditChannelModal = (props) => {
         const nextValues = { ...initialValues, models: initialModels };
         setSelectedModels(initialModels);
         setInputs(nextValues);
+        setSplitByModelVendor(false);
+        setModelVendorGroups([]);
         formApiRef.current?.setValues(nextValues);
         try {
           navigator?.clipboard?.readText()?.then((text) => {
@@ -1489,6 +1647,9 @@ const EditChannelModal = (props) => {
     setDoubaoApiEditUnlocked(false);
     doubaoApiClickCountRef.current = 0;
     setModelSearchValue('');
+    setSplitByModelVendor(false);
+    setModelVendorGroups([]);
+    setModelVendorGroupLoading(false);
     // 重置高级设置折叠状态
     setAdvancedSettingsOpen(false);
     // 清空表单中的key_mode字段
@@ -1812,6 +1973,23 @@ const EditChannelModal = (props) => {
       }
     }
 
+    let submitModelVendorGroups = [];
+    if (!isEdit && splitByModelVendor) {
+      if (modelVendorGroupsMatchModels(modelVendorGroups, localInputs.models)) {
+        submitModelVendorGroups = modelVendorGroups;
+      } else {
+        setModelVendorGroupLoading(true);
+        submitModelVendorGroups = await fetchModelVendorGroups(
+          localInputs.models,
+        );
+        setModelVendorGroupLoading(false);
+      }
+      if (submitModelVendorGroups.length === 0) {
+        showError(t('模型供应商分组失败'));
+        return;
+      }
+    }
+
     const invalidStatusCodeEntries = collectInvalidStatusCodeEntries(
       localInputs.status_code_mapping,
     );
@@ -1989,7 +2167,10 @@ const EditChannelModal = (props) => {
               id: parseInt(channelId),
             },
           }
-        : buildModelOverlapCheckRequest(localInputs, mode);
+        : buildModelOverlapCheckRequest(localInputs, mode, {
+            splitByModelVendor,
+            modelVendorGroups: submitModelVendorGroups,
+          });
       const overlapItems = await checkChannelModelOverlap(overlapRequest);
       const confirmed = await confirmModelOverlap(overlapItems, t);
       if (!confirmed) {
@@ -2010,6 +2191,7 @@ const EditChannelModal = (props) => {
       res = await API.post(`/api/channel/`, {
         mode: mode,
         multi_key_mode: mode === 'multi_to_single' ? multiKeyMode : undefined,
+        split_by_model_vendor: splitByModelVendor,
         channel: localInputs,
       });
     }
@@ -3772,6 +3954,76 @@ const EditChannelModal = (props) => {
                         </Space>
                       }
                     />
+
+                  {!isEdit && (
+                    <div className='rounded-lg border border-gray-100 bg-gray-50 p-3'>
+                      <div className='flex flex-wrap items-center justify-between gap-2'>
+                        <Checkbox
+                          checked={splitByModelVendor}
+                          disabled={selectedModels.length === 0}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setSplitByModelVendor(checked);
+                            if (!checked) {
+                              setModelVendorGroups([]);
+                            }
+                          }}
+                        >
+                          {t('按模型供应商拆分渠道')}
+                        </Checkbox>
+                        {splitByModelVendor && (
+                          <Button
+                            size='small'
+                            type='tertiary'
+                            loading={modelVendorGroupLoading}
+                            onClick={() => fetchModelVendorGroups(selectedModels)}
+                          >
+                            {t('刷新分组预览')}
+                          </Button>
+                        )}
+                      </div>
+                      <Text type='tertiary' size='small'>
+                        {t(
+                          '保存时会按模型管理中的精确、前缀、后缀、包含规则匹配供应商，并为每个供应商创建一个渠道。',
+                        )}
+                      </Text>
+                      {splitByModelVendor && (
+                        <div className='mt-3'>
+                          <Spin spinning={modelVendorGroupLoading}>
+                            {modelVendorGroups.length === 0 ? (
+                              <Text type='tertiary' size='small'>
+                                {t('暂无分组预览')}
+                              </Text>
+                            ) : (
+                              <div className='max-h-56 space-y-2 overflow-y-auto pr-1'>
+                                {modelVendorGroups.map((group) => (
+                                  <div
+                                    key={`${group.vendor_id}-${group.vendor_name}`}
+                                    className='rounded-md border bg-white px-3 py-2'
+                                  >
+                                    <div className='mb-1 flex flex-wrap items-center gap-2'>
+                                      <Tag color='blue'>
+                                        {group.vendor_name ||
+                                          t('未匹配供应商')}
+                                      </Tag>
+                                      <Text type='tertiary' size='small'>
+                                        {t('{{count}} 个模型', {
+                                          count: group.models?.length || 0,
+                                        })}
+                                      </Text>
+                                    </div>
+                                    <div className='break-all text-xs text-gray-500'>
+                                      {(group.models || []).join(', ')}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </Spin>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Custom Model Name - Core Config */}
                   <Form.Input

@@ -580,6 +580,7 @@ type AddChannelRequest struct {
 	Mode                      string                `json:"mode"`
 	MultiKeyMode              constant.MultiKeyMode `json:"multi_key_mode"`
 	BatchAddSetKeyPrefix2Name bool                  `json:"batch_add_set_key_prefix_2_name"`
+	SplitByModelVendor        bool                  `json:"split_by_model_vendor"`
 	Channel                   *model.Channel        `json:"channel"`
 }
 
@@ -691,7 +692,7 @@ func AddChannel(c *gin.Context) {
 		if key == "" {
 			continue
 		}
-		localChannel := addChannelRequest.Channel
+		localChannel := *addChannelRequest.Channel
 		localChannel.Key = key
 		if addChannelRequest.BatchAddSetKeyPrefix2Name && len(keys) > 1 {
 			keyPrefix := localChannel.Key
@@ -700,7 +701,16 @@ func AddChannel(c *gin.Context) {
 			}
 			localChannel.Name = fmt.Sprintf("%s %s", localChannel.Name, keyPrefix)
 		}
-		channels = append(channels, *localChannel)
+		if addChannelRequest.SplitByModelVendor {
+			splitChannels, err := buildModelVendorSplitChannels(localChannel)
+			if err != nil {
+				common.ApiError(c, err)
+				return
+			}
+			channels = append(channels, splitChannels...)
+			continue
+		}
+		channels = append(channels, localChannel)
 	}
 	err = model.BatchInsertChannels(channels)
 	if err != nil {

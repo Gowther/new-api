@@ -96,6 +96,12 @@ type Model struct {
 	MatchedCount  int      `json:"matched_count,omitempty" gorm:"-"`
 }
 
+type ModelVendorGroup struct {
+	VendorID   int      `json:"vendor_id"`
+	VendorName string   `json:"vendor_name"`
+	Models     []string `json:"models"`
+}
+
 func (mi *Model) Insert() error {
 	now := common.GetTimestamp()
 	mi.CreatedTime = now
@@ -154,6 +160,105 @@ func GetVendorModelCounts() (map[int64]int64, error) {
 		m[s.VendorID] = s.Count
 	}
 	return m, nil
+}
+
+func GroupModelNamesByVendor(modelNames []string) ([]ModelVendorGroup, error) {
+	modelNames = normalizeLookupValues(modelNames)
+	if len(modelNames) == 0 {
+		return []ModelVendorGroup{}, nil
+	}
+
+	var metas []Model
+	if err := DB.Order("id ASC").Find(&metas).Error; err != nil {
+		return nil, err
+	}
+
+	var vendors []Vendor
+	if err := DB.Find(&vendors).Error; err != nil {
+		return nil, err
+	}
+	vendorNames := make(map[int]string, len(vendors))
+	for i := range vendors {
+		vendorNames[vendors[i].Id] = vendors[i].Name
+	}
+
+	exactMetas := make(map[string]*Model)
+	prefixMetas := make([]*Model, 0)
+	suffixMetas := make([]*Model, 0)
+	containsMetas := make([]*Model, 0)
+	for i := range metas {
+		meta := &metas[i]
+		metaName := strings.TrimSpace(meta.ModelName)
+		if metaName == "" {
+			continue
+		}
+		switch meta.NameRule {
+		case NameRuleExact:
+			exactMetas[metaName] = meta
+		case NameRulePrefix:
+			prefixMetas = append(prefixMetas, meta)
+		case NameRuleSuffix:
+			suffixMetas = append(suffixMetas, meta)
+		case NameRuleContains:
+			containsMetas = append(containsMetas, meta)
+		}
+	}
+
+	groupsByVendor := make(map[int]*ModelVendorGroup)
+	vendorOrder := make([]int, 0)
+	for _, modelName := range modelNames {
+		meta := matchModelVendorMeta(modelName, exactMetas, prefixMetas, suffixMetas, containsMetas)
+		vendorID := 0
+		vendorName := "未匹配供应商"
+		if meta != nil && meta.VendorID > 0 {
+			vendorID = meta.VendorID
+			if name := strings.TrimSpace(vendorNames[vendorID]); name != "" {
+				vendorName = name
+			} else {
+				vendorName = "供应商 " + strconv.Itoa(vendorID)
+			}
+		}
+
+		group, ok := groupsByVendor[vendorID]
+		if !ok {
+			group = &ModelVendorGroup{
+				VendorID:   vendorID,
+				VendorName: vendorName,
+				Models:     make([]string, 0),
+			}
+			groupsByVendor[vendorID] = group
+			vendorOrder = append(vendorOrder, vendorID)
+		}
+		group.Models = append(group.Models, modelName)
+	}
+
+	groups := make([]ModelVendorGroup, 0, len(vendorOrder))
+	for _, vendorID := range vendorOrder {
+		groups = append(groups, *groupsByVendor[vendorID])
+	}
+	return groups, nil
+}
+
+func matchModelVendorMeta(modelName string, exactMetas map[string]*Model, prefixMetas []*Model, suffixMetas []*Model, containsMetas []*Model) *Model {
+	if meta, ok := exactMetas[modelName]; ok {
+		return meta
+	}
+	for _, meta := range prefixMetas {
+		if ruleName := strings.TrimSpace(meta.ModelName); ruleName != "" && strings.HasPrefix(modelName, ruleName) {
+			return meta
+		}
+	}
+	for _, meta := range suffixMetas {
+		if ruleName := strings.TrimSpace(meta.ModelName); ruleName != "" && strings.HasSuffix(modelName, ruleName) {
+			return meta
+		}
+	}
+	for _, meta := range containsMetas {
+		if ruleName := strings.TrimSpace(meta.ModelName); ruleName != "" && strings.Contains(modelName, ruleName) {
+			return meta
+		}
+	}
+	return nil
 }
 
 func GetAllModels(offset int, limit int) ([]*Model, error) {

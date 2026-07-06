@@ -3774,6 +3774,15 @@
     "通道测试：{{tested}} 个渠道，成功 {{succeeded}}，失败 {{failed}}，跳过 {{skipped}}，禁用 {{disabled}}，恢复 {{enabled}}；Key 测试 {{keyTested}}，恢复 {{keyRecovered}}，失败 {{keyFailed}}": "Test des canaux : {{tested}} canaux, {{succeeded}} réussis, {{failed}} échoués, {{skipped}} ignorés, {{disabled}} désactivés, {{enabled}} récupérés ; tests de clés {{keyTested}}, récupérées {{keyRecovered}}, échouées {{keyFailed}}",
     "无运行中任务时暂停自动刷新": "L'actualisation automatique est suspendue sans tâche en cours",
     "无运行中的系统任务": "Aucune tâche système en cours",
-    "自动刷新中（每 {{seconds}} 秒）": "Actualisation automatique toutes les {{seconds}} s"
+    "自动刷新中（每 {{seconds}} 秒）": "Actualisation automatique toutes les {{seconds}} s",
+    "{{count}} 个模型": "{{count}} modèles",
+    "{{count}} 个模型_one": "{{count}} modèle",
+    "{{count}} 个模型_other": "{{count}} modèles",
+    "模型供应商分组失败": "Impossible de regrouper les modèles par fournisseur",
+    "按模型供应商拆分渠道": "Scinder le canal par fournisseur de modèles",
+    "刷新分组预览": "Actualiser l’aperçu des groupes",
+    "保存时会按模型管理中的精确、前缀、后缀、包含规则匹配供应商，并为每个供应商创建一个渠道。": "À l’enregistrement, les fournisseurs sont associés avec les règles exactes, préfixe, suffixe et contient de la gestion des modèles, puis un canal est créé pour chacun.",
+    "暂无分组预览": "Aucun aperçu de groupe pour le moment",
+    "未匹配供应商": "Fournisseur non associé"
   }
 }

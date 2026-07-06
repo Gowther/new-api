@@ -21,7 +21,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Button,
   Empty,
-  Pagination,
   Progress,
   Space,
   Spin,
@@ -34,10 +33,12 @@ import { IconRefresh } from '@douyinfe/semi-icons';
 import { ListChecks } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { API, showError, timestamp2string } from '../../../helpers';
+import { useIsMobile } from '../../../hooks/common/useIsMobile';
+import { createCardProPagination } from '../../../helpers/utils';
 
 const { Text, Title } = Typography;
 
-const TASK_LIMIT = 100;
+const TASK_LIMIT = 20;
 const ACTIVE_POLL_INTERVAL_MS = 8000;
 
 const TYPE_LABEL = {
@@ -210,6 +211,7 @@ function SystemTasksTable({ tasks }) {
 
 export default function SettingsSystemTasks() {
   const { t } = useTranslation();
+  const isMobile = useIsMobile();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -344,17 +346,17 @@ export default function SettingsSystemTasks() {
           </div>
 
           {total > 0 ? (
-            <div className='flex justify-end'>
-              <Pagination
-                currentPage={currentPage}
-                pageSize={pageSize}
-                total={total}
-                pageSizeOpts={[20, 50, 100]}
-                showSizeChanger
-                showTotal
-                onPageChange={handlePageChange}
-                onPageSizeChange={handlePageSizeChange}
-              />
+            <div className='flex items-center justify-between gap-3'>
+              {createCardProPagination({
+                currentPage,
+                pageSize,
+                total,
+                pageSizeOpts: [20, 50, 100],
+                onPageChange: handlePageChange,
+                onPageSizeChange: handlePageSizeChange,
+                isMobile,
+                t,
+              })}
             </div>
           ) : null}
         </div>

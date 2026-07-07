@@ -51,6 +51,7 @@ import type {
   TokenUsageQueryParams,
   TokenUsageSelfResponse,
   TokenUsageTokenItem,
+  TokenUsageTrendItem,
 } from './types'
 
 type RangeOption =
@@ -183,6 +184,50 @@ function formatHourRange(timestamp: number) {
     ? end.format('HH:mm')
     : end.format('YYYY-MM-DD HH:mm')
   return `${start.format('YYYY-MM-DD HH:mm')}-${endText}`
+}
+
+function formatTrendTimeLabel(
+  timestamp: number,
+  granularity: TokenUsageQueryParams['granularity']
+) {
+  if (timestamp <= 0) return '-'
+  const time = dayjs(timestamp * 1000)
+  return granularity === 'hour'
+    ? time.format('MM-DD HH:mm')
+    : time.format('YYYY-MM-DD')
+}
+
+function buildCallTrendValues(
+  trend: TokenUsageTrendItem[],
+  params: TokenUsageQueryParams
+) {
+  const stepSeconds = params.granularity === 'hour' ? 3600 : 86400
+  const countByTimestamp = new Map<number, number>()
+
+  trend.forEach((item) => {
+    const bucket = item.timestamp - (item.timestamp % stepSeconds)
+    countByTimestamp.set(bucket, item.count || 0)
+  })
+
+  const startBucket =
+    params.start_timestamp - (params.start_timestamp % stepSeconds)
+  const endBucket = params.end_timestamp - (params.end_timestamp % stepSeconds)
+  const bucketCount = Math.floor((endBucket - startBucket) / stepSeconds) + 1
+  const shouldPadBuckets =
+    startBucket > 0 && endBucket >= startBucket && bucketCount <= 400
+
+  const timestamps = shouldPadBuckets
+    ? Array.from(
+        { length: bucketCount },
+        (_, index) => startBucket + index * stepSeconds
+      )
+    : Array.from(countByTimestamp.keys()).sort((a, b) => a - b)
+
+  return timestamps.map((timestamp) => ({
+    time: formatTrendTimeLabel(timestamp, params.granularity),
+    timestamp,
+    requests: countByTimestamp.get(timestamp) ?? 0,
+  }))
 }
 
 function dateTimeLocalFromTimestamp(timestamp: number) {
@@ -591,6 +636,57 @@ export function TokenUsage() {
     [apiKeyValues]
   )
 
+  const requestTrendValues = useMemo(
+    () => buildCallTrendValues(data.trend, params),
+    [data.trend, params]
+  )
+
+  const requestTrendSpec = useMemo(
+    () => ({
+      type: 'line',
+      data: [{ id: 'requestTrend', values: loading ? [] : requestTrendValues }],
+      xField: 'time',
+      yField: 'requests',
+      smooth: true,
+      point: { visible: true },
+      line: { style: { lineWidth: 2 } },
+      axes: [
+        {
+          orient: 'bottom',
+          label: { autoHide: true, autoLimit: true },
+        },
+        {
+          orient: 'left',
+          title: { visible: true, text: t('Requests') },
+          label: { formatMethod: formatCompactTokenCount },
+        },
+      ],
+      tooltip: {
+        mark: {
+          title: {
+            value: (datum: Record<string, unknown>) =>
+              String(datum?.time ?? ''),
+          },
+          content: [
+            {
+              key: t('Requests'),
+              value: (datum: Record<string, unknown>) =>
+                formatCompactWithFullValue(datum?.requests),
+            },
+          ],
+        },
+      },
+      title: loading
+        ? undefined
+        : requestTrendValues.length === 0
+          ? { visible: true, text: t('No usage data') }
+          : undefined,
+      theme: resolvedTheme === 'dark' ? 'dark' : 'light',
+      background: 'transparent',
+    }),
+    [loading, requestTrendValues, resolvedTheme, t]
+  )
+
   const apiKeyBarSpec = useMemo(
     () => ({
       type: 'bar',
@@ -773,6 +869,12 @@ export function TokenUsage() {
               icon={Key}
             />
           </div>
+
+          <Panel title={t('Call Trend')}>
+            <div className='h-[280px]'>
+              <VChart spec={requestTrendSpec} option={VCHART_OPTION} />
+            </div>
+          </Panel>
 
           <div className='grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.75fr)]'>
             <Panel title={t('Token Usage')}>

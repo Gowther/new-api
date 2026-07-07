@@ -163,6 +163,51 @@ function formatHourRange(timestamp) {
   return `${startText}-${endText}`;
 }
 
+function formatTrendTimeLabel(timestamp, granularity) {
+  if (!timestamp) return '-';
+  const date = new Date(timestamp * 1000);
+  const pad = (value) => String(value).padStart(2, '0');
+  const dateText = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+
+  if (granularity === 'hour') {
+    return `${dateText.slice(5)} ${pad(date.getHours())}:${pad(
+      date.getMinutes(),
+    )}`;
+  }
+
+  return dateText;
+}
+
+function buildCallTrendValues(trend, params) {
+  const stepSeconds = params.granularity === 'hour' ? 3600 : 86400;
+  const countByTimestamp = new Map();
+
+  trend.forEach((item) => {
+    const bucket = item.timestamp - (item.timestamp % stepSeconds);
+    countByTimestamp.set(bucket, item.count || 0);
+  });
+
+  const startBucket =
+    params.start_timestamp - (params.start_timestamp % stepSeconds);
+  const endBucket = params.end_timestamp - (params.end_timestamp % stepSeconds);
+  const bucketCount = Math.floor((endBucket - startBucket) / stepSeconds) + 1;
+  const shouldPadBuckets =
+    startBucket > 0 && endBucket >= startBucket && bucketCount <= 400;
+
+  const timestamps = shouldPadBuckets
+    ? Array.from(
+        { length: bucketCount },
+        (_, index) => startBucket + index * stepSeconds,
+      )
+    : Array.from(countByTimestamp.keys()).sort((a, b) => a - b);
+
+  return timestamps.map((timestamp) => ({
+    time: formatTrendTimeLabel(timestamp, params.granularity),
+    timestamp,
+    requests: countByTimestamp.get(timestamp) || 0,
+  }));
+}
+
 function dateTimeLocalFromTimestamp(timestamp) {
   const date = new Date(timestamp * 1000);
   const pad = (value) => String(value).padStart(2, '0');
@@ -492,6 +537,53 @@ const TokenUsage = () => {
     [apiKeyValues],
   );
 
+  const requestTrendValues = useMemo(
+    () => buildCallTrendValues(usage.trend, params),
+    [usage.trend, params],
+  );
+
+  const requestTrendSpec = useMemo(
+    () => ({
+      type: 'line',
+      data: [{ id: 'requestTrend', values: loading ? [] : requestTrendValues }],
+      xField: 'time',
+      yField: 'requests',
+      smooth: true,
+      point: { visible: true },
+      line: { style: { lineWidth: 2 } },
+      axes: [
+        {
+          orient: 'bottom',
+          label: { autoHide: true, autoLimit: true },
+        },
+        {
+          orient: 'left',
+          title: { visible: true, text: t('请求数') },
+          label: { formatMethod: formatCompactTokenCount },
+        },
+      ],
+      tooltip: {
+        mark: {
+          title: {
+            value: (datum) => String(datum?.time || ''),
+          },
+          content: [
+            {
+              key: t('请求数'),
+              value: (datum) => formatCompactWithFullValue(datum?.requests),
+            },
+          ],
+        },
+      },
+      title:
+        !loading && requestTrendValues.length === 0
+          ? { visible: true, text: t('暂无用量数据') }
+          : undefined,
+      background: 'transparent',
+    }),
+    [loading, requestTrendValues, t],
+  );
+
   const apiKeyBarSpec = useMemo(
     () => ({
       type: 'bar',
@@ -715,6 +807,12 @@ const TokenUsage = () => {
               icon={Key}
             />
           </div>
+
+          <Panel title={t('调用趋势')}>
+            <div className='h-72'>
+              <VChart spec={requestTrendSpec} option={CHART_CONFIG} />
+            </div>
+          </Panel>
 
           <div className='grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.75fr)]'>
             <Panel title={t('令牌用量')}>

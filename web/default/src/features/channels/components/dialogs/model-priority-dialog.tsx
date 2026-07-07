@@ -50,12 +50,23 @@ type ModelPriorityDialogProps = {
   onOpenChange: (open: boolean) => void
 }
 
+function compareChannelsForModelRouting(
+  a: Channel,
+  b: Channel,
+  getPriority = (channel: Channel) => channel.priority ?? 0
+): number {
+  const statusDiff =
+    Number(b.status === CHANNEL_STATUS.ENABLED) -
+    Number(a.status === CHANNEL_STATUS.ENABLED)
+  if (statusDiff !== 0) return statusDiff
+
+  const priorityDiff = getPriority(b) - getPriority(a)
+  if (priorityDiff !== 0) return priorityDiff
+  return a.id - b.id
+}
+
 function sortChannelsByPriority(channels: Channel[]): Channel[] {
-  return [...channels].sort((a, b) => {
-    const priorityDiff = (b.priority ?? 0) - (a.priority ?? 0)
-    if (priorityDiff !== 0) return priorityDiff
-    return a.id - b.id
-  })
+  return [...channels].sort(compareChannelsForModelRouting)
 }
 
 function applyPriorityUpdates(
@@ -82,19 +93,22 @@ function applyPriorityUpdates(
 
 function applyChannelStatusUpdates(
   oldData: GetChannelsResponse | undefined,
-  statusesById: Map<number, number>
+  statusesById: Map<number, number>,
+  shouldSort = false
 ): GetChannelsResponse | undefined {
   if (!oldData?.data?.items) return oldData
+
+  const items = oldData.data.items.map((channel) => {
+    const status = statusesById.get(channel.id)
+    if (status === undefined) return channel
+    return { ...channel, status }
+  })
 
   return {
     ...oldData,
     data: {
       ...oldData.data,
-      items: oldData.data.items.map((channel) => {
-        const status = statusesById.get(channel.id)
-        if (status === undefined) return channel
-        return { ...channel, status }
-      }),
+      items: shouldSort ? sortChannelsByPriority(items) : items,
     },
   }
 }
@@ -191,11 +205,7 @@ export function ModelPriorityDialog({
         const models = channel.models.split(',').map((m) => m.trim())
         return models.includes(selectedModel)
       })
-      .sort((a, b) => {
-        const priorityDiff = getPriorityValue(b) - getPriorityValue(a)
-        if (priorityDiff !== 0) return priorityDiff
-        return a.id - b.id
-      })
+      .sort((a, b) => compareChannelsForModelRouting(a, b, getPriorityValue))
   }, [channels, selectedModel, getPriorityValue])
 
   // Reset when dialog opens
@@ -225,7 +235,7 @@ export function ModelPriorityDialog({
       queryClient.setQueryData(
         channelsQueryKeys.list({ all: true }),
         (oldData: GetChannelsResponse | undefined) =>
-          applyChannelStatusUpdates(oldData, statusesById)
+          applyChannelStatusUpdates(oldData, statusesById, true)
       )
     },
     [queryClient]

@@ -50,12 +50,23 @@ const CHANNEL_STATUS_META = {
   [CHANNEL_STATUS.AUTO_DISABLED]: { label: '自动禁用', color: 'orange' },
 };
 
+const compareChannelsForModelRouting = (
+  a,
+  b,
+  getPriority = (channel) => channel.priority ?? 0,
+) => {
+  const statusDiff =
+    Number(b.status === CHANNEL_STATUS.ENABLED) -
+    Number(a.status === CHANNEL_STATUS.ENABLED);
+  if (statusDiff !== 0) return statusDiff;
+
+  const priorityDiff = getPriority(b) - getPriority(a);
+  if (priorityDiff !== 0) return priorityDiff;
+  return a.id - b.id;
+};
+
 const sortChannelsByPriority = (channels) =>
-  [...channels].sort((a, b) => {
-    const priorityDiff = (b.priority ?? 0) - (a.priority ?? 0);
-    if (priorityDiff !== 0) return priorityDiff;
-    return a.id - b.id;
-  });
+  [...channels].sort(compareChannelsForModelRouting);
 
 const ModelPriorityModal = ({
   visible,
@@ -162,9 +173,7 @@ const ModelPriorityModal = ({
         return models.includes(selectedModel);
       })
       .sort((a, b) => {
-        const priorityDiff = getPriorityValue(b) - getPriorityValue(a);
-        if (priorityDiff !== 0) return priorityDiff;
-        return a.id - b.id;
+        return compareChannelsForModelRouting(a, b, getPriorityValue);
       });
   }, [channels, selectedModel, getPriorityValue]);
 
@@ -196,8 +205,10 @@ const ModelPriorityModal = ({
       }
 
       setChannels((prev) =>
-        prev.map((item) =>
-          item.id === channel.id ? { ...item, status } : item,
+        sortChannelsByPriority(
+          prev.map((item) =>
+            item.id === channel.id ? { ...item, status } : item,
+          ),
         ),
       );
       showSuccess(checked ? t('已启用') : t('已禁用'));

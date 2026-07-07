@@ -106,6 +106,11 @@ const getFieldValue = (channel, changes, field) => {
 
 const sortRoutingChannels = (channels, changes = {}) =>
   [...channels].sort((a, b) => {
+    const statusDiff =
+      Number(b.status === CHANNEL_STATUS.ENABLED) -
+      Number(a.status === CHANNEL_STATUS.ENABLED);
+    if (statusDiff !== 0) return statusDiff;
+
     const priorityDiff =
       getFieldValue(b, changes, 'priority') -
       getFieldValue(a, changes, 'priority');

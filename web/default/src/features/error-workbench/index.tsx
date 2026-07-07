@@ -505,7 +505,7 @@ export function ErrorWorkbench() {
       )
     }
     return (
-      <div className='bg-muted/30 mt-3 max-h-56 space-y-2 overflow-y-auto rounded-lg border p-2'>
+      <div className='bg-muted/30 max-h-56 space-y-2 overflow-y-auto rounded-lg border p-2'>
         <div className='text-muted-foreground text-xs'>
           {t('Same model channels')} · {t('Ordered by priority, then weight')}
         </div>
@@ -763,7 +763,12 @@ export function ErrorWorkbench() {
                     <TableHead className='w-[190px]'>{t('Model')}</TableHead>
                     <TableHead className='w-[300px]'>{t('Channel')}</TableHead>
                     <TableHead>{t('Error')}</TableHead>
-                    <TableHead className='w-[210px]'>{t('Auto test')}</TableHead>
+                    <TableHead className='w-[210px]'>
+                      {t('Auto test')}
+                    </TableHead>
+                    <TableHead className='w-[320px]'>
+                      {t('Same model channels')}
+                    </TableHead>
                     <TableHead className='text-right'>{t('Actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -771,7 +776,7 @@ export function ErrorWorkbench() {
                   {summary.items.length === 0 && (
                     <TableRow>
                       <TableCell
-                        colSpan={6}
+                        colSpan={7}
                         className='text-muted-foreground h-28 text-center'
                       >
                         {summaryQuery.isFetching
@@ -845,7 +850,6 @@ export function ErrorWorkbench() {
                           {t('Last tested')}:{' '}
                           {formatTimestampToDate(record.channel_test_time)}
                         </div>
-                        {renderPeerChannels(record)}
                       </TableCell>
                       <TableCell className='max-w-[420px] align-top whitespace-normal'>
                         <div className='flex flex-wrap items-center gap-1'>
@@ -953,6 +957,9 @@ export function ErrorWorkbench() {
                             </div>
                           )}
                         </div>
+                      </TableCell>
+                      <TableCell className='w-[320px] align-top'>
+                        {renderPeerChannels(record)}
                       </TableCell>
                       <TableCell className='align-top'>
                         <div className='flex justify-end gap-1'>

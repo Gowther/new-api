@@ -465,7 +465,7 @@ export default function ErrorWorkbench() {
       );
     }
     return (
-      <div className='mt-2 max-h-56 w-full overflow-y-auto rounded-lg border border-solid border-gray-100 bg-gray-50 p-2'>
+      <div className='max-h-56 w-full overflow-y-auto rounded-lg border border-solid border-gray-100 bg-gray-50 p-2'>
         <Typography.Text type='tertiary' size='small'>
           {t('同模型渠道池')} · {t('按优先级、权重排序')}
         </Typography.Text>
@@ -606,7 +606,6 @@ export default function ErrorWorkbench() {
           <Typography.Text type='tertiary' size='small'>
             {t('最近测试')} {renderTime(record.channel_test_time)}
           </Typography.Text>
-          {renderPeerChannels(record)}
         </Space>
       ),
     },
@@ -688,6 +687,12 @@ export default function ErrorWorkbench() {
           )}
         </Space>
       ),
+    },
+    {
+      title: t('同模型渠道池'),
+      dataIndex: 'peer_channels',
+      width: 320,
+      render: (_, record) => renderPeerChannels(record),
     },
     {
       title: t('处理'),
@@ -920,7 +925,7 @@ export default function ErrorWorkbench() {
             columns={columns}
             dataSource={summary.items || []}
             pagination={false}
-            scroll={{ x: 1320 }}
+            scroll={{ x: 1640 }}
             empty={
               <Empty
                 title={t('暂无错误日志')}

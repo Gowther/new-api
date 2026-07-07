@@ -29,7 +29,11 @@ func PreviewChannelModelVendorGroups(c *gin.Context) {
 	common.ApiSuccess(c, groups)
 }
 
-func buildModelVendorSplitChannels(channel model.Channel) ([]model.Channel, error) {
+func buildModelVendorSplitChannels(channel model.Channel, selectedVendorIDs []int) ([]model.Channel, error) {
+	if selectedVendorIDs != nil && len(selectedVendorIDs) == 0 {
+		return nil, fmt.Errorf("请至少选择一个模型供应商")
+	}
+
 	groups, err := model.GroupModelNamesByVendor(channel.GetModels())
 	if err != nil {
 		return nil, err
@@ -39,7 +43,16 @@ func buildModelVendorSplitChannels(channel model.Channel) ([]model.Channel, erro
 	}
 
 	channels := make([]model.Channel, 0, len(groups))
+	selectedVendorIDSet := make(map[int]struct{}, len(selectedVendorIDs))
+	for _, vendorID := range selectedVendorIDs {
+		selectedVendorIDSet[vendorID] = struct{}{}
+	}
 	for _, group := range groups {
+		if selectedVendorIDs != nil {
+			if _, ok := selectedVendorIDSet[group.VendorID]; !ok {
+				continue
+			}
+		}
 		if len(group.Models) == 0 {
 			continue
 		}

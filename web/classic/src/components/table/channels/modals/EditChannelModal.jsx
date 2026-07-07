@@ -192,6 +192,27 @@ const buildModelVendorSplitCandidates = (channel, modelVendorGroups) => {
     }));
 };
 
+const getModelVendorGroupId = (group) => {
+  const vendorId = Number(group?.vendor_id);
+  return Number.isFinite(vendorId) ? vendorId : 0;
+};
+
+const getModelVendorGroupIds = (groups) =>
+  Array.from(
+    new Set(
+      (Array.isArray(groups) ? groups : []).map((group) =>
+        getModelVendorGroupId(group),
+      ),
+    ),
+  );
+
+const filterModelVendorGroupsByIds = (groups, selectedVendorIds) => {
+  const selectedVendorIdSet = new Set(selectedVendorIds);
+  return (Array.isArray(groups) ? groups : []).filter((group) =>
+    selectedVendorIdSet.has(getModelVendorGroupId(group)),
+  );
+};
+
 const buildModelOverlapCheckRequest = (
   channel,
   mode,
@@ -366,6 +387,7 @@ const EditChannelModal = (props) => {
   const [modelGroups, setModelGroups] = useState([]);
   const [splitByModelVendor, setSplitByModelVendor] = useState(false);
   const [modelVendorGroups, setModelVendorGroups] = useState([]);
+  const [selectedModelVendorIds, setSelectedModelVendorIds] = useState([]);
   const [modelVendorGroupLoading, setModelVendorGroupLoading] = useState(false);
   const [customModel, setCustomModel] = useState('');
   const [modelSearchValue, setModelSearchValue] = useState('');
@@ -488,6 +510,47 @@ const EditChannelModal = (props) => {
   const selectedModelKey = useMemo(
     () => normalizeChannelModels(selectedModels).join(','),
     [selectedModels],
+  );
+  const modelVendorGroupIds = useMemo(
+    () => getModelVendorGroupIds(modelVendorGroups),
+    [modelVendorGroups],
+  );
+  const selectedModelVendorIdSet = useMemo(
+    () => new Set(selectedModelVendorIds),
+    [selectedModelVendorIds],
+  );
+  const selectedModelVendorCount = useMemo(
+    () =>
+      modelVendorGroupIds.filter((vendorId) =>
+        selectedModelVendorIdSet.has(vendorId),
+      ).length,
+    [modelVendorGroupIds, selectedModelVendorIdSet],
+  );
+  const allModelVendorGroupsSelected =
+    modelVendorGroupIds.length > 0 &&
+    selectedModelVendorCount === modelVendorGroupIds.length;
+  const someModelVendorGroupsSelected =
+    selectedModelVendorCount > 0 &&
+    selectedModelVendorCount < modelVendorGroupIds.length;
+  const setAllModelVendorGroupsSelected = useCallback(
+    (checked) => {
+      setSelectedModelVendorIds(checked ? modelVendorGroupIds : []);
+    },
+    [modelVendorGroupIds],
+  );
+  const toggleModelVendorGroupSelection = useCallback(
+    (vendorId, checked) => {
+      setSelectedModelVendorIds((prev) => {
+        const nextSet = new Set(prev);
+        if (checked) {
+          nextSet.add(vendorId);
+        } else {
+          nextSet.delete(vendorId);
+        }
+        return modelVendorGroupIds.filter((id) => nextSet.has(id));
+      });
+    },
+    [modelVendorGroupIds],
   );
   const paramOverrideMeta = useMemo(() => {
     const raw =
@@ -1406,6 +1469,7 @@ const EditChannelModal = (props) => {
       if (normalizedModels.length === 0) {
         if (updateState) {
           setModelVendorGroups([]);
+          setSelectedModelVendorIds([]);
         }
         return [];
       }
@@ -1418,6 +1482,7 @@ const EditChannelModal = (props) => {
           const groups = res.data.data || [];
           if (updateState) {
             setModelVendorGroups(groups);
+            setSelectedModelVendorIds(getModelVendorGroupIds(groups));
           }
           return groups;
         }
@@ -1425,6 +1490,7 @@ const EditChannelModal = (props) => {
       } catch (error) {
         if (updateState) {
           setModelVendorGroups([]);
+          setSelectedModelVendorIds([]);
         }
         if (!silent) {
           showError(error.message || t('模型供应商分组失败'));
@@ -1539,6 +1605,7 @@ const EditChannelModal = (props) => {
     if (!props.visible || isEdit || !splitByModelVendor) {
       setModelVendorGroupLoading(false);
       setModelVendorGroups([]);
+      setSelectedModelVendorIds([]);
       return;
     }
 
@@ -1546,6 +1613,7 @@ const EditChannelModal = (props) => {
     if (models.length === 0) {
       setModelVendorGroupLoading(false);
       setModelVendorGroups([]);
+      setSelectedModelVendorIds([]);
       return;
     }
 
@@ -1558,6 +1626,7 @@ const EditChannelModal = (props) => {
       });
       if (!cancelled) {
         setModelVendorGroups(groups);
+        setSelectedModelVendorIds(getModelVendorGroupIds(groups));
         setModelVendorGroupLoading(false);
       }
     }, 250);
@@ -1581,6 +1650,7 @@ const EditChannelModal = (props) => {
       initialBaseUrlRef.current = '';
       setInputs(originInputs);
       setSelectedModels([]);
+      setSelectedModelVendorIds([]);
       if (formApiRef.current) {
         formApiRef.current.setValues(originInputs);
       }
@@ -2082,18 +2152,45 @@ const EditChannelModal = (props) => {
     }
 
     let submitModelVendorGroups = [];
+    let submitSelectedModelVendorIds = [];
     if (!isEdit && splitByModelVendor) {
-      if (modelVendorGroupsMatchModels(modelVendorGroups, localInputs.models)) {
+      const hasCurrentModelVendorGroups = modelVendorGroupsMatchModels(
+        modelVendorGroups,
+        localInputs.models,
+      );
+      if (hasCurrentModelVendorGroups) {
         submitModelVendorGroups = modelVendorGroups;
+        submitSelectedModelVendorIds = selectedModelVendorIds;
       } else {
         setModelVendorGroupLoading(true);
         submitModelVendorGroups = await fetchModelVendorGroups(
           localInputs.models,
         );
         setModelVendorGroupLoading(false);
+        submitSelectedModelVendorIds = getModelVendorGroupIds(
+          submitModelVendorGroups,
+        );
+        setSelectedModelVendorIds(submitSelectedModelVendorIds);
       }
       if (submitModelVendorGroups.length === 0) {
         showError(t('模型供应商分组失败'));
+        return;
+      }
+      const currentModelVendorGroupIds = getModelVendorGroupIds(
+        submitModelVendorGroups,
+      );
+      const submitSelectedModelVendorIdSet = new Set(
+        submitSelectedModelVendorIds,
+      );
+      submitSelectedModelVendorIds = currentModelVendorGroupIds.filter(
+        (vendorId) => submitSelectedModelVendorIdSet.has(vendorId),
+      );
+      submitModelVendorGroups = filterModelVendorGroupsByIds(
+        submitModelVendorGroups,
+        submitSelectedModelVendorIds,
+      );
+      if (submitModelVendorGroups.length === 0) {
+        showError(t('请至少选择一个模型供应商！'));
         return;
       }
     }
@@ -2300,6 +2397,9 @@ const EditChannelModal = (props) => {
         mode: mode,
         multi_key_mode: mode === 'multi_to_single' ? multiKeyMode : undefined,
         split_by_model_vendor: splitByModelVendor,
+        selected_model_vendor_ids: splitByModelVendor
+          ? submitSelectedModelVendorIds
+          : undefined,
         channel: localInputs,
       });
     }
@@ -4385,6 +4485,7 @@ const EditChannelModal = (props) => {
                                 setSplitByModelVendor(checked);
                                 if (!checked) {
                                   setModelVendorGroups([]);
+                                  setSelectedModelVendorIds([]);
                                 }
                               }}
                             >
@@ -4405,7 +4506,7 @@ const EditChannelModal = (props) => {
                           </div>
                           <Text type='tertiary' size='small'>
                             {t(
-                              '保存时会按模型管理中的精确、前缀、后缀、包含规则匹配供应商，并为每个供应商创建一个渠道。',
+                              '保存时会按模型管理中的精确、前缀、后缀、包含规则匹配供应商，并为选中的供应商创建渠道。',
                             )}
                           </Text>
                           {splitByModelVendor && (
@@ -4416,29 +4517,86 @@ const EditChannelModal = (props) => {
                                     {t('暂无分组预览')}
                                   </Text>
                                 ) : (
-                                  <div className='max-h-56 space-y-2 overflow-y-auto pr-1'>
-                                    {modelVendorGroups.map((group) => (
-                                      <div
-                                        key={`${group.vendor_id}-${group.vendor_name}`}
-                                        className='rounded-md border bg-white px-3 py-2'
-                                      >
-                                        <div className='mb-1 flex flex-wrap items-center gap-2'>
-                                          <Tag color='blue'>
-                                            {group.vendor_name ||
-                                              t('未匹配供应商')}
-                                          </Tag>
-                                          <Text type='tertiary' size='small'>
-                                            {t('{{count}} 个模型', {
-                                              count: group.models?.length || 0,
-                                            })}
-                                          </Text>
-                                        </div>
-                                        <div className='break-all text-xs text-gray-500'>
-                                          {(group.models || []).join(', ')}
-                                        </div>
+                                  <>
+                                    <div className='mb-2 flex flex-wrap items-center justify-between gap-2'>
+                                      <div className='flex flex-wrap items-center gap-2'>
+                                        <Text strong size='small'>
+                                          {t('选择模型供应商')}
+                                        </Text>
+                                        <Text type='tertiary' size='small'>
+                                          {t(
+                                            '已选择 {{selected}} / {{total}}',
+                                            {
+                                              selected:
+                                                selectedModelVendorCount,
+                                              total: modelVendorGroupIds.length,
+                                            },
+                                          )}
+                                        </Text>
                                       </div>
-                                    ))}
-                                  </div>
+                                      <Checkbox
+                                        checked={allModelVendorGroupsSelected}
+                                        indeterminate={
+                                          someModelVendorGroupsSelected
+                                        }
+                                        onChange={(e) =>
+                                          setAllModelVendorGroupsSelected(
+                                            e.target.checked,
+                                          )
+                                        }
+                                      >
+                                        {t('全选')}
+                                      </Checkbox>
+                                    </div>
+                                    <div className='max-h-56 space-y-2 overflow-y-auto pr-1'>
+                                      {modelVendorGroups.map((group) => {
+                                        const vendorId =
+                                          getModelVendorGroupId(group);
+                                        const checked =
+                                          selectedModelVendorIdSet.has(
+                                            vendorId,
+                                          );
+                                        return (
+                                          <div
+                                            key={`${vendorId}-${group.vendor_name}`}
+                                            className='rounded-md border bg-white px-3 py-2'
+                                          >
+                                            <div className='mb-1 flex flex-wrap items-center gap-2'>
+                                              <Checkbox
+                                                checked={checked}
+                                                onChange={(e) =>
+                                                  toggleModelVendorGroupSelection(
+                                                    vendorId,
+                                                    e.target.checked,
+                                                  )
+                                                }
+                                              />
+                                              <Tag
+                                                color={
+                                                  checked ? 'blue' : 'grey'
+                                                }
+                                              >
+                                                {group.vendor_name ||
+                                                  t('未匹配供应商')}
+                                              </Tag>
+                                              <Text
+                                                type='tertiary'
+                                                size='small'
+                                              >
+                                                {t('{{count}} 个模型', {
+                                                  count:
+                                                    group.models?.length || 0,
+                                                })}
+                                              </Text>
+                                            </div>
+                                            <div className='break-all text-xs text-gray-500'>
+                                              {(group.models || []).join(', ')}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </>
                                 )}
                               </Spin>
                             </div>

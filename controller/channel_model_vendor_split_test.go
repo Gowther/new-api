@@ -84,7 +84,7 @@ func TestBuildModelVendorSplitChannelsFiltersMappingAndKeepsMultiKey(t *testing.
 		},
 	}
 
-	channels, err := buildModelVendorSplitChannels(channel)
+	channels, err := buildModelVendorSplitChannels(channel, nil)
 
 	require.NoError(t, err)
 	require.Len(t, channels, 2)
@@ -133,12 +133,57 @@ func TestBuildModelVendorSplitChannelsAddsVendorNameForSingleGroup(t *testing.T)
 		Type:   constant.ChannelTypeOpenAI,
 		Key:    "key-a",
 		Models: "gpt-4o",
-	})
+	}, nil)
 
 	require.NoError(t, err)
 	require.Len(t, channels, 1)
 	assert.Equal(t, "primary - OpenAI", channels[0].Name)
 	assert.Equal(t, "gpt-4o", channels[0].Models)
+}
+
+func TestBuildModelVendorSplitChannelsFiltersSelectedVendors(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+
+	openai := model.Vendor{Name: "OpenAI", Status: 1}
+	anthropic := model.Vendor{Name: "Anthropic", Status: 1}
+	require.NoError(t, db.Create(&openai).Error)
+	require.NoError(t, db.Create(&anthropic).Error)
+	require.NoError(t, db.Create(&model.Model{
+		ModelName: "gpt-4o",
+		VendorID:  openai.Id,
+		Status:    1,
+		NameRule:  model.NameRuleExact,
+	}).Error)
+	require.NoError(t, db.Create(&model.Model{
+		ModelName: "claude-",
+		VendorID:  anthropic.Id,
+		Status:    1,
+		NameRule:  model.NameRulePrefix,
+	}).Error)
+
+	channels, err := buildModelVendorSplitChannels(model.Channel{
+		Name:   "primary",
+		Type:   constant.ChannelTypeOpenAI,
+		Key:    "key-a",
+		Models: "gpt-4o,claude-3-opus",
+	}, []int{anthropic.Id})
+
+	require.NoError(t, err)
+	require.Len(t, channels, 1)
+	assert.Equal(t, "primary - Anthropic", channels[0].Name)
+	assert.Equal(t, "claude-3-opus", channels[0].Models)
+}
+
+func TestBuildModelVendorSplitChannelsRejectsEmptySelectedVendors(t *testing.T) {
+	channels, err := buildModelVendorSplitChannels(model.Channel{
+		Name:   "primary",
+		Type:   constant.ChannelTypeOpenAI,
+		Key:    "key-a",
+		Models: "gpt-4o",
+	}, []int{})
+
+	require.ErrorContains(t, err, "请至少选择一个模型供应商")
+	assert.Nil(t, channels)
 }
 
 func TestFormatModelVendorSplitChannelNameKeepsExistingVendorSuffix(t *testing.T) {

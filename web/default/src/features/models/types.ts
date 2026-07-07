@@ -211,6 +211,23 @@ export interface MissingModelsResponse {
   data?: string[]
 }
 
+export interface ModelRuleCoverage {
+  total: number
+  covered: string[]
+  uncovered: string[]
+}
+
+export interface ModelRuleCoverageSnapshot {
+  addable: ModelRuleCoverage
+  channel: ModelRuleCoverage
+}
+
+export interface ModelRuleCoverageSnapshotResponse {
+  success: boolean
+  message?: string
+  data?: ModelRuleCoverageSnapshot
+}
+
 /**
  * Prefill groups response
  */

@@ -30,6 +30,7 @@ import type {
   SyncUpstreamResponse,
   PreviewUpstreamDiffResponse,
   MissingModelsResponse,
+  ModelRuleCoverageSnapshotResponse,
   PrefillGroupsResponse,
   SyncLocale,
   SyncSource,
@@ -236,6 +237,11 @@ export async function applyUpstreamOverwrite(params: {
  */
 export async function getMissingModels(): Promise<MissingModelsResponse> {
   const res = await api.get('/api/models/missing')
+  return res.data
+}
+
+export async function getModelRuleCoverage(): Promise<ModelRuleCoverageSnapshotResponse> {
+  const res = await api.get('/api/models/rule_coverage')
   return res.data
 }
 

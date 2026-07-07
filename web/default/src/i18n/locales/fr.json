@@ -5271,6 +5271,22 @@
     "Zero retention": "Aucune rétention",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Addable": "Ajoutable",
+    "Models not covered by model management rules": "Modeles non couverts par les regles de gestion des modeles",
+    "The following channel models do not match any enabled model management rule, so they may be hidden from the model square or miss metadata:": "Les modeles de canal suivants ne correspondent a aucune regle de gestion des modeles activee. Ils peuvent donc etre masques dans la place des modeles ou manquer de metadonnees :",
+    "You can go back and add matching model management rules, or save anyway if this is intentional.": "Vous pouvez revenir ajouter des regles de gestion de modeles correspondantes, ou enregistrer quand meme si cette configuration est intentionnelle.",
+    "Save anyway": "Enregistrer quand meme",
+    "Model rule coverage check failed": "Echec de la verification de couverture des regles de modele",
+    "Model pricing needs attention": "La tarification des modeles demande votre attention",
+    "{{count}} enabled model(s) do not have explicit pricing configured.": "{{count}} modele(s) active(s) n ont pas de tarification explicite configuree.",
+    "{{count}} pricing model(s) no longer exist in any channel.": "{{count}} modele(s) de tarification n existent plus dans aucun canal.",
+    "Clean stale pricing": "Nettoyer la tarification obsolete",
+    "Cleaned {{count}} stale model pricing item(s)": "{{count}} entree(s) de tarification de modele obsolete(s) nettoyee(s)",
+    "Failed to clean stale model pricing": "Impossible de nettoyer la tarification obsolete des modeles",
+    "Clean stale model pricing?": "Nettoyer la tarification obsolete des modeles ?",
+    "This removes model pricing entries whose model names no longer exist in any channel. Pattern entries are preserved.": "Cela supprime les entrees de tarification dont le nom de modele n existe plus dans aucun canal. Les entrees avec motif sont conservees.",
+    "Models that do not match any enabled model management rule": "Modeles qui ne correspondent a aucune regle de gestion des modeles activee",
+    "All checked models are covered by model management rules.": "Tous les modeles verifies sont couverts par les regles de gestion des modeles."
   }
 }

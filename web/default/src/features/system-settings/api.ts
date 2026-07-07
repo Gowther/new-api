@@ -19,9 +19,11 @@ For commercial licensing, please contact support@quantumnous.com
 import { api } from '@/lib/api'
 
 import type {
+  CleanupStaleModelPricingResponse,
   ConfirmPaymentComplianceResponse,
   FetchUpstreamRatiosRequest,
   LogCleanupTask,
+  ModelPricingHealthResponse,
   SystemOptionsResponse,
   SystemTaskListResponse,
   SystemTaskResponse,
@@ -94,6 +96,20 @@ export async function listSystemTasks(params: ListSystemTasksParams = {}) {
 export async function resetModelRatios() {
   const res = await api.post<UpdateOptionResponse>(
     '/api/option/rest_model_ratio'
+  )
+  return res.data
+}
+
+export async function getModelPricingHealth() {
+  const res = await api.get<ModelPricingHealthResponse>(
+    '/api/models/pricing_health'
+  )
+  return res.data
+}
+
+export async function cleanupStaleModelPricingSettings() {
+  const res = await api.post<CleanupStaleModelPricingResponse>(
+    '/api/models/pricing_settings/cleanup'
   )
   return res.data
 }

@@ -35,6 +35,7 @@ import type {
   GetChannelResponse,
   GetChannelsParams,
   GetChannelsResponse,
+  ModelRuleCoverageResponse,
   MultiKeyManageParams,
   MultiKeyStatusResponse,
   SearchChannelsParams,
@@ -124,6 +125,17 @@ export async function checkChannelModelOverlap(
   const res = await api.post(
     '/api/channel/model_overlap',
     data,
+    channelActionConfig()
+  )
+  return res.data
+}
+
+export async function checkModelRuleCoverage(
+  models: string[]
+): Promise<ModelRuleCoverageResponse> {
+  const res = await api.post(
+    '/api/models/rule_coverage/check',
+    { models },
     channelActionConfig()
   )
   return res.data

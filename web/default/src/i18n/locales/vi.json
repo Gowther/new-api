@@ -5271,6 +5271,22 @@
     "Zero retention": "Không lưu dữ liệu",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Addable": "Co the them",
+    "Models not covered by model management rules": "Model chua duoc phu boi quy tac quan ly model",
+    "The following channel models do not match any enabled model management rule, so they may be hidden from the model square or miss metadata:": "Cac model kenh sau khong khop voi bat ky quy tac quan ly model dang bat nao, nen co the bi an khoi khu vuc model hoac thieu sieu du lieu:",
+    "You can go back and add matching model management rules, or save anyway if this is intentional.": "Ban co the quay lai them quy tac quan ly model phu hop, hoac van luu neu day la cau hinh co chu y.",
+    "Save anyway": "Van luu",
+    "Model rule coverage check failed": "Kiem tra phu quy tac model that bai",
+    "Model pricing needs attention": "Can xu ly cau hinh gia model",
+    "{{count}} enabled model(s) do not have explicit pricing configured.": "{{count}} model dang bat chua co gia hoac he so gia ro rang.",
+    "{{count}} pricing model(s) no longer exist in any channel.": "{{count}} model trong cau hinh gia khong con ton tai trong bat ky kenh nao.",
+    "Clean stale pricing": "Don cau hinh gia cu",
+    "Cleaned {{count}} stale model pricing item(s)": "Da don {{count}} muc gia model cu",
+    "Failed to clean stale model pricing": "Khong the don cau hinh gia model cu",
+    "Clean stale model pricing?": "Don cau hinh gia model cu?",
+    "This removes model pricing entries whose model names no longer exist in any channel. Pattern entries are preserved.": "Thao tac nay xoa cac muc gia co ten model khong con ton tai trong bat ky kenh nao. Cac muc dang mau se duoc giu lai.",
+    "Models that do not match any enabled model management rule": "Cac model khong khop voi quy tac quan ly model dang bat nao",
+    "All checked models are covered by model management rules.": "Tat ca model da kiem tra deu duoc phu boi quy tac quan ly model."
   }
 }

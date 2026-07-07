@@ -5271,6 +5271,22 @@
     "Zero retention": "データ保持なし",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V 4",
-    "Zoom": "ズーム"
+    "Zoom": "ズーム",
+    "Addable": "追加可能",
+    "Models not covered by model management rules": "モデル管理ルールでカバーされていないモデル",
+    "The following channel models do not match any enabled model management rule, so they may be hidden from the model square or miss metadata:": "次のチャンネルモデルは有効なモデル管理ルールに一致していないため、モデル広場で非表示になるか、メタデータが不足する可能性があります:",
+    "You can go back and add matching model management rules, or save anyway if this is intentional.": "戻って一致するモデル管理ルールを追加できます。意図した設定であれば、そのまま保存できます。",
+    "Save anyway": "そのまま保存",
+    "Model rule coverage check failed": "モデルルールのカバレッジ確認に失敗しました",
+    "Model pricing needs attention": "モデル価格設定の確認が必要です",
+    "{{count}} enabled model(s) do not have explicit pricing configured.": "{{count}} 個の有効なモデルに明示的な価格または倍率が設定されていません。",
+    "{{count}} pricing model(s) no longer exist in any channel.": "{{count}} 個の価格設定モデルはどのチャンネルにも存在しません。",
+    "Clean stale pricing": "古い価格設定を整理",
+    "Cleaned {{count}} stale model pricing item(s)": "{{count}} 件の古いモデル価格設定を整理しました",
+    "Failed to clean stale model pricing": "古いモデル価格設定の整理に失敗しました",
+    "Clean stale model pricing?": "古いモデル価格設定を整理しますか?",
+    "This removes model pricing entries whose model names no longer exist in any channel. Pattern entries are preserved.": "どのチャンネルにも存在しないモデル名の価格設定を削除します。パターン設定は保持されます。",
+    "Models that do not match any enabled model management rule": "有効なモデル管理ルールに一致しないモデル",
+    "All checked models are covered by model management rules.": "確認対象のすべてのモデルはモデル管理ルールでカバーされています。"
   }
 }

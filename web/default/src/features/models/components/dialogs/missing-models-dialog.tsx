@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, Loader2, Plus, Search } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Dialog } from '@/components/dialog'
@@ -34,7 +34,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { useIsMobile } from '@/hooks/use-mobile'
 
-import { getMissingModels } from '../../api'
+import { getModelRuleCoverage } from '../../api'
 import { DEFAULT_PAGE_SIZE } from '../../constants'
 import { modelsQueryKeys } from '../../lib'
 import type { Model } from '../../types'
@@ -43,6 +43,11 @@ import { useModels } from '../models-provider'
 type MissingModelsDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
+}
+
+type MissingModelItem = {
+  modelName: string
+  sources: Array<'addable' | 'channel'>
 }
 
 export function MissingModelsDialog({
@@ -56,12 +61,32 @@ export function MissingModelsDialog({
   const [currentPage, setCurrentPage] = useState(1)
 
   const { data, isLoading } = useQuery({
-    queryKey: modelsQueryKeys.missing(),
-    queryFn: getMissingModels,
+    queryKey: modelsQueryKeys.ruleCoverage(),
+    queryFn: getModelRuleCoverage,
     enabled: open,
   })
 
-  const missingModels = useMemo(() => data?.data || [], [data?.data])
+  const missingModels = useMemo<MissingModelItem[]>(() => {
+    const addableModels = data?.data?.addable?.uncovered || []
+    const channelModels = data?.data?.channel?.uncovered || []
+    const itemMap = new Map<string, MissingModelItem>()
+
+    for (const modelName of addableModels) {
+      itemMap.set(modelName, { modelName, sources: ['addable'] })
+    }
+    for (const modelName of channelModels) {
+      const existing = itemMap.get(modelName)
+      if (existing) {
+        existing.sources.push('channel')
+      } else {
+        itemMap.set(modelName, { modelName, sources: ['channel'] })
+      }
+    }
+
+    return [...itemMap.values()].sort((a, b) =>
+      a.modelName.localeCompare(b.modelName)
+    )
+  }, [data?.data])
   const pageSize = DEFAULT_PAGE_SIZE
 
   const handleConfigureModel = (modelName: string) => {
@@ -83,8 +108,8 @@ export function MissingModelsDialog({
       return missingModels
     }
     const keyword = searchTerm.toLowerCase().trim()
-    return missingModels.filter((modelName) =>
-      modelName.toLowerCase().includes(keyword)
+    return missingModels.filter((item) =>
+      item.modelName.toLowerCase().includes(keyword)
     )
   }, [missingModels, searchTerm])
 
@@ -110,13 +135,140 @@ export function MissingModelsDialog({
     totalItems === 0 ? 0 : Math.min(currentPage * pageSize, totalItems)
   const showPagination = totalItems > pageSize
 
+  let dialogBody: ReactNode
+  if (isLoading) {
+    dialogBody = (
+      <div className='flex items-center justify-center py-12'>
+        <Loader2 className='h-8 w-8 animate-spin' />
+      </div>
+    )
+  } else if (missingModels.length === 0) {
+    dialogBody = (
+      <div className='text-muted-foreground py-12 text-center'>
+        <p>{t('No missing models found.')}</p>
+        <p className='text-sm'>
+          {t('All checked models are covered by model management rules.')}
+        </p>
+      </div>
+    )
+  } else {
+    dialogBody = (
+      <div className='flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto'>
+        <div className='flex flex-shrink-0 items-center justify-between gap-3'>
+          <div className='text-muted-foreground text-sm whitespace-nowrap'>
+            {t('Showing')} {displayStart}-{displayEnd} {t('of')} {totalItems}
+          </div>
+          <div className='relative w-48'>
+            <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2' />
+            <Input
+              value={searchTerm}
+              onChange={(event) => {
+                setSearchTerm(event.target.value)
+                setCurrentPage(1)
+              }}
+              placeholder={t('Search models...')}
+              className='pl-9'
+              aria-label={t('Search missing models')}
+            />
+          </div>
+        </div>
+
+        {filteredModels.length === 0 ? (
+          <Empty className='border'>
+            <EmptyHeader>
+              <EmptyMedia variant='icon'>
+                <Search className='h-5 w-5' />
+              </EmptyMedia>
+              <EmptyTitle>{t('No matches found')}</EmptyTitle>
+              <EmptyDescription>
+                {t('Try adjusting your search to locate a missing model.')}
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <div className='flex-shrink-0 rounded-lg border'>
+            <div className='divide-y'>
+              {paginatedModels.map((modelName) => (
+                <div
+                  key={modelName.modelName}
+                  className='flex items-center justify-between gap-3 p-3'
+                >
+                  <div className='flex min-w-0 flex-1 flex-wrap items-center gap-2'>
+                    <StatusBadge
+                      label={modelName.modelName}
+                      variant='neutral'
+                      copyText={modelName.modelName}
+                    />
+                    {modelName.sources.map((source) => (
+                      <span
+                        key={source}
+                        className='bg-muted text-muted-foreground rounded-md px-1.5 py-0.5 text-xs'
+                      >
+                        {source === 'channel' ? t('Channel') : t('Addable')}
+                      </span>
+                    ))}
+                  </div>
+                  <Button
+                    size='sm'
+                    className='flex-shrink-0 gap-1'
+                    onClick={() => handleConfigureModel(modelName.modelName)}
+                  >
+                    <Plus className='h-4 w-4' />
+                    {t('Configure')}
+                  </Button>
+                </div>
+              ))}
+            </div>
+
+            <div className='bg-muted/40 flex items-center justify-between border-t px-3 py-2 text-sm'>
+              <div className='text-muted-foreground text-sm'>
+                {t('Page {{current}} of {{total}}', {
+                  current: currentPage,
+                  total: totalPages,
+                })}
+              </div>
+              {showPagination && (
+                <div className='flex items-center gap-2'>
+                  <Button
+                    variant='outline'
+                    size='icon'
+                    className='h-8 w-8'
+                    onClick={() =>
+                      setCurrentPage((prev) => Math.max(1, prev - 1))
+                    }
+                    disabled={currentPage === 1}
+                    aria-label={t('Previous page')}
+                  >
+                    <ChevronLeft className='h-4 w-4' />
+                  </Button>
+                  <Button
+                    variant='outline'
+                    size='icon'
+                    className='h-8 w-8'
+                    onClick={() =>
+                      setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+                    }
+                    disabled={currentPage === totalPages}
+                    aria-label={t('Next page')}
+                  >
+                    <ChevronRight className='h-4 w-4' />
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
       title={t('Missing Models')}
       description={t(
-        'Models that are being used but not configured in the system'
+        'Models that do not match any enabled model management rule'
       )}
       contentClassName='flex max-h-[85vh] max-w-2xl flex-col gap-3 p-4'
       headerClassName='flex-shrink-0 text-start'
@@ -124,117 +276,7 @@ export function MissingModelsDialog({
       bodyClassName='space-y-4'
       initialFocus={!isMobile}
     >
-      {isLoading ? (
-        <div className='flex items-center justify-center py-12'>
-          <Loader2 className='h-8 w-8 animate-spin' />
-        </div>
-      ) : missingModels.length === 0 ? (
-        <div className='text-muted-foreground py-12 text-center'>
-          <p>{t('No missing models found.')}</p>
-          <p className='text-sm'>
-            {t('All models in use are properly configured.')}
-          </p>
-        </div>
-      ) : (
-        <div className='flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto'>
-          <div className='flex flex-shrink-0 items-center justify-between gap-3'>
-            <div className='text-muted-foreground text-sm whitespace-nowrap'>
-              {t('Showing')} {displayStart}-{displayEnd} {t('of')} {totalItems}
-            </div>
-            <div className='relative w-48'>
-              <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2' />
-              <Input
-                value={searchTerm}
-                onChange={(event) => {
-                  setSearchTerm(event.target.value)
-                  setCurrentPage(1)
-                }}
-                placeholder={t('Search models...')}
-                className='pl-9'
-                aria-label={t('Search missing models')}
-              />
-            </div>
-          </div>
-
-          {filteredModels.length === 0 ? (
-            <Empty className='border'>
-              <EmptyHeader>
-                <EmptyMedia variant='icon'>
-                  <Search className='h-5 w-5' />
-                </EmptyMedia>
-                <EmptyTitle>{t('No matches found')}</EmptyTitle>
-                <EmptyDescription>
-                  {t('Try adjusting your search to locate a missing model.')}
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          ) : (
-            <div className='flex-shrink-0 rounded-lg border'>
-              <div className='divide-y'>
-                {paginatedModels.map((modelName) => (
-                  <div
-                    key={modelName}
-                    className='flex items-center justify-between gap-3 p-3'
-                  >
-                    <div className='min-w-0 flex-1'>
-                      <StatusBadge
-                        label={modelName}
-                        variant='neutral'
-                        copyText={modelName}
-                      />
-                    </div>
-                    <Button
-                      size='sm'
-                      className='flex-shrink-0 gap-1'
-                      onClick={() => handleConfigureModel(modelName)}
-                    >
-                      <Plus className='h-4 w-4' />
-                      Configure
-                    </Button>
-                  </div>
-                ))}
-              </div>
-
-              <div className='bg-muted/40 flex items-center justify-between border-t px-3 py-2 text-sm'>
-                <div className='text-muted-foreground text-sm'>
-                  {t('Page {{current}} of {{total}}', {
-                    current: currentPage,
-                    total: totalPages,
-                  })}
-                </div>
-                {showPagination && (
-                  <div className='flex items-center gap-2'>
-                    <Button
-                      variant='outline'
-                      size='icon'
-                      className='h-8 w-8'
-                      onClick={() =>
-                        setCurrentPage((prev) => Math.max(1, prev - 1))
-                      }
-                      disabled={currentPage === 1}
-                      aria-label={t('Previous page')}
-                    >
-                      <ChevronLeft className='h-4 w-4' />
-                    </Button>
-                    <Button
-                      variant='outline'
-                      size='icon'
-                      className='h-8 w-8'
-                      onClick={() =>
-                        setCurrentPage((prev) => Math.min(totalPages, prev + 1))
-                      }
-                      disabled={currentPage === totalPages}
-                      aria-label={t('Next page')}
-                    >
-                      <ChevronRight className='h-4 w-4' />
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+      {dialogBody}
     </Dialog>
   )
 }

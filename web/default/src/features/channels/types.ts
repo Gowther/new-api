@@ -234,6 +234,18 @@ export interface ChannelModelOverlapResponse {
   }
 }
 
+export interface ModelRuleCoverage {
+  total: number
+  covered: string[]
+  uncovered: string[]
+}
+
+export interface ModelRuleCoverageResponse {
+  success: boolean
+  message?: string
+  data?: ModelRuleCoverage
+}
+
 export interface CopyChannelResponse {
   success: boolean
   message?: string

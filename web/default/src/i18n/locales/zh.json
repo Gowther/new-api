@@ -5271,6 +5271,22 @@
     "Zero retention": "零数据保留",
     "Zhipu": "智谱",
     "Zhipu V4": "智谱 V4",
-    "Zoom": "缩放"
+    "Zoom": "缩放",
+    "Addable": "可添加",
+    "Models not covered by model management rules": "模型未被模型管理规则覆盖",
+    "The following channel models do not match any enabled model management rule, so they may be hidden from the model square or miss metadata:": "当前渠道中的下列模型未匹配任何已启用的模型管理规则，因此可能不会在模型广场展示或缺少元数据：",
+    "You can go back and add matching model management rules, or save anyway if this is intentional.": "你可以返回并添加匹配的模型管理规则；如果这是预期配置，也可以继续保存。",
+    "Save anyway": "仍然保存",
+    "Model rule coverage check failed": "模型管理规则覆盖检查失败",
+    "Model pricing needs attention": "模型定价需要处理",
+    "{{count}} enabled model(s) do not have explicit pricing configured.": "{{count}} 个已启用模型未设置明确价格或倍率。",
+    "{{count}} pricing model(s) no longer exist in any channel.": "{{count}} 个模型定价已不在任何渠道中。",
+    "Clean stale pricing": "清理已不存在模型定价",
+    "Cleaned {{count}} stale model pricing item(s)": "已清理 {{count}} 个已不存在模型定价",
+    "Failed to clean stale model pricing": "清理已不存在模型定价失败",
+    "Clean stale model pricing?": "清理已不存在模型定价？",
+    "This removes model pricing entries whose model names no longer exist in any channel. Pattern entries are preserved.": "这会移除模型名已不在任何渠道中的定价配置。模式配置会保留。",
+    "Models that do not match any enabled model management rule": "未匹配任何已启用模型管理规则的模型",
+    "All checked models are covered by model management rules.": "所有已检查模型都已被模型管理规则覆盖。"
   }
 }

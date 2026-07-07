@@ -17,7 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { AlertTriangle, Loader2, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
@@ -25,9 +26,15 @@ import { toast } from 'sonner'
 import * as z from 'zod'
 
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
-import { resetModelRatios } from '../api'
+import {
+  cleanupStaleModelPricingSettings,
+  getModelPricingHealth,
+  resetModelRatios,
+} from '../api'
 import { SettingsPageTitleStatusPortal } from '../components/settings-page-context'
 import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
@@ -58,18 +65,22 @@ function formatJsonValidationError(
     )
   }
 
-  const parts = [
-    error.line && error.column
-      ? t('JSON is invalid at line {{line}}, column {{column}}.', {
-          line: error.line,
-          column: error.column,
-        })
-      : error.position !== undefined
-        ? t('JSON is invalid at position {{position}}.', {
-            position: error.position,
-          })
-        : t('JSON is invalid. Please check the syntax.'),
-  ]
+  let locationMessage = t('JSON is invalid. Please check the syntax.')
+  if (error.line && error.column) {
+    locationMessage = t(
+      'JSON is invalid at line {{line}}, column {{column}}.',
+      {
+        line: error.line,
+        column: error.column,
+      }
+    )
+  } else if (error.position !== undefined) {
+    locationMessage = t('JSON is invalid at position {{position}}.', {
+      position: error.position,
+    })
+  }
+
+  const parts = [locationMessage]
 
   if (error.missingCommaLine) {
     parts.push(
@@ -151,6 +162,14 @@ export function RatioSettingsCard({
   const updateOption = useUpdateOption()
   const queryClient = useQueryClient()
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [cleanupConfirmOpen, setCleanupConfirmOpen] = useState(false)
+
+  const pricingHealthQuery = useQuery({
+    queryKey: ['model-pricing-health'],
+    queryFn: getModelPricingHealth,
+    enabled: visibleTabs.includes('models'),
+    staleTime: 30_000,
+  })
 
   const resetMutation = useMutation({
     mutationFn: resetModelRatios,
@@ -158,6 +177,7 @@ export function RatioSettingsCard({
       if (data.success) {
         toast.success(t('Model prices reset successfully'))
         queryClient.invalidateQueries({ queryKey: ['system-options'] })
+        queryClient.invalidateQueries({ queryKey: ['model-pricing-health'] })
         setConfirmOpen(false)
       } else {
         toast.error(data.message || t('Failed to reset model ratios'))
@@ -165,6 +185,27 @@ export function RatioSettingsCard({
     },
     onError: (error: Error) => {
       toast.error(error.message || t('Failed to reset model ratios'))
+    },
+  })
+
+  const cleanupMutation = useMutation({
+    mutationFn: cleanupStaleModelPricingSettings,
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success(
+          t('Cleaned {{count}} stale model pricing item(s)', {
+            count: data.data?.total ?? 0,
+          })
+        )
+        queryClient.invalidateQueries({ queryKey: ['system-options'] })
+        queryClient.invalidateQueries({ queryKey: ['model-pricing-health'] })
+        setCleanupConfirmOpen(false)
+      } else {
+        toast.error(data.message || t('Failed to clean stale model pricing'))
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || t('Failed to clean stale model pricing'))
     },
   })
 
@@ -337,8 +378,9 @@ export function RatioSettingsCard({
 
       modelNormalizedDefaults.current = normalized
       setSavedModelValues(normalized)
+      queryClient.invalidateQueries({ queryKey: ['model-pricing-health'] })
     },
-    [t, updateOption]
+    [queryClient, t, updateOption]
   )
 
   const saveGroupRatios = useCallback(
@@ -384,6 +426,71 @@ export function RatioSettingsCard({
     resetMutate()
   }, [resetMutate])
 
+  const previewModelNames = useCallback((models: string[], limit = 6) => {
+    const preview = models.slice(0, limit).join(', ')
+    const remaining = models.length - limit
+    if (remaining <= 0) return preview
+    return `${preview}, +${remaining}`
+  }, [])
+
+  const renderPricingHealthAlert = () => {
+    const health = pricingHealthQuery.data?.data
+    if (!health) return null
+
+    const staleItems = health.stale_pricing?.items || []
+    const unsetModels = health.unset_pricing || []
+    if (staleItems.length === 0 && unsetModels.length === 0) {
+      return null
+    }
+
+    return (
+      <Alert className='border-amber-200 bg-amber-50/70 text-amber-950 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-50'>
+        <AlertTriangle className='h-4 w-4' aria-hidden='true' />
+        <AlertTitle>{t('Model pricing needs attention')}</AlertTitle>
+        <AlertDescription className='space-y-3'>
+          {unsetModels.length > 0 && (
+            <p>
+              {t(
+                '{{count}} enabled model(s) do not have explicit pricing configured.',
+                { count: unsetModels.length }
+              )}{' '}
+              <span className='font-mono text-xs'>
+                {previewModelNames(unsetModels)}
+              </span>
+            </p>
+          )}
+          {staleItems.length > 0 && (
+            <div className='space-y-2'>
+              <p>
+                {t(
+                  '{{count}} pricing model(s) no longer exist in any channel.',
+                  { count: staleItems.length }
+                )}{' '}
+                <span className='font-mono text-xs'>
+                  {previewModelNames(staleItems.map((item) => item.model))}
+                </span>
+              </p>
+              <Button
+                type='button'
+                size='sm'
+                variant='outline'
+                disabled={cleanupMutation.isPending}
+                onClick={() => setCleanupConfirmOpen(true)}
+              >
+                {cleanupMutation.isPending ? (
+                  <Loader2 className='h-3.5 w-3.5 animate-spin' />
+                ) : (
+                  <Trash2 className='h-3.5 w-3.5' />
+                )}
+                {t('Clean stale pricing')}
+              </Button>
+            </div>
+          )}
+        </AlertDescription>
+      </Alert>
+    )
+  }
+
   const tabLabels: Record<RatioTabId, string> = {
     models: 'Model prices',
     groups: 'Group ratios',
@@ -402,14 +509,17 @@ export function RatioSettingsCard({
   const renderTabContent = (tab: RatioTabId) => {
     if (tab === 'models') {
       return (
-        <ModelRatioForm
-          form={modelForm}
-          savedValues={savedModelValues}
-          onSave={saveModelRatios}
-          onReset={handleResetRatios}
-          isSaving={updateOption.isPending}
-          isResetting={resetMutation.isPending}
-        />
+        <div className='space-y-4'>
+          {renderPricingHealthAlert()}
+          <ModelRatioForm
+            form={modelForm}
+            savedValues={savedModelValues}
+            onSave={saveModelRatios}
+            onReset={handleResetRatios}
+            isSaving={updateOption.isPending}
+            isResetting={resetMutation.isPending}
+          />
+        </div>
       )
     }
     if (tab === 'groups') {
@@ -485,6 +595,19 @@ export function RatioSettingsCard({
         isLoading={resetMutation.isPending}
         handleConfirm={handleConfirmReset}
         confirmText={t('Reset')}
+      />
+
+      <ConfirmDialog
+        open={cleanupConfirmOpen}
+        onOpenChange={setCleanupConfirmOpen}
+        title={t('Clean stale model pricing?')}
+        desc={t(
+          'This removes model pricing entries whose model names no longer exist in any channel. Pattern entries are preserved.'
+        )}
+        destructive
+        isLoading={cleanupMutation.isPending}
+        handleConfirm={() => cleanupMutation.mutate()}
+        confirmText={t('Clean')}
       />
     </>
   )

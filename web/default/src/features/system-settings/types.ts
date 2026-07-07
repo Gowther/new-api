@@ -39,6 +39,33 @@ export type UpdateOptionResponse = {
   message: string
 }
 
+export type StaleModelPricingItem = {
+  model: string
+  fields: string[]
+}
+
+export type StaleModelPricingReport = {
+  total: number
+  items: StaleModelPricingItem[]
+}
+
+export type ModelPricingHealth = {
+  stale_pricing: StaleModelPricingReport
+  unset_pricing: string[]
+}
+
+export type ModelPricingHealthResponse = {
+  success: boolean
+  message?: string
+  data?: ModelPricingHealth
+}
+
+export type CleanupStaleModelPricingResponse = {
+  success: boolean
+  message?: string
+  data?: StaleModelPricingReport
+}
+
 export type ConfirmPaymentComplianceResponse = {
   success: boolean
   message: string

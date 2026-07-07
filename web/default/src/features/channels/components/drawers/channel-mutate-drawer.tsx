@@ -122,6 +122,7 @@ import { useAuthStore } from '@/stores/auth-store'
 
 import {
   checkChannelModelOverlap,
+  checkModelRuleCoverage,
   fetchModels,
   getAllModels,
   getChannel,
@@ -180,6 +181,10 @@ import {
   type MissingModelsAction,
 } from '../dialogs/missing-models-confirmation-dialog'
 import { ModelOverlapConfirmDialog } from '../dialogs/model-overlap-dialog'
+import {
+  ModelRuleCoverageDialog,
+  type ModelRuleCoverageAction,
+} from '../dialogs/model-rule-coverage-dialog'
 import { ParamOverrideEditorDialog } from '../dialogs/param-override-editor-dialog'
 import { StatusCodeRiskDialog } from '../dialogs/status-code-risk-dialog'
 import { ModelMappingEditor } from '../model-mapping-editor'
@@ -627,10 +632,20 @@ export function ChannelMutateDrawer({
   const missingModelsResolveRef = useRef<
     ((action: MissingModelsAction) => void) | null
   >(null)
+  const [modelRuleCoverageDialogOpen, setModelRuleCoverageDialogOpen] =
+    useState(false)
+  const [uncoveredModelRuleList, setUncoveredModelRuleList] = useState<
+    string[]
+  >([])
+  const modelRuleCoverageResolveRef = useRef<
+    ((action: ModelRuleCoverageAction) => void) | null
+  >(null)
   const [modelOverlapDialogOpen, setModelOverlapDialogOpen] = useState(false)
   const [modelOverlapItems, setModelOverlapItems] = useState<
     ChannelModelOverlapItem[]
   >([])
+  const [isCheckingModelRuleCoverage, setIsCheckingModelRuleCoverage] =
+    useState(false)
   const [isCheckingModelOverlap, setIsCheckingModelOverlap] = useState(false)
   const modelOverlapResolveRef = useRef<((confirmed: boolean) => void) | null>(
     null
@@ -1523,6 +1538,28 @@ export function ChannelMutateDrawer({
     []
   )
 
+  const confirmModelRuleCoverage = useCallback(
+    (uncoveredModels: string[]): Promise<ModelRuleCoverageAction> => {
+      return new Promise((resolve) => {
+        setUncoveredModelRuleList(uncoveredModels)
+        setModelRuleCoverageDialogOpen(true)
+        modelRuleCoverageResolveRef.current = resolve
+      })
+    },
+    []
+  )
+
+  const handleModelRuleCoverageAction = useCallback(
+    (action: ModelRuleCoverageAction) => {
+      setModelRuleCoverageDialogOpen(false)
+      if (modelRuleCoverageResolveRef.current) {
+        modelRuleCoverageResolveRef.current(action)
+        modelRuleCoverageResolveRef.current = null
+      }
+    },
+    []
+  )
+
   const confirmStatusCodeRisk = useCallback(
     (detailItems: string[]): Promise<boolean> =>
       new Promise((resolve) => {
@@ -1591,6 +1628,42 @@ export function ChannelMutateDrawer({
     }
   }, [])
 
+  const checkModelRuleCoverageBeforeSubmit = useCallback(
+    async (data: ChannelFormValues): Promise<boolean> => {
+      const modelNames = parseModelsString(data.models || '')
+      if (modelNames.length === 0) {
+        return true
+      }
+
+      setIsCheckingModelRuleCoverage(true)
+      try {
+        const response = await checkModelRuleCoverage(modelNames)
+        if (!response.success) {
+          toast.error(response.message || t('Model rule coverage check failed'))
+          return false
+        }
+
+        const uncoveredModels = response.data?.uncovered || []
+        if (uncoveredModels.length === 0) {
+          return true
+        }
+
+        const action = await confirmModelRuleCoverage(uncoveredModels)
+        return action === 'submit'
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : t('Model rule coverage check failed')
+        )
+        return false
+      } finally {
+        setIsCheckingModelRuleCoverage(false)
+      }
+    },
+    [confirmModelRuleCoverage, t]
+  )
+
   const checkModelOverlapBeforeSubmit = useCallback(
     async (data: ChannelFormValues): Promise<boolean> => {
       setIsCheckingModelOverlap(true)
@@ -1635,6 +1708,15 @@ export function ChannelMutateDrawer({
     }
   }, [])
 
+  useEffect(() => {
+    return () => {
+      if (modelRuleCoverageResolveRef.current) {
+        modelRuleCoverageResolveRef.current('cancel')
+        modelRuleCoverageResolveRef.current = null
+      }
+    }
+  }, [])
+
   const channelMutation = useChannelMutateForm({
     currentRow,
     isEditing,
@@ -1642,7 +1724,10 @@ export function ChannelMutateDrawer({
     onSuccess: handleSuccess,
   })
 
-  const isSubmitting = channelMutation.isPending || isCheckingModelOverlap
+  const isSubmitting =
+    channelMutation.isPending ||
+    isCheckingModelRuleCoverage ||
+    isCheckingModelOverlap
 
   // Submit handler
   const onSubmit = useCallback(
@@ -1743,6 +1828,9 @@ export function ChannelMutateDrawer({
         }
       }
 
+      const isModelRuleCovered = await checkModelRuleCoverageBeforeSubmit(data)
+      if (!isModelRuleCovered) return
+
       const canContinue = await checkModelOverlapBeforeSubmit(data)
       if (!canContinue) return
 
@@ -1753,6 +1841,7 @@ export function ChannelMutateDrawer({
       sensitiveLocked,
       form,
       confirmMissingModelMappings,
+      checkModelRuleCoverageBeforeSubmit,
       confirmStatusCodeRisk,
       checkModelOverlapBeforeSubmit,
       channelMutation,
@@ -4800,6 +4889,13 @@ export function ChannelMutateDrawer({
         missingModels={missingModelsList}
         onConfirm={handleMissingModelsAction}
         onOpenChange={setMissingModelsDialogOpen}
+      />
+
+      <ModelRuleCoverageDialog
+        open={modelRuleCoverageDialogOpen}
+        uncoveredModels={uncoveredModelRuleList}
+        onConfirm={handleModelRuleCoverageAction}
+        onOpenChange={setModelRuleCoverageDialogOpen}
       />
 
       <StatusCodeRiskDialog

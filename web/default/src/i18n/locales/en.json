@@ -5271,6 +5271,22 @@
     "Zero retention": "Zero retention",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Addable": "Addable",
+    "Models not covered by model management rules": "Models not covered by model management rules",
+    "The following channel models do not match any enabled model management rule, so they may be hidden from the model square or miss metadata:": "The following channel models do not match any enabled model management rule, so they may be hidden from the model square or miss metadata:",
+    "You can go back and add matching model management rules, or save anyway if this is intentional.": "You can go back and add matching model management rules, or save anyway if this is intentional.",
+    "Save anyway": "Save anyway",
+    "Model rule coverage check failed": "Model rule coverage check failed",
+    "Model pricing needs attention": "Model pricing needs attention",
+    "{{count}} enabled model(s) do not have explicit pricing configured.": "{{count}} enabled model(s) do not have explicit pricing configured.",
+    "{{count}} pricing model(s) no longer exist in any channel.": "{{count}} pricing model(s) no longer exist in any channel.",
+    "Clean stale pricing": "Clean stale pricing",
+    "Cleaned {{count}} stale model pricing item(s)": "Cleaned {{count}} stale model pricing item(s)",
+    "Failed to clean stale model pricing": "Failed to clean stale model pricing",
+    "Clean stale model pricing?": "Clean stale model pricing?",
+    "This removes model pricing entries whose model names no longer exist in any channel. Pattern entries are preserved.": "This removes model pricing entries whose model names no longer exist in any channel. Pattern entries are preserved.",
+    "Models that do not match any enabled model management rule": "Models that do not match any enabled model management rule",
+    "All checked models are covered by model management rules.": "All checked models are covered by model management rules."
   }
 }

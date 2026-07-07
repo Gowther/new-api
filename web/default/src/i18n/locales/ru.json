@@ -5271,6 +5271,22 @@
     "Zero retention": "Без хранения данных",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Addable": "Можно добавить",
+    "Models not covered by model management rules": "Модели, не покрытые правилами управления моделями",
+    "The following channel models do not match any enabled model management rule, so they may be hidden from the model square or miss metadata:": "Следующие модели канала не соответствуют ни одному включенному правилу управления моделями, поэтому они могут быть скрыты в витрине моделей или остаться без метаданных:",
+    "You can go back and add matching model management rules, or save anyway if this is intentional.": "Можно вернуться и добавить подходящие правила управления моделями или все равно сохранить, если это ожидаемая настройка.",
+    "Save anyway": "Все равно сохранить",
+    "Model rule coverage check failed": "Не удалось проверить покрытие правил модели",
+    "Model pricing needs attention": "Требуется внимание к ценам моделей",
+    "{{count}} enabled model(s) do not have explicit pricing configured.": "Для {{count}} включенных моделей не задана явная цена или коэффициент.",
+    "{{count}} pricing model(s) no longer exist in any channel.": "{{count}} моделей из настроек цен больше не существуют ни в одном канале.",
+    "Clean stale pricing": "Очистить устаревшие цены",
+    "Cleaned {{count}} stale model pricing item(s)": "Очищено {{count}} устаревших записей цен моделей",
+    "Failed to clean stale model pricing": "Не удалось очистить устаревшие цены моделей",
+    "Clean stale model pricing?": "Очистить устаревшие цены моделей?",
+    "This removes model pricing entries whose model names no longer exist in any channel. Pattern entries are preserved.": "Будут удалены записи цен, чьи имена моделей больше не существуют ни в одном канале. Шаблонные записи сохраняются.",
+    "Models that do not match any enabled model management rule": "Модели, которые не соответствуют ни одному включенному правилу управления моделями",
+    "All checked models are covered by model management rules.": "Все проверенные модели покрыты правилами управления моделями."
   }
 }

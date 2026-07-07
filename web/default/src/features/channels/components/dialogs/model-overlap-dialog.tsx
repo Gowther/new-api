@@ -58,6 +58,75 @@ function ModelOverlapItemsList(props: { items: ChannelModelOverlapItem[] }) {
   return (
     <>
       {props.items.map((item) => {
+        if (item.warning_type === 'vendor_channel_name') {
+          const warningKey = [
+            'vendor_channel_name',
+            item.target_name,
+            item.upstream.type,
+            item.upstream.base_url,
+            item.upstream.openai_organization,
+            item.upstream.key_fingerprint,
+          ].join(':')
+
+          return (
+            <div
+              key={warningKey}
+              className='border-border/70 rounded-md border p-3'
+            >
+              <div className='flex flex-wrap items-center gap-2'>
+                <Badge variant='outline'>
+                  {t('Vendor channel already exists')}
+                </Badge>
+                <span className='text-sm font-medium break-words'>
+                  {item.target_name}
+                </span>
+              </div>
+
+              <p className='text-muted-foreground mt-2 text-sm'>
+                {t(
+                  'The channel name to be created appears to match an existing vendor channel. Continuing will create another channel with the same vendor name.'
+                )}
+              </p>
+
+              <div className='mt-3 space-y-2'>
+                <p className='text-sm font-medium'>
+                  {t('Existing matching channels')}
+                </p>
+                {item.channels.map((channel) => {
+                  const statusConfig =
+                    CHANNEL_STATUS_CONFIG[
+                      channel.status as keyof typeof CHANNEL_STATUS_CONFIG
+                    ] || CHANNEL_STATUS_CONFIG[0]
+                  return (
+                    <div
+                      key={channel.id}
+                      className='bg-muted/30 flex flex-col gap-1 rounded-md px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between'
+                    >
+                      <span className='min-w-0 font-medium'>
+                        <span className='text-muted-foreground'>
+                          #{channel.id}
+                        </span>{' '}
+                        <span className='break-words'>{channel.name}</span>
+                      </span>
+                      <span className='text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs'>
+                        <span>{t(statusConfig.label)}</span>
+                        <span>
+                          {t('Priority')}: {channel.priority ?? 0}
+                        </span>
+                        {channel.group && (
+                          <span>
+                            {t('Group')}: {channel.group}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        }
+
         const upstreamKey = [
           item.upstream.type,
           item.upstream.base_url,
@@ -185,9 +254,9 @@ export function ModelOverlapConfirmDialog(
     <ConfirmDialog
       open={props.open}
       onOpenChange={props.onOpenChange}
-      title={t('Model overlap detected')}
+      title={t('Review channel save warnings')}
       desc={t(
-        'These models already exist in channels with the same upstream source. Continue saving?'
+        'Model overlaps or matching vendor channel names were found. Continue saving?'
       )}
       confirmText={t('Continue Saving')}
       isLoading={props.isLoading}

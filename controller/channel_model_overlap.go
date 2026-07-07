@@ -12,8 +12,9 @@ import (
 )
 
 type ChannelModelOverlapRequest struct {
-	Channel  *model.Channel   `json:"channel"`
-	Channels []*model.Channel `json:"channels"`
+	Channel               *model.Channel   `json:"channel"`
+	Channels              []*model.Channel `json:"channels"`
+	WarnVendorChannelName bool             `json:"warn_vendor_channel_name"`
 }
 
 type ChannelModelOverlapUpstream struct {
@@ -32,9 +33,11 @@ type ChannelModelOverlapChannel struct {
 }
 
 type ChannelModelOverlapItem struct {
-	Upstream ChannelModelOverlapUpstream  `json:"upstream"`
-	Model    string                       `json:"model"`
-	Channels []ChannelModelOverlapChannel `json:"channels"`
+	WarningType string                       `json:"warning_type,omitempty"`
+	TargetName  string                       `json:"target_name,omitempty"`
+	Upstream    ChannelModelOverlapUpstream  `json:"upstream"`
+	Model       string                       `json:"model"`
+	Channels    []ChannelModelOverlapChannel `json:"channels"`
 }
 
 type channelModelOverlapSourceKey struct {
@@ -228,6 +231,71 @@ func detectChannelModelOverlaps(channels []*model.Channel, candidate *model.Chan
 	return items
 }
 
+func collectCandidateVendorChannelNameWarnings(channels []*model.Channel, candidates []*model.Channel) []ChannelModelOverlapItem {
+	itemsByName := make(map[string]ChannelModelOverlapItem)
+	for _, candidate := range candidates {
+		if candidate == nil {
+			continue
+		}
+		targetName := strings.TrimSpace(candidate.Name)
+		normalizedTargetName := normalizeModelVendorSplitChannelName(targetName)
+		if normalizedTargetName == "" {
+			continue
+		}
+
+		matches := make([]ChannelModelOverlapChannel, 0)
+		for _, channel := range channels {
+			if channel == nil {
+				continue
+			}
+			if candidate.Id > 0 && channel.Id == candidate.Id {
+				continue
+			}
+			if normalizeModelVendorSplitChannelName(channel.Name) != normalizedTargetName {
+				continue
+			}
+			matches = append(matches, channelModelOverlapChannel(channel))
+		}
+		if len(matches) == 0 {
+			continue
+		}
+
+		if existing, ok := itemsByName[normalizedTargetName]; ok {
+			seen := make(map[int]struct{}, len(existing.Channels)+len(matches))
+			for _, channel := range existing.Channels {
+				seen[channel.Id] = struct{}{}
+			}
+			for _, channel := range matches {
+				if _, ok := seen[channel.Id]; ok {
+					continue
+				}
+				existing.Channels = append(existing.Channels, channel)
+			}
+			itemsByName[normalizedTargetName] = existing
+			continue
+		}
+
+		upstream := ChannelModelOverlapUpstream{}
+		sources := channelModelOverlapSources(candidate)
+		if len(sources) > 0 {
+			upstream = sources[0].upstream
+		}
+		itemsByName[normalizedTargetName] = ChannelModelOverlapItem{
+			WarningType: "vendor_channel_name",
+			TargetName:  targetName,
+			Upstream:    upstream,
+			Channels:    matches,
+		}
+	}
+
+	items := make([]ChannelModelOverlapItem, 0, len(itemsByName))
+	for _, item := range itemsByName {
+		items = append(items, item)
+	}
+	sortChannelModelOverlapItems(items)
+	return items
+}
+
 func collectCandidateChannelModelOverlaps(groups map[channelModelOverlapGroupKey]*channelModelOverlapGroup, candidates []*model.Channel) []ChannelModelOverlapItem {
 	itemsByKey := make(map[channelModelOverlapGroupKey]ChannelModelOverlapItem)
 	for _, candidate := range candidates {
@@ -284,6 +352,12 @@ func collectCandidateChannelModelOverlaps(groups map[channelModelOverlapGroupKey
 
 func sortChannelModelOverlapItems(items []ChannelModelOverlapItem) {
 	sort.Slice(items, func(i, j int) bool {
+		if items[i].WarningType != items[j].WarningType {
+			return items[i].WarningType == ""
+		}
+		if items[i].TargetName != items[j].TargetName {
+			return items[i].TargetName < items[j].TargetName
+		}
 		if items[i].Upstream.Type != items[j].Upstream.Type {
 			return items[i].Upstream.Type < items[j].Upstream.Type
 		}
@@ -337,7 +411,12 @@ func CheckChannelModelOverlap(c *gin.Context) {
 		candidates[i] = resolved
 	}
 
+	items := collectCandidateChannelModelOverlaps(buildChannelModelOverlapGroups(channels), candidates)
+	if req.WarnVendorChannelName {
+		items = append(items, collectCandidateVendorChannelNameWarnings(channels, candidates)...)
+	}
+	sortChannelModelOverlapItems(items)
 	common.ApiSuccess(c, gin.H{
-		"items": collectCandidateChannelModelOverlaps(buildChannelModelOverlapGroups(channels), candidates),
+		"items": items,
 	})
 }

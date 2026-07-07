@@ -120,7 +120,28 @@ const normalizeChannelModels = (models) =>
 const formatModelVendorSplitChannelName = (name, vendorName) => {
   const trimmedName = String(name || '').trim();
   const trimmedVendor = String(vendorName || '').trim() || '未匹配供应商';
-  return trimmedName ? `${trimmedName} - ${trimmedVendor}` : trimmedVendor;
+  if (!trimmedName) return trimmedVendor;
+  if (hasModelVendorSplitChannelNameSuffix(trimmedName, trimmedVendor)) {
+    return trimmedName;
+  }
+  return `${trimmedName} - ${trimmedVendor}`;
+};
+
+const normalizeModelVendorSplitChannelName = (name) =>
+  String(name || '')
+    .trim()
+    .split('-')
+    .map((part) => part.trim().replace(/\s+/g, ' '))
+    .join('-');
+
+const hasModelVendorSplitChannelNameSuffix = (name, vendorName) => {
+  const normalizedName = normalizeModelVendorSplitChannelName(name);
+  const normalizedVendor = normalizeModelVendorSplitChannelName(vendorName);
+  if (!normalizedName || !normalizedVendor) return false;
+  return (
+    normalizedName === normalizedVendor ||
+    normalizedName.endsWith(`-${normalizedVendor}`)
+  );
 };
 
 const filterModelMappingByModels = (modelMapping, models) => {
@@ -153,10 +174,7 @@ const buildModelVendorSplitCandidates = (channel, modelVendorGroups) => {
     .filter((group) => Array.isArray(group.models) && group.models.length > 0)
     .map((group) => ({
       ...channel,
-      name:
-        groups.length > 1
-          ? formatModelVendorSplitChannelName(channel.name, group.vendor_name)
-          : channel.name,
+      name: formatModelVendorSplitChannelName(channel.name, group.vendor_name),
       models: group.models.join(','),
       model_mapping: filterModelMappingByModels(
         channel.model_mapping,
@@ -188,6 +206,7 @@ const buildModelOverlapCheckRequest = (
 
   if (splitByModelVendor && modelVendorGroups.length > 0) {
     return {
+      warn_vendor_channel_name: true,
       channels: baseChannels.flatMap((baseChannel) =>
         buildModelVendorSplitCandidates(baseChannel, modelVendorGroups),
       ),

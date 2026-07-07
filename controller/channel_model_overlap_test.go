@@ -201,3 +201,41 @@ func TestDetectChannelModelOverlaps_CandidateRequiresSameSource(t *testing.T) {
 
 	require.Empty(t, items)
 }
+
+func TestCollectCandidateVendorChannelNameWarningsNormalizesHyphenSpacing(t *testing.T) {
+	baseURL := "https://api.example.com"
+	existing := []*model.Channel{
+		{
+			Id:      12,
+			Type:    constant.ChannelTypeOpenAI,
+			Key:     "sk-existing",
+			BaseURL: &baseURL,
+			Name:    "公益-A站-OpenAI",
+			Group:   "default",
+			Status:  common.ChannelStatusEnabled,
+			Models:  "gpt-4o",
+		},
+	}
+	candidate := &model.Channel{
+		Type:    constant.ChannelTypeOpenAI,
+		Key:     "sk-new",
+		BaseURL: &baseURL,
+		Name:    "公益-A站 - OpenAI",
+		Models:  "gpt-4o-mini",
+	}
+
+	items := collectCandidateVendorChannelNameWarnings(existing, []*model.Channel{candidate})
+
+	require.Len(t, items, 1)
+	require.Equal(t, "vendor_channel_name", items[0].WarningType)
+	require.Equal(t, "公益-A站 - OpenAI", items[0].TargetName)
+	require.Equal(t, constant.ChannelTypeOpenAI, items[0].Upstream.Type)
+	require.Equal(t, []ChannelModelOverlapChannel{
+		{
+			Id:     12,
+			Name:   "公益-A站-OpenAI",
+			Group:  "default",
+			Status: common.ChannelStatusEnabled,
+		},
+	}, items[0].Channels)
+}

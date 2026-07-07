@@ -219,6 +219,8 @@ export interface ChannelModelOverlapChannel {
 }
 
 export interface ChannelModelOverlapItem {
+  warning_type?: 'vendor_channel_name'
+  target_name?: string
   upstream: ChannelModelOverlapUpstream
   model: string
   channels: ChannelModelOverlapChannel[]
@@ -408,4 +410,5 @@ export interface AddChannelRequest {
 export interface ChannelModelOverlapRequest {
   channel?: Partial<Channel>
   channels?: Partial<Channel>[]
+  warn_vendor_channel_name?: boolean
 }

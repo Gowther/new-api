@@ -48,6 +48,70 @@ const renderModelOverlapItems = (items, t) => {
   return (
     <div className='max-h-[520px] space-y-3 overflow-y-auto pr-1'>
       {items.map((item) => {
+        if (item.warning_type === 'vendor_channel_name') {
+          const warningKey = [
+            'vendor_channel_name',
+            item.target_name,
+            item.upstream?.type,
+            item.upstream?.base_url,
+            item.upstream?.openai_organization,
+            item.upstream?.key_fingerprint,
+          ].join(':');
+          return (
+            <div key={warningKey} className='rounded-md border p-3'>
+              <div className='flex flex-wrap items-center gap-2'>
+                <Tag color='orange'>{t('同名供应商渠道')}</Tag>
+                <Typography.Text strong className='break-words'>
+                  {item.target_name}
+                </Typography.Text>
+              </div>
+              <Typography.Text
+                type='tertiary'
+                size='small'
+                className='mt-2 block'
+              >
+                {t(
+                  '将创建的供应商渠道名称与已有渠道疑似重复，继续保存会创建新的重复渠道。',
+                )}
+              </Typography.Text>
+              <div className='mt-3 space-y-2'>
+                <Typography.Text strong>
+                  {t('已有相同命名渠道')}
+                </Typography.Text>
+                {item.channels.map((channel) => {
+                  const statusMeta =
+                    CHANNEL_STATUS_META[channel.status] ||
+                    CHANNEL_STATUS_META[0];
+                  return (
+                    <div
+                      key={channel.id}
+                      className='flex flex-col gap-1 rounded-md bg-gray-50 px-3 py-2 text-sm md:flex-row md:items-center md:justify-between'
+                    >
+                      <span className='min-w-0 font-medium'>
+                        <span className='text-gray-500'>#{channel.id}</span>{' '}
+                        <span className='break-words'>{channel.name}</span>
+                      </span>
+                      <span className='flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500'>
+                        <Tag size='small' color={statusMeta.color}>
+                          {t(statusMeta.label)}
+                        </Tag>
+                        <span>
+                          {t('优先级')}: {channel.priority ?? 0}
+                        </span>
+                        {channel.group && (
+                          <span>
+                            {t('分组')}: {channel.group}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        }
+
         const upstreamKey = [
           item.upstream?.type,
           item.upstream?.base_url,
@@ -150,11 +214,11 @@ export const confirmModelOverlap = (items, t) => {
 
   return new Promise((resolve) => {
     Modal.confirm({
-      title: t('检测到模型重叠'),
+      title: t('保存前检查提示'),
       content: (
         <div className='space-y-3'>
           <Typography.Text>
-            {t('这些模型已存在于同源逻辑渠道中，是否继续保存？')}
+            {t('检测到模型重叠或疑似同名供应商渠道，是否继续保存？')}
           </Typography.Text>
           {renderModelOverlapItems(items, t)}
         </div>

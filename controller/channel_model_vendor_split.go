@@ -45,9 +45,7 @@ func buildModelVendorSplitChannels(channel model.Channel) ([]model.Channel, erro
 		}
 		localChannel := channel
 		localChannel.Models = strings.Join(group.Models, ",")
-		if len(groups) > 1 {
-			localChannel.Name = formatModelVendorSplitChannelName(channel.Name, group.VendorName)
-		}
+		localChannel.Name = formatModelVendorSplitChannelName(channel.Name, group.VendorName)
 		localChannel.ModelMapping, err = filterModelMappingByModels(channel.ModelMapping, group.Models)
 		if err != nil {
 			return nil, fmt.Errorf("模型映射拆分失败: %w", err)
@@ -72,7 +70,27 @@ func formatModelVendorSplitChannelName(name string, vendorName string) string {
 	if name == "" {
 		return vendorName
 	}
+	if hasModelVendorSplitChannelNameSuffix(name, vendorName) {
+		return name
+	}
 	return fmt.Sprintf("%s - %s", name, vendorName)
+}
+
+func hasModelVendorSplitChannelNameSuffix(name string, vendorName string) bool {
+	normalizedName := normalizeModelVendorSplitChannelName(name)
+	normalizedVendor := normalizeModelVendorSplitChannelName(vendorName)
+	if normalizedName == "" || normalizedVendor == "" {
+		return false
+	}
+	return normalizedName == normalizedVendor || strings.HasSuffix(normalizedName, "-"+normalizedVendor)
+}
+
+func normalizeModelVendorSplitChannelName(name string) string {
+	parts := strings.Split(strings.TrimSpace(name), "-")
+	for i, part := range parts {
+		parts[i] = strings.Join(strings.Fields(part), " ")
+	}
+	return strings.Join(parts, "-")
 }
 
 func filterModelMappingByModels(mapping *string, models []string) (*string, error) {

@@ -115,3 +115,47 @@ func TestBuildModelVendorSplitChannelsFiltersMappingAndKeepsMultiKey(t *testing.
 		"claude-3-opus": "claude-3-opus-20240229",
 	}, anthropicMapping)
 }
+
+func TestBuildModelVendorSplitChannelsAddsVendorNameForSingleGroup(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+
+	openai := model.Vendor{Name: "OpenAI", Status: 1}
+	require.NoError(t, db.Create(&openai).Error)
+	require.NoError(t, db.Create(&model.Model{
+		ModelName: "gpt-4o",
+		VendorID:  openai.Id,
+		Status:    1,
+		NameRule:  model.NameRuleExact,
+	}).Error)
+
+	channels, err := buildModelVendorSplitChannels(model.Channel{
+		Name:   "primary",
+		Type:   constant.ChannelTypeOpenAI,
+		Key:    "key-a",
+		Models: "gpt-4o",
+	})
+
+	require.NoError(t, err)
+	require.Len(t, channels, 1)
+	assert.Equal(t, "primary - OpenAI", channels[0].Name)
+	assert.Equal(t, "gpt-4o", channels[0].Models)
+}
+
+func TestFormatModelVendorSplitChannelNameKeepsExistingVendorSuffix(t *testing.T) {
+	tests := []struct {
+		name       string
+		vendorName string
+		want       string
+	}{
+		{name: "primary-OpenAI", vendorName: "OpenAI", want: "primary-OpenAI"},
+		{name: "primary - OpenAI", vendorName: "OpenAI", want: "primary - OpenAI"},
+		{name: "primary  -  OpenAI", vendorName: "OpenAI", want: "primary  -  OpenAI"},
+		{name: "primary", vendorName: "OpenAI", want: "primary - OpenAI"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, formatModelVendorSplitChannelName(tt.name, tt.vendorName))
+		})
+	}
+}

@@ -21,6 +21,22 @@ import { createContext, useContext, useState, type ReactNode } from 'react'
 
 import type { ChannelAffinityInfo } from '../types'
 
+const AUTO_REFRESH_STORAGE_KEY = 'usage-logs:auto-refresh-seconds'
+const AUTO_REFRESH_INTERVALS = [0, 5, 10, 30, 60] as const
+
+function getInitialAutoRefreshSeconds(): number {
+  try {
+    const stored = Number(localStorage.getItem(AUTO_REFRESH_STORAGE_KEY))
+    return AUTO_REFRESH_INTERVALS.includes(
+      stored as (typeof AUTO_REFRESH_INTERVALS)[number]
+    )
+      ? stored
+      : 0
+  } catch {
+    return 0
+  }
+}
+
 interface UsageLogsContextValue {
   selectedUserId: number | null
   setSelectedUserId: (userId: number | null) => void
@@ -32,6 +48,8 @@ interface UsageLogsContextValue {
   setAffinityDialogOpen: (open: boolean) => void
   sensitiveVisible: boolean
   setSensitiveVisible: (visible: boolean) => void
+  autoRefreshSeconds: number
+  setAutoRefreshSeconds: (seconds: number) => void
 }
 
 const UsageLogsContext = createContext<UsageLogsContextValue | undefined>(
@@ -45,6 +63,23 @@ export function UsageLogsProvider({ children }: { children: ReactNode }) {
     useState<ChannelAffinityInfo | null>(null)
   const [affinityDialogOpen, setAffinityDialogOpen] = useState(false)
   const [sensitiveVisible, setSensitiveVisible] = useState(true)
+  const [autoRefreshSeconds, setAutoRefreshSecondsState] = useState(
+    getInitialAutoRefreshSeconds
+  )
+
+  const setAutoRefreshSeconds = (seconds: number) => {
+    const next = AUTO_REFRESH_INTERVALS.includes(
+      seconds as (typeof AUTO_REFRESH_INTERVALS)[number]
+    )
+      ? seconds
+      : 0
+    setAutoRefreshSecondsState(next)
+    try {
+      localStorage.setItem(AUTO_REFRESH_STORAGE_KEY, String(next))
+    } catch {
+      /* ignore storage failures */
+    }
+  }
 
   return (
     <UsageLogsContext.Provider
@@ -59,6 +94,8 @@ export function UsageLogsProvider({ children }: { children: ReactNode }) {
         setAffinityDialogOpen,
         sensitiveVisible,
         setSensitiveVisible,
+        autoRefreshSeconds,
+        setAutoRefreshSeconds,
       }}
     >
       {children}

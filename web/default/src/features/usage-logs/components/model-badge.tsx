@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Route } from 'lucide-react'
+import type { MouseEventHandler } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { StatusBadge } from '@/components/status-badge'
@@ -32,6 +33,8 @@ interface ModelBadgeProps {
   modelName: string
   actualModel?: string
   className?: string
+  copyable?: boolean
+  onClick?: MouseEventHandler<HTMLSpanElement>
 }
 
 interface ModelProvider {
@@ -128,6 +131,8 @@ function ModelBadgeContent(props: ModelBadgeProps) {
   return (
     <StatusBadge
       copyText={props.modelName}
+      copyable={props.copyable}
+      onClick={props.onClick}
       size='sm'
       showDot={!provider}
       autoColor={provider ? undefined : props.modelName}
@@ -161,35 +166,42 @@ export function ModelBadge(props: ModelBadgeProps) {
   }
 
   return (
-    <Popover>
-      <PopoverTrigger
-        render={
-          <button type='button' className='inline-flex items-center gap-1' />
-        }
-      >
-        <ModelBadgeContent {...props} />
-        <Route className='text-muted-foreground size-3 shrink-0' />
-      </PopoverTrigger>
-      <PopoverContent className='w-72'>
-        <div className='space-y-2'>
-          <div className='flex items-start justify-between gap-3'>
-            <span className='text-muted-foreground text-xs'>
-              {t('Request Model:')}
-            </span>
-            <span className='truncate font-mono text-xs font-medium'>
-              {props.modelName}
-            </span>
+    <span className='inline-flex items-center gap-1'>
+      <ModelBadgeContent {...props} />
+      <Popover>
+        <PopoverTrigger
+          render={
+            <button
+              type='button'
+              className='text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex size-5 shrink-0 items-center justify-center rounded-full transition-colors focus-visible:ring-2 focus-visible:outline-none'
+              aria-label={t('Actual Model:')}
+              onClick={(event) => event.stopPropagation()}
+            />
+          }
+        >
+          <Route className='size-3 shrink-0' />
+        </PopoverTrigger>
+        <PopoverContent className='w-72'>
+          <div className='space-y-2'>
+            <div className='flex items-start justify-between gap-3'>
+              <span className='text-muted-foreground text-xs'>
+                {t('Request Model:')}
+              </span>
+              <span className='truncate font-mono text-xs font-medium'>
+                {props.modelName}
+              </span>
+            </div>
+            <div className='flex items-start justify-between gap-3'>
+              <span className='text-muted-foreground text-xs'>
+                {t('Actual Model:')}
+              </span>
+              <span className='truncate font-mono text-xs font-medium'>
+                {props.actualModel}
+              </span>
+            </div>
           </div>
-          <div className='flex items-start justify-between gap-3'>
-            <span className='text-muted-foreground text-xs'>
-              {t('Actual Model:')}
-            </span>
-            <span className='truncate font-mono text-xs font-medium'>
-              {props.actualModel}
-            </span>
-          </div>
-        </div>
-      </PopoverContent>
-    </Popover>
+        </PopoverContent>
+      </Popover>
+    </span>
   )
 }

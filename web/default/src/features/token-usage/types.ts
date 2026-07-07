@@ -93,4 +93,5 @@ export interface TokenUsageQueryParams {
   end_timestamp: number
   granularity: 'hour' | 'day'
   detail_limit?: number
+  token_id?: number
 }

@@ -16,11 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { type ColumnDef } from '@tanstack/react-table'
+import { useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
+import type { ColumnDef } from '@tanstack/react-table'
 import { CircleAlert, GitBranch, Sparkles, KeyRound } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { CopyButton } from '@/components/copy-button'
 import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
@@ -72,6 +75,8 @@ interface DetailSegment {
   danger?: boolean
 }
 
+type QuickFilterField = 'channel' | 'model' | 'token'
+
 function formatRatioCompact(ratio: number | undefined): string {
   if (ratio == null || !Number.isFinite(ratio)) return '-'
   return ratio % 1 === 0
@@ -95,6 +100,12 @@ function getGroupRatioText(other: LogOtherData | null): string | null {
   }
 
   return null
+}
+
+function getDetailSegmentClassName(segment: DetailSegment): string {
+  if (segment.muted) return 'text-muted-foreground/60'
+  if (segment.danger) return 'text-red-600 dark:text-red-400'
+  return 'text-foreground'
 }
 
 function splitQuotaDisplay(value: string): { prefix: string; amount: string } {
@@ -225,8 +236,9 @@ function buildTypeDetailSegments(
   } else {
     const isPerCall = isPerCallBilling(other.model_price)
     if (isPerCall) {
+      const modelPrice = other.model_price ?? 0
       segments.push({
-        text: `${t('Per-call')} · ${formatBillingCurrencyFromUSD(other.model_price!, priceOpts)}`,
+        text: `${t('Per-call')} · ${formatBillingCurrencyFromUSD(modelPrice, priceOpts)}`,
       })
     } else if (other.model_ratio != null) {
       const inputPriceUSD = other.model_ratio * 2.0
@@ -293,6 +305,27 @@ function buildTypeDetailSegments(
 
 export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
   const { t } = useTranslation()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const applyQuickFilter = (
+    field: QuickFilterField,
+    value: string | number
+  ) => {
+    const filterValue = String(value).trim()
+    if (!filterValue) return
+
+    void navigate({
+      to: '/usage-logs/$section',
+      params: { section: 'common' },
+      search: (prev) => ({
+        ...prev,
+        [field]: filterValue,
+        page: 1,
+      }),
+    })
+    void queryClient.invalidateQueries({ queryKey: ['logs'] })
+    void queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] })
+  }
   const columns: ColumnDef<UsageLog>[] = [
     {
       accessorKey: 'created_at',
@@ -373,11 +406,21 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                     <StatusBadge
                       label={channelIdDisplay}
                       autoColor={String(log.channel)}
-                      copyText={String(log.channel)}
+                      copyable={false}
+                      onClick={() => applyQuickFilter('channel', log.channel)}
                       size='sm'
                       showDot={false}
-                      className='font-mono'
+                      className='cursor-pointer font-mono hover:underline'
                     />
+                    <span onClick={(event) => event.stopPropagation()}>
+                      <CopyButton
+                        value={String(log.channel)}
+                        size='icon'
+                        tooltip={t('Copy to clipboard')}
+                        className='text-muted-foreground hover:text-foreground size-5'
+                        iconClassName='size-3'
+                      />
+                    </span>
                     {showMultiKeyIndex && (
                       <StatusBadge
                         label={String(multiKeyIndex)}
@@ -568,25 +611,46 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
 
       return (
         <div className='flex max-w-[200px] flex-col gap-0.5'>
-          <TooltipProvider delay={300}>
-            <Tooltip>
-              <TooltipTrigger render={<div className='max-w-full' />}>
-                <StatusBadge
-                  label={displayName}
-                  icon={KeyRound}
-                  copyText={sensitiveVisible ? tokenName : undefined}
-                  size='sm'
-                  showDot={false}
-                  className='border-border/60 bg-muted/30 text-foreground h-6 max-w-full gap-1.5 overflow-hidden rounded-md border px-2 py-0.5 [font-family:var(--font-body)]'
+          <div className='flex min-w-0 items-center gap-1'>
+            <TooltipProvider delay={300}>
+              <Tooltip>
+                <TooltipTrigger render={<div className='max-w-full min-w-0' />}>
+                  <StatusBadge
+                    label={displayName}
+                    icon={KeyRound}
+                    copyable={false}
+                    onClick={
+                      sensitiveVisible
+                        ? () => applyQuickFilter('token', tokenName)
+                        : undefined
+                    }
+                    size='sm'
+                    showDot={false}
+                    className={cn(
+                      'border-border/60 bg-muted/30 text-foreground h-6 max-w-full gap-1.5 overflow-hidden rounded-md border px-2 py-0.5 [font-family:var(--font-body)]',
+                      sensitiveVisible && 'cursor-pointer hover:underline'
+                    )}
+                  />
+                </TooltipTrigger>
+                {sensitiveVisible && tokenName.length > 16 && (
+                  <TooltipContent side='top' className='max-w-xs break-all'>
+                    {tokenName}
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+            {sensitiveVisible && (
+              <span onClick={(event) => event.stopPropagation()}>
+                <CopyButton
+                  value={tokenName}
+                  size='icon'
+                  tooltip={t('Copy token')}
+                  className='text-muted-foreground hover:text-foreground size-5'
+                  iconClassName='size-3'
                 />
-              </TooltipTrigger>
-              {sensitiveVisible && tokenName.length > 16 && (
-                <TooltipContent side='top' className='max-w-xs break-all'>
-                  {tokenName}
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
+              </span>
+            )}
+          </div>
           {metaParts.length > 0 && (
             <span className='text-muted-foreground/60 truncate [font-family:var(--font-body)] !text-xs'>
               {metaParts.join(' · ')}
@@ -608,11 +672,23 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const modelInfo = formatModelName(log)
 
         return (
-          <div className='flex w-fit flex-col gap-0.5'>
+          <div className='flex w-fit max-w-full items-center gap-1'>
             <ModelBadge
               modelName={modelInfo.name}
               actualModel={modelInfo.actualModel}
+              copyable={false}
+              onClick={() => applyQuickFilter('model', modelInfo.name)}
+              className='cursor-pointer hover:underline'
             />
+            <span onClick={(event) => event.stopPropagation()}>
+              <CopyButton
+                value={modelInfo.name}
+                size='icon'
+                tooltip={t('Copy to clipboard')}
+                className='text-muted-foreground hover:text-foreground size-5'
+                iconClassName='size-3'
+              />
+            </span>
           </div>
         )
       },
@@ -702,7 +778,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                     <Tooltip>
                       <TooltipTrigger
                         render={<CircleAlert className='size-3 text-red-500' />}
-                      ></TooltipTrigger>
+                      />
                       <TooltipContent>
                         <div className='space-y-0.5 text-xs'>
                           <p>
@@ -837,6 +913,31 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const segments = buildDetailSegments(log, other, t, isAdmin)
         const primary = segments[0]
         const hasMore = segments.length > 1
+        let detailContent = <span className='text-muted-foreground/40'>—</span>
+        if (log.content) {
+          detailContent = (
+            <span className='text-muted-foreground truncate group-hover:underline'>
+              {log.content}
+            </span>
+          )
+        }
+        if (primary) {
+          detailContent = (
+            <span
+              className={cn(
+                'truncate leading-snug group-hover:underline',
+                getDetailSegmentClassName(primary)
+              )}
+            >
+              {primary.text}
+              {hasMore && (
+                <span className='text-muted-foreground/40 ml-0.5'>
+                  +{segments.length - 1}
+                </span>
+              )}
+            </span>
+          )
+        }
 
         return (
           <>
@@ -846,31 +947,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
               onClick={() => setDialogOpen(true)}
               title={t('Click to view full details')}
             >
-              {primary ? (
-                <span
-                  className={cn(
-                    'truncate leading-snug group-hover:underline',
-                    primary.muted
-                      ? 'text-muted-foreground/60'
-                      : primary.danger
-                        ? 'text-red-600 dark:text-red-400'
-                        : 'text-foreground'
-                  )}
-                >
-                  {primary.text}
-                  {hasMore && (
-                    <span className='text-muted-foreground/40 ml-0.5'>
-                      +{segments.length - 1}
-                    </span>
-                  )}
-                </span>
-              ) : log.content ? (
-                <span className='text-muted-foreground truncate group-hover:underline'>
-                  {log.content}
-                </span>
-              ) : (
-                <span className='text-muted-foreground/40'>—</span>
-              )}
+              {detailContent}
             </button>
             <DetailsDialog
               log={log}

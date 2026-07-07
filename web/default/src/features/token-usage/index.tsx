@@ -28,10 +28,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { formatQuotaWithCurrency } from '@/lib/currency'
-import dayjs from '@/lib/dayjs'
-import { VCHART_OPTION } from '@/lib/vchart'
-import { useTheme } from '@/context/theme-provider'
+import { SectionPageLayout } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -44,7 +41,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { SectionPageLayout } from '@/components/layout'
+import { useTheme } from '@/context/theme-provider'
+import { formatQuotaWithCurrency } from '@/lib/currency'
+import dayjs from '@/lib/dayjs'
+import { VCHART_OPTION } from '@/lib/vchart'
 import { getTokenUsageSelf } from './api'
 import type {
   TokenUsageDetailItem,
@@ -157,11 +157,23 @@ function formatCompactWithFullValue(value: unknown) {
   return compact === full ? full : `${compact} (${full})`
 }
 
-function formatChartTokenLabel(
-  value: unknown,
-  datum?: { tokens?: unknown }
-) {
+function formatChartTokenLabel(value: unknown, datum?: { tokens?: unknown }) {
   return formatCompactTokenCount(datum?.tokens ?? value)
+}
+
+function chartTextColor(theme: string | undefined) {
+  return theme === 'dark' ? '#e5e7eb' : '#1f2937'
+}
+
+function chartMutedTextColor(theme: string | undefined) {
+  return theme === 'dark' ? '#cbd5e1' : '#475569'
+}
+
+function chartEmptyTitle(loading: boolean, hasData: boolean, text: string) {
+  if (loading || hasData) {
+    return undefined
+  }
+  return { visible: true, text }
 }
 
 function cacheTokenParts(row: TokenUsageDetailItem) {
@@ -221,7 +233,7 @@ function buildCallTrendValues(
         { length: bucketCount },
         (_, index) => startBucket + index * stepSeconds
       )
-    : Array.from(countByTimestamp.keys()).sort((a, b) => a - b)
+    : [...countByTimestamp.keys()].sort((a, b) => a - b)
 
   return timestamps.map((timestamp) => ({
     time: formatTrendTimeLabel(timestamp, params.granularity),
@@ -388,6 +400,65 @@ function RankMetric({
   )
 }
 
+function TokenTrendSelector({
+  items,
+  selectedTokenId,
+  colorByTokenId,
+  onSelect,
+}: {
+  items: TokenUsageTokenItem[]
+  selectedTokenId: number | null
+  colorByTokenId: Map<number, string>
+  onSelect: (tokenId: number | null) => void
+}) {
+  const { t } = useTranslation()
+
+  if (items.length === 0) {
+    return null
+  }
+
+  return (
+    <div className='border-border/70 flex max-h-28 flex-wrap gap-2 overflow-y-auto border-t pt-3'>
+      <Button
+        type='button'
+        size='sm'
+        variant={selectedTokenId === null ? 'default' : 'outline'}
+        onClick={() => onSelect(null)}
+        aria-pressed={selectedTokenId === null}
+        className='h-8'
+      >
+        {t('All')}
+      </Button>
+      {items.map((item, index) => {
+        const active = item.token_id === selectedTokenId
+        const color = colorByTokenId.get(item.token_id) ?? apiKeyColor(index)
+        const label = tokenUsageLabel(item)
+        return (
+          <Button
+            key={item.token_id}
+            type='button'
+            size='sm'
+            variant={active ? 'default' : 'outline'}
+            onClick={() => onSelect(item.token_id)}
+            aria-pressed={active}
+            title={`${label}: ${formatInteger(item.count)} ${t('Requests')}`}
+            className='h-8 max-w-[220px] justify-start gap-1.5 px-2.5'
+          >
+            <span
+              className='size-2 shrink-0 rounded-full'
+              style={{ backgroundColor: color }}
+            />
+            <span className='truncate'>{label}</span>
+            <span className='text-xs opacity-70'>
+              {formatCompactTokenCount(item.count)}
+            </span>
+          </Button>
+        )
+      })}
+    </div>
+  )
+}
+
 function TokenRankList({
   items,
   colorByKey,
@@ -422,7 +493,7 @@ function TokenRankList({
             <div className='flex items-start justify-between gap-3'>
               <div className='flex min-w-0 items-center gap-2'>
                 <div
-                  className='flex size-7 shrink-0 items-center justify-center rounded-md border bg-background text-xs font-bold'
+                  className='bg-background flex size-7 shrink-0 items-center justify-center rounded-md border text-xs font-bold'
                   style={{ borderColor: color, color }}
                 >
                   {index + 1}
@@ -560,6 +631,7 @@ export function TokenUsage() {
   const [rangeValue, setRangeValue] = useState('0')
   const [customRange, setCustomRange] = useState(getDefaultCustomRange)
   const [refreshNonce, setRefreshNonce] = useState(0)
+  const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null)
   const isCustomRange = rangeValue === CUSTOM_RANGE_VALUE
   const dateTimeInputStyle = useMemo<CSSProperties>(
     () => ({ colorScheme: resolvedTheme === 'dark' ? 'dark' : 'light' }),
@@ -567,8 +639,17 @@ export function TokenUsage() {
   )
   const params = useMemo(
     () => buildParams(rangeValue, customRange),
-    [rangeValue, customRange, refreshNonce]
+    [rangeValue, customRange]
   )
+  const selectedParams = useMemo(
+    () =>
+      selectedTokenId === null
+        ? params
+        : { ...params, token_id: selectedTokenId },
+    [params, selectedTokenId]
+  )
+  const chartLabelColor = chartTextColor(resolvedTheme)
+  const chartAxisColor = chartMutedTextColor(resolvedTheme)
 
   const handleCustomStartChange = (value: string) => {
     const startTimestamp = parseDateTimeLocal(value)
@@ -594,13 +675,38 @@ export function TokenUsage() {
     })
   }
 
-  const query = useQuery({
-    queryKey: ['token-usage-self', params],
+  const allQuery = useQuery({
+    queryKey: ['token-usage-self', 'all', params, refreshNonce],
     queryFn: () => getTokenUsageSelf(params),
   })
 
-  const data = query.data?.data ?? emptyTokenUsage()
-  const loading = query.isLoading || query.isFetching
+  const selectedQuery = useQuery({
+    queryKey: ['token-usage-self', 'selected', selectedParams, refreshNonce],
+    queryFn: () => getTokenUsageSelf(selectedParams),
+    enabled: selectedTokenId !== null,
+  })
+
+  const allData = allQuery.data?.data ?? emptyTokenUsage()
+  const data =
+    selectedTokenId === null
+      ? allData
+      : (selectedQuery.data?.data ?? emptyTokenUsage())
+  const loading =
+    allQuery.isLoading ||
+    allQuery.isFetching ||
+    (selectedTokenId !== null &&
+      (selectedQuery.isLoading || selectedQuery.isFetching))
+
+  const tokenColorById = useMemo(
+    () =>
+      new Map(
+        allData.by_token.map((item: TokenUsageTokenItem, index) => [
+          item.token_id,
+          apiKeyColor(index),
+        ])
+      ),
+    [allData.by_token]
+  )
 
   const apiKeyValues = useMemo(
     () =>
@@ -609,9 +715,9 @@ export function TokenUsage() {
         tokens: item.total_tokens,
         requests: item.count,
         cost: item.quota,
-        color: apiKeyColor(index),
+        color: tokenColorById.get(item.token_id) ?? apiKeyColor(index),
       })),
-    [data.by_token]
+    [data.by_token, tokenColorById]
   )
 
   const apiKeyShareValues = useMemo(
@@ -620,9 +726,9 @@ export function TokenUsage() {
         key: tokenUsageLabel(item),
         tokens: item.total_tokens,
         requests: item.count,
-        color: apiKeyColor(index),
+        color: tokenColorById.get(item.token_id) ?? apiKeyColor(index),
       })),
-    [data.by_token]
+    [data.by_token, tokenColorById]
   )
 
   const apiKeyColorScale = useMemo(
@@ -631,8 +737,7 @@ export function TokenUsage() {
   )
 
   const apiKeyColorByKey = useMemo(
-    () =>
-      new Map(apiKeyValues.map((item) => [item.key, item.color] as const)),
+    () => new Map(apiKeyValues.map((item) => [item.key, item.color] as const)),
     [apiKeyValues]
   )
 
@@ -653,12 +758,23 @@ export function TokenUsage() {
       axes: [
         {
           orient: 'bottom',
-          label: { autoHide: true, autoLimit: true },
+          label: {
+            autoHide: true,
+            autoLimit: true,
+            style: { fill: chartAxisColor, fontSize: 12, fontWeight: 500 },
+          },
         },
         {
           orient: 'left',
-          title: { visible: true, text: t('Requests') },
-          label: { formatMethod: formatCompactTokenCount },
+          title: {
+            visible: true,
+            text: t('Requests'),
+            style: { fill: chartLabelColor, fontSize: 12, fontWeight: 600 },
+          },
+          label: {
+            formatMethod: formatCompactTokenCount,
+            style: { fill: chartAxisColor, fontSize: 12, fontWeight: 500 },
+          },
         },
       ],
       tooltip: {
@@ -676,15 +792,22 @@ export function TokenUsage() {
           ],
         },
       },
-      title: loading
-        ? undefined
-        : requestTrendValues.length === 0
-          ? { visible: true, text: t('No usage data') }
-          : undefined,
+      title: chartEmptyTitle(
+        loading,
+        requestTrendValues.length > 0,
+        t('No usage data')
+      ),
       theme: resolvedTheme === 'dark' ? 'dark' : 'light',
       background: 'transparent',
     }),
-    [loading, requestTrendValues, resolvedTheme, t]
+    [
+      chartAxisColor,
+      chartLabelColor,
+      loading,
+      requestTrendValues,
+      resolvedTheme,
+      t,
+    ]
   )
 
   const apiKeyBarSpec = useMemo(
@@ -698,21 +821,37 @@ export function TokenUsage() {
       axes: [
         {
           orient: 'bottom',
-          label: { autoRotate: true, autoHide: true, autoLimit: true },
+          label: {
+            autoRotate: true,
+            autoHide: true,
+            autoLimit: true,
+            style: { fill: chartAxisColor, fontSize: 12, fontWeight: 500 },
+          },
         },
         {
           orient: 'left',
-          title: { visible: true, text: t('Tokens') },
-          label: { formatMethod: formatCompactTokenCount },
+          title: {
+            visible: true,
+            text: t('Tokens'),
+            style: { fill: chartLabelColor, fontSize: 12, fontWeight: 600 },
+          },
+          label: {
+            formatMethod: formatCompactTokenCount,
+            style: { fill: chartAxisColor, fontSize: 12, fontWeight: 500 },
+          },
         },
       ],
       label: {
-        visible: apiKeyValues.length > 0 && apiKeyValues.length <= 12,
+        visible: apiKeyValues.length > 0 && apiKeyValues.length <= 8,
         position: 'outside',
         formatMethod: formatChartTokenLabel,
-        style: { fontSize: 11 },
+        style: { fill: chartLabelColor, fontSize: 11, fontWeight: 600 },
       },
-      legends: { visible: apiKeyValues.length <= 12, orient: 'bottom' },
+      legends: {
+        visible: apiKeyValues.length <= 12,
+        orient: 'bottom',
+        item: { label: { style: { fill: chartLabelColor, fontSize: 12 } } },
+      },
       tooltip: {
         mark: {
           content: [
@@ -734,15 +873,23 @@ export function TokenUsage() {
           ],
         },
       },
-      title: loading
-        ? undefined
-        : apiKeyValues.length === 0
-          ? { visible: true, text: t('No usage data') }
-          : undefined,
+      title: chartEmptyTitle(
+        loading,
+        apiKeyValues.length > 0,
+        t('No usage data')
+      ),
       theme: resolvedTheme === 'dark' ? 'dark' : 'light',
       background: 'transparent',
     }),
-    [apiKeyColorScale, apiKeyValues, loading, resolvedTheme, t]
+    [
+      apiKeyColorScale,
+      apiKeyValues,
+      chartAxisColor,
+      chartLabelColor,
+      loading,
+      resolvedTheme,
+      t,
+    ]
   )
 
   const apiKeyShareSpec = useMemo(
@@ -755,11 +902,15 @@ export function TokenUsage() {
       outerRadius: 0.82,
       innerRadius: 0.52,
       padAngle: 0.8,
-      legends: { visible: true, orient: 'bottom' },
+      legends: {
+        visible: true,
+        orient: 'bottom',
+        item: { label: { style: { fill: chartLabelColor, fontSize: 12 } } },
+      },
       label: {
         visible: apiKeyShareValues.length > 0 && apiKeyShareValues.length <= 8,
         formatMethod: formatChartTokenLabel,
-        style: { fontSize: 11 },
+        style: { fill: chartLabelColor, fontSize: 11, fontWeight: 600 },
       },
       tooltip: {
         mark: {
@@ -777,15 +928,22 @@ export function TokenUsage() {
           ],
         },
       },
-      title: loading
-        ? undefined
-        : apiKeyShareValues.length === 0
-          ? { visible: true, text: t('No usage data') }
-          : undefined,
+      title: chartEmptyTitle(
+        loading,
+        apiKeyShareValues.length > 0,
+        t('No usage data')
+      ),
       theme: resolvedTheme === 'dark' ? 'dark' : 'light',
       background: 'transparent',
     }),
-    [apiKeyColorScale, apiKeyShareValues, loading, resolvedTheme, t]
+    [
+      apiKeyColorScale,
+      apiKeyShareValues,
+      chartLabelColor,
+      loading,
+      resolvedTheme,
+      t,
+    ]
   )
 
   return (
@@ -871,9 +1029,15 @@ export function TokenUsage() {
           </div>
 
           <Panel title={t('Call Trend')}>
-            <div className='h-[280px]'>
+            <div className='h-[300px]'>
               <VChart spec={requestTrendSpec} option={VCHART_OPTION} />
             </div>
+            <TokenTrendSelector
+              items={allData.by_token as TokenUsageTokenItem[]}
+              selectedTokenId={selectedTokenId}
+              colorByTokenId={tokenColorById}
+              onSelect={setSelectedTokenId}
+            />
           </Panel>
 
           <div className='grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.75fr)]'>

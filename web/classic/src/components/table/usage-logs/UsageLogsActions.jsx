@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import { Tag, Space, Skeleton } from '@douyinfe/semi-ui';
+import { Tag, Space, Skeleton, Select, Typography } from '@douyinfe/semi-ui';
 import { renderQuota } from '../../../helpers';
 import CompactModeToggle from '../../common/ui/CompactModeToggle';
 import { useMinimumLoadingTime } from '../../../hooks/common/useMinimumLoadingTime';
@@ -29,6 +29,8 @@ const LogsActions = ({
   showStat,
   compactMode,
   setCompactMode,
+  autoRefreshSeconds,
+  setAutoRefreshSeconds,
   t,
 }) => {
   const showSkeleton = useMinimumLoadingTime(loadingStat);
@@ -83,11 +85,30 @@ const LogsActions = ({
         </Space>
       </Skeleton>
 
-      <CompactModeToggle
-        compactMode={compactMode}
-        setCompactMode={setCompactMode}
-        t={t}
-      />
+      <Space>
+        <Space spacing={4}>
+          <Typography.Text size='small' type='secondary'>
+            {t('自动刷新')}
+          </Typography.Text>
+          <Select
+            value={String(autoRefreshSeconds)}
+            onChange={(value) => setAutoRefreshSeconds(Number(value))}
+            size='small'
+            style={{ width: 88 }}
+          >
+            <Select.Option value='0'>{t('禁用')}</Select.Option>
+            <Select.Option value='5'>5s</Select.Option>
+            <Select.Option value='10'>10s</Select.Option>
+            <Select.Option value='30'>30s</Select.Option>
+            <Select.Option value='60'>60s</Select.Option>
+          </Select>
+        </Space>
+        <CompactModeToggle
+          compactMode={compactMode}
+          setCompactMode={setCompactMode}
+          t={t}
+        />
+      </Space>
     </div>
   );
 };

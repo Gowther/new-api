@@ -25,6 +25,7 @@ import {
   Tooltip,
   Popover,
   Typography,
+  Button,
 } from '@douyinfe/semi-ui';
 import {
   renderGroup,
@@ -35,7 +36,7 @@ import {
   renderModelPriceSimple,
   renderTieredModelPriceSimple,
 } from '../../../helpers';
-import { IconHelpCircle } from '@douyinfe/semi-icons';
+import { IconCopy, IconHelpCircle } from '@douyinfe/semi-icons';
 import { CircleAlert, Route, Sparkles } from 'lucide-react';
 
 const colors = [
@@ -144,10 +145,7 @@ function renderType(type, t) {
 
 function buildStreamStatusTooltip(ss, t) {
   if (!ss) return null;
-  const lines = [
-    t('流状态') + '：' + t('异常'),
-    (ss.end_reason || 'unknown'),
-  ];
+  const lines = [t('流状态') + '：' + t('异常'), ss.end_reason || 'unknown'];
   if (ss.error_count > 0) {
     lines.push(`${t('软错误')}: ${ss.error_count}`);
   }
@@ -185,11 +183,7 @@ function renderIsStream(bool, t, streamStatus) {
                 userSelect: 'none',
               }}
             >
-              <CircleAlert
-                size={14}
-                strokeWidth={2.5}
-                color='currentColor'
-              />
+              <CircleAlert size={14} strokeWidth={2.5} color='currentColor' />
             </span>
           </Tooltip>
         )}
@@ -269,18 +263,43 @@ function renderBillingTag(record, t) {
   return null;
 }
 
-function renderModelName(record, copyText, t) {
+function CopyTextButton({ text, copyText, t }) {
+  if (!text) {
+    return null;
+  }
+  return (
+    <Button
+      icon={<IconCopy />}
+      size='small'
+      theme='borderless'
+      type='tertiary'
+      aria-label={t('复制')}
+      style={{ height: 22, minWidth: 22, padding: 2 }}
+      onClick={(event) => {
+        copyText(event, text);
+      }}
+    />
+  );
+}
+
+function renderModelName(record, copyText, applyColumnFilter, t) {
   let other = getLogOther(record.other);
   let modelMapped =
     other?.is_model_mapped &&
     other?.upstream_model_name &&
     other?.upstream_model_name !== '';
   if (!modelMapped) {
-    return renderModelTag(record.model_name, {
-      onClick: (event) => {
-        copyText(event, record.model_name).then((r) => {});
-      },
-    });
+    return (
+      <Space spacing={4}>
+        {renderModelTag(record.model_name, {
+          onClick: (event) => {
+            event.stopPropagation();
+            applyColumnFilter?.('model_name', record.model_name);
+          },
+        })}
+        <CopyTextButton text={record.model_name} copyText={copyText} t={t} />
+      </Space>
+    );
   } else {
     return (
       <>
@@ -295,7 +314,8 @@ function renderModelName(record, copyText, t) {
                     </Typography.Text>
                     {renderModelTag(record.model_name, {
                       onClick: (event) => {
-                        copyText(event, record.model_name).then((r) => {});
+                        event.stopPropagation();
+                        applyColumnFilter?.('model_name', record.model_name);
                       },
                     })}
                   </div>
@@ -305,8 +325,10 @@ function renderModelName(record, copyText, t) {
                     </Typography.Text>
                     {renderModelTag(other.upstream_model_name, {
                       onClick: (event) => {
-                        copyText(event, other.upstream_model_name).then(
-                          (r) => {},
+                        event.stopPropagation();
+                        applyColumnFilter?.(
+                          'model_name',
+                          other.upstream_model_name,
                         );
                       },
                     })}
@@ -317,7 +339,8 @@ function renderModelName(record, copyText, t) {
           >
             {renderModelTag(record.model_name, {
               onClick: (event) => {
-                copyText(event, record.model_name).then((r) => {});
+                event.stopPropagation();
+                applyColumnFilter?.('model_name', record.model_name);
               },
               suffixIcon: (
                 <Route
@@ -325,6 +348,11 @@ function renderModelName(record, copyText, t) {
                 />
               ),
             })}
+            <CopyTextButton
+              text={record.model_name}
+              copyText={copyText}
+              t={t}
+            />
           </Popover>
         </Space>
       </>
@@ -461,7 +489,11 @@ function getUsageLogDetailSummary(record, text, billingDisplayMode, t) {
     };
   }
 
-  const summaryOpts = { ...other, displayMode: billingDisplayMode, outputMode: 'segments' };
+  const summaryOpts = {
+    ...other,
+    displayMode: billingDisplayMode,
+    outputMode: 'segments',
+  };
 
   if (other?.billing_mode === 'tiered_expr') {
     return { segments: renderTieredModelPriceSimple(summaryOpts) };
@@ -478,6 +510,7 @@ export const getLogsColumns = ({
   t,
   COLUMN_KEYS,
   copyText,
+  applyColumnFilter,
   showUserInfoFunc,
   openChannelAffinityUsageCacheModal,
   isAdminUser,
@@ -530,9 +563,18 @@ export const getLogsColumns = ({
                   <Tag
                     color={colors[parseInt(text) % colors.length]}
                     shape='circle'
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      applyColumnFilter?.('channel', text);
+                    }}
                   >
                     {text}
                   </Tag>
+                  <CopyTextButton
+                    text={String(text)}
+                    copyText={copyText}
+                    t={t}
+                  />
                 </span>
               </Tooltip>
               {showMarker && (
@@ -622,12 +664,14 @@ export const getLogsColumns = ({
               color='grey'
               shape='circle'
               onClick={(event) => {
-                copyText(event, text);
+                event.stopPropagation();
+                applyColumnFilter?.('token_name', text);
               }}
             >
               {' '}
               {t(text)}{' '}
             </Tag>
+            <CopyTextButton text={text} copyText={copyText} t={t} />
           </div>
         ) : (
           <></>
@@ -688,7 +732,7 @@ export const getLogsColumns = ({
           record.type === 2 ||
           record.type === 5 ||
           record.type === 6 ? (
-          <>{renderModelName(record, copyText, t)}</>
+          <>{renderModelName(record, copyText, applyColumnFilter, t)}</>
         ) : (
           <></>
         );

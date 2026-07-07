@@ -113,6 +113,21 @@ function formatChartTokenLabel(value, datum) {
   return formatCompactTokenCount(datum?.tokens ?? value);
 }
 
+function chartTextColor(theme) {
+  return theme === 'dark' ? '#e5e7eb' : '#1f2937';
+}
+
+function chartMutedTextColor(theme) {
+  return theme === 'dark' ? '#cbd5e1' : '#475569';
+}
+
+function chartEmptyTitle(loading, hasData, text) {
+  if (loading || hasData) {
+    return undefined;
+  }
+  return { visible: true, text };
+}
+
 function getCacheTokenParts(row) {
   return {
     read: row?.cache_read_tokens || 0,
@@ -199,7 +214,7 @@ function buildCallTrendValues(trend, params) {
         { length: bucketCount },
         (_, index) => startBucket + index * stepSeconds,
       )
-    : Array.from(countByTimestamp.keys()).sort((a, b) => a - b);
+    : [...countByTimestamp.keys()].sort((a, b) => a - b);
 
   return timestamps.map((timestamp) => ({
     time: formatTrendTimeLabel(timestamp, params.granularity),
@@ -347,6 +362,58 @@ function RankMetric({ label, value, fullValue }) {
   );
 }
 
+function TokenTrendSelector({
+  items,
+  selectedTokenId,
+  colorByTokenId,
+  onSelect,
+  t,
+}) {
+  if (items.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className='flex max-h-28 flex-wrap gap-2 overflow-y-auto border-t border-gray-200 pt-3 dark:border-gray-700'>
+      <Button
+        theme={selectedTokenId === null ? 'solid' : 'outline'}
+        size='small'
+        onClick={() => onSelect(null)}
+        aria-pressed={selectedTokenId === null}
+      >
+        {t('全部')}
+      </Button>
+      {items.map((item, index) => {
+        const active = item.token_id === selectedTokenId;
+        const color = colorByTokenId.get(item.token_id) || apiKeyColor(index);
+        const label = tokenUsageLabel(item);
+        return (
+          <Button
+            key={item.token_id}
+            theme={active ? 'solid' : 'outline'}
+            size='small'
+            onClick={() => onSelect(item.token_id)}
+            aria-pressed={active}
+            title={`${label}: ${formatInteger(item.count)} ${t('请求数')}`}
+            className='max-w-[220px]'
+          >
+            <span className='inline-flex min-w-0 items-center gap-1.5'>
+              <span
+                className='h-2 w-2 shrink-0 rounded-full'
+                style={{ backgroundColor: color }}
+              />
+              <span className='truncate'>{label}</span>
+              <span className='text-xs opacity-70'>
+                {formatCompactTokenCount(item.count)}
+              </span>
+            </span>
+          </Button>
+        );
+      })}
+    </div>
+  );
+}
+
 function TokenRankList({ items, colorByKey, t }) {
   const max = Math.max(...items.map((item) => item.quota), 1);
   const totalQuota = items.reduce((sum, item) => sum + item.quota, 0);
@@ -442,14 +509,25 @@ const TokenUsage = () => {
   const [rangeIndex, setRangeIndex] = useState('0');
   const [customRange, setCustomRange] = useState(getDefaultCustomRange);
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const [selectedTokenId, setSelectedTokenId] = useState(null);
+  const [allUsage, setAllUsage] = useState(emptyUsage);
   const [usage, setUsage] = useState(emptyUsage);
   const [loading, setLoading] = useState(false);
   const isCustomRange = rangeIndex === CUSTOM_RANGE_VALUE;
 
   const params = useMemo(
     () => buildParams(rangeIndex, customRange),
-    [rangeIndex, customRange, refreshNonce],
+    [rangeIndex, customRange],
   );
+  const selectedParams = useMemo(
+    () =>
+      selectedTokenId === null
+        ? params
+        : { ...params, token_id: selectedTokenId },
+    [params, selectedTokenId],
+  );
+  const chartLabelColor = chartTextColor(actualTheme);
+  const chartAxisColor = chartMutedTextColor(actualTheme);
   const dateTimeInputStyle = useMemo(
     () => ({
       backgroundColor: 'var(--semi-color-bg-1)',
@@ -492,7 +570,22 @@ const TokenUsage = () => {
         showError(res.data?.message || t('加载失败'));
         return;
       }
-      setUsage(res.data?.data || emptyUsage);
+      const nextAllUsage = res.data?.data || emptyUsage;
+      setAllUsage(nextAllUsage);
+
+      if (selectedTokenId === null) {
+        setUsage(nextAllUsage);
+        return;
+      }
+
+      const selectedRes = await API.get('/api/token_usage/self', {
+        params: selectedParams,
+      });
+      if (!selectedRes.data?.success) {
+        showError(selectedRes.data?.message || t('加载失败'));
+        return;
+      }
+      setUsage(selectedRes.data?.data || emptyUsage);
     } catch (error) {
       showError(error);
     } finally {
@@ -502,7 +595,18 @@ const TokenUsage = () => {
 
   useEffect(() => {
     loadUsage();
-  }, [params]);
+  }, [params, selectedParams, selectedTokenId, refreshNonce]);
+
+  const tokenColorById = useMemo(
+    () =>
+      new Map(
+        allUsage.by_token.map((item, index) => [
+          item.token_id,
+          apiKeyColor(index),
+        ]),
+      ),
+    [allUsage.by_token],
+  );
 
   const apiKeyValues = useMemo(
     () =>
@@ -511,9 +615,9 @@ const TokenUsage = () => {
         tokens: item.total_tokens,
         requests: item.count,
         cost: item.quota,
-        color: apiKeyColor(index),
+        color: tokenColorById.get(item.token_id) || apiKeyColor(index),
       })),
-    [usage.by_token],
+    [usage.by_token, tokenColorById],
   );
 
   const apiKeyShareValues = useMemo(
@@ -522,9 +626,9 @@ const TokenUsage = () => {
         key: tokenUsageLabel(item),
         tokens: item.total_tokens,
         requests: item.count,
-        color: apiKeyColor(index),
+        color: tokenColorById.get(item.token_id) || apiKeyColor(index),
       })),
-    [usage.by_token],
+    [usage.by_token, tokenColorById],
   );
 
   const apiKeyColorScale = useMemo(
@@ -554,12 +658,23 @@ const TokenUsage = () => {
       axes: [
         {
           orient: 'bottom',
-          label: { autoHide: true, autoLimit: true },
+          label: {
+            autoHide: true,
+            autoLimit: true,
+            style: { fill: chartAxisColor, fontSize: 12, fontWeight: 500 },
+          },
         },
         {
           orient: 'left',
-          title: { visible: true, text: t('请求数') },
-          label: { formatMethod: formatCompactTokenCount },
+          title: {
+            visible: true,
+            text: t('请求数'),
+            style: { fill: chartLabelColor, fontSize: 12, fontWeight: 600 },
+          },
+          label: {
+            formatMethod: formatCompactTokenCount,
+            style: { fill: chartAxisColor, fontSize: 12, fontWeight: 500 },
+          },
         },
       ],
       tooltip: {
@@ -575,13 +690,22 @@ const TokenUsage = () => {
           ],
         },
       },
-      title:
-        !loading && requestTrendValues.length === 0
-          ? { visible: true, text: t('暂无用量数据') }
-          : undefined,
+      title: chartEmptyTitle(
+        loading,
+        requestTrendValues.length > 0,
+        t('暂无用量数据'),
+      ),
+      theme: actualTheme === 'dark' ? 'dark' : 'light',
       background: 'transparent',
     }),
-    [loading, requestTrendValues, t],
+    [
+      actualTheme,
+      chartAxisColor,
+      chartLabelColor,
+      loading,
+      requestTrendValues,
+      t,
+    ],
   );
 
   const apiKeyBarSpec = useMemo(
@@ -595,21 +719,37 @@ const TokenUsage = () => {
       axes: [
         {
           orient: 'bottom',
-          label: { autoRotate: true, autoHide: true, autoLimit: true },
+          label: {
+            autoRotate: true,
+            autoHide: true,
+            autoLimit: true,
+            style: { fill: chartAxisColor, fontSize: 12, fontWeight: 500 },
+          },
         },
         {
           orient: 'left',
-          title: { visible: true, text: 'Tokens' },
-          label: { formatMethod: formatCompactTokenCount },
+          title: {
+            visible: true,
+            text: 'Tokens',
+            style: { fill: chartLabelColor, fontSize: 12, fontWeight: 600 },
+          },
+          label: {
+            formatMethod: formatCompactTokenCount,
+            style: { fill: chartAxisColor, fontSize: 12, fontWeight: 500 },
+          },
         },
       ],
       label: {
-        visible: apiKeyValues.length > 0 && apiKeyValues.length <= 12,
+        visible: apiKeyValues.length > 0 && apiKeyValues.length <= 8,
         position: 'outside',
         formatMethod: formatChartTokenLabel,
-        style: { fontSize: 11 },
+        style: { fill: chartLabelColor, fontSize: 11, fontWeight: 600 },
       },
-      legends: { visible: apiKeyValues.length <= 12, orient: 'bottom' },
+      legends: {
+        visible: apiKeyValues.length <= 12,
+        orient: 'bottom',
+        item: { label: { style: { fill: chartLabelColor, fontSize: 12 } } },
+      },
       tooltip: {
         mark: {
           content: [
@@ -628,13 +768,23 @@ const TokenUsage = () => {
           ],
         },
       },
-      title:
-        !loading && apiKeyValues.length === 0
-          ? { visible: true, text: t('暂无用量数据') }
-          : undefined,
+      title: chartEmptyTitle(
+        loading,
+        apiKeyValues.length > 0,
+        t('暂无用量数据'),
+      ),
+      theme: actualTheme === 'dark' ? 'dark' : 'light',
       background: 'transparent',
     }),
-    [apiKeyColorScale, apiKeyValues, loading, t],
+    [
+      actualTheme,
+      apiKeyColorScale,
+      apiKeyValues,
+      chartAxisColor,
+      chartLabelColor,
+      loading,
+      t,
+    ],
   );
 
   const apiKeyShareSpec = useMemo(
@@ -647,11 +797,15 @@ const TokenUsage = () => {
       outerRadius: 0.82,
       innerRadius: 0.52,
       padAngle: 0.8,
-      legends: { visible: true, orient: 'bottom' },
+      legends: {
+        visible: true,
+        orient: 'bottom',
+        item: { label: { style: { fill: chartLabelColor, fontSize: 12 } } },
+      },
       label: {
         visible: apiKeyShareValues.length > 0 && apiKeyShareValues.length <= 8,
         formatMethod: formatChartTokenLabel,
-        style: { fontSize: 11 },
+        style: { fill: chartLabelColor, fontSize: 11, fontWeight: 600 },
       },
       tooltip: {
         mark: {
@@ -667,13 +821,22 @@ const TokenUsage = () => {
           ],
         },
       },
-      title:
-        !loading && apiKeyShareValues.length === 0
-          ? { visible: true, text: t('暂无用量数据') }
-          : undefined,
+      title: chartEmptyTitle(
+        loading,
+        apiKeyShareValues.length > 0,
+        t('暂无用量数据'),
+      ),
+      theme: actualTheme === 'dark' ? 'dark' : 'light',
       background: 'transparent',
     }),
-    [apiKeyColorScale, apiKeyShareValues, loading, t],
+    [
+      actualTheme,
+      apiKeyColorScale,
+      apiKeyShareValues,
+      chartLabelColor,
+      loading,
+      t,
+    ],
   );
 
   const columns = useMemo(
@@ -809,9 +972,16 @@ const TokenUsage = () => {
           </div>
 
           <Panel title={t('调用趋势')}>
-            <div className='h-72'>
+            <div className='h-80'>
               <VChart spec={requestTrendSpec} option={CHART_CONFIG} />
             </div>
+            <TokenTrendSelector
+              items={allUsage.by_token}
+              selectedTokenId={selectedTokenId}
+              colorByTokenId={tokenColorById}
+              onSelect={setSelectedTokenId}
+              t={t}
+            />
           </Panel>
 
           <div className='grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.75fr)]'>

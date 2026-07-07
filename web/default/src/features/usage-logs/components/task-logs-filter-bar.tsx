@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQueryClient, useIsFetching } from '@tanstack/react-query'
 import { useNavigate, getRouteApi } from '@tanstack/react-router'
-import { type Table } from '@tanstack/react-table'
+import type { Table } from '@tanstack/react-table'
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -33,6 +33,7 @@ import {
   LogsFilterInput,
   LogsFilterToolbar,
 } from './logs-filter-toolbar'
+import { UsageLogsAutoRefreshControl } from './usage-logs-auto-refresh-control'
 
 const route = getRouteApi('/_authenticated/usage-logs/$section')
 
@@ -219,6 +220,7 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
       }
       mobileFilterCount={[filterValue, filters.channel].filter(Boolean).length}
       hasActiveFilters={hasAdditionalFilters}
+      actionStart={<UsageLogsAutoRefreshControl />}
       onSearch={handleApply}
       searchLoading={fetchingLogs > 0}
       onReset={handleReset}

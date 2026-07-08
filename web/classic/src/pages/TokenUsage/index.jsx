@@ -37,19 +37,24 @@ const RANGE_OPTIONS = [
 const CUSTOM_RANGE_VALUE = 'custom';
 
 const API_KEY_COLORS = [
-  '#2563eb',
-  '#10b981',
+  '#3b82f6',
+  '#22c55e',
   '#f59e0b',
-  '#e11d48',
-  '#8b5cf6',
+  '#f43f5e',
+  '#a78bfa',
   '#06b6d4',
   '#84cc16',
-  '#64748b',
   '#f97316',
   '#14b8a6',
-  '#d946ef',
-  '#0ea5e9',
+  '#e879f9',
+  '#38bdf8',
+  '#facc15',
 ];
+
+const DEFAULT_CALL_TREND_COLORS = {
+  light: '#2563eb',
+  dark: '#60a5fa',
+};
 
 const TOKEN_COUNT_UNITS = [
   { value: 1000000000000, suffix: 'T' },
@@ -607,6 +612,12 @@ const TokenUsage = () => {
       ),
     [allUsage.by_token],
   );
+  const requestTrendColor =
+    selectedTokenId === null
+      ? DEFAULT_CALL_TREND_COLORS[actualTheme === 'dark' ? 'dark' : 'light']
+      : tokenColorById.get(selectedTokenId) || apiKeyColor(0);
+  const requestTrendPointStroke =
+    actualTheme === 'dark' ? '#0f172a' : '#ffffff';
 
   const apiKeyValues = useMemo(
     () =>
@@ -650,11 +661,19 @@ const TokenUsage = () => {
     () => ({
       type: 'line',
       data: [{ id: 'requestTrend', values: loading ? [] : requestTrendValues }],
+      color: [requestTrendColor],
       xField: 'time',
       yField: 'requests',
       smooth: true,
-      point: { visible: true },
-      line: { style: { lineWidth: 2 } },
+      point: {
+        visible: true,
+        style: {
+          fill: requestTrendColor,
+          stroke: requestTrendPointStroke,
+          lineWidth: 2,
+        },
+      },
+      line: { style: { lineWidth: 2.5, stroke: requestTrendColor } },
       axes: [
         {
           orient: 'bottom',
@@ -703,6 +722,8 @@ const TokenUsage = () => {
       chartAxisColor,
       chartLabelColor,
       loading,
+      requestTrendColor,
+      requestTrendPointStroke,
       requestTrendValues,
       t,
     ],

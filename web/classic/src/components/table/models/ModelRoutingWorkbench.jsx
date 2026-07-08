@@ -534,7 +534,7 @@ const ModelRoutingWorkbench = () => {
     {
       title: t('渠道'),
       dataIndex: 'name',
-      width: 360,
+      width: 320,
       render: (_, record, index) => {
         const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
         const remark = record.remark?.trim();
@@ -598,7 +598,7 @@ const ModelRoutingWorkbench = () => {
     {
       title: t('操作'),
       dataIndex: 'actions',
-      width: 110,
+      width: 90,
       render: (_, record) => {
         return (
           <div className='flex items-center gap-2'>
@@ -624,7 +624,7 @@ const ModelRoutingWorkbench = () => {
     {
       title: t('类型'),
       dataIndex: 'type',
-      width: 150,
+      width: 130,
       render: (type) => (
         <span className='flex items-center gap-2'>
           {getChannelIcon(type)}
@@ -635,7 +635,7 @@ const ModelRoutingWorkbench = () => {
     {
       title: t('分组'),
       dataIndex: 'group',
-      width: 120,
+      width: 100,
       render: (group) => (
         <Tag color='grey' shape='circle' size='small'>
           {group}
@@ -645,7 +645,7 @@ const ModelRoutingWorkbench = () => {
     {
       title: t('状态'),
       dataIndex: 'status',
-      width: 170,
+      width: 150,
       render: (_, record) => {
         const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
         const updating = Boolean(statusUpdatingIds[record.id]);
@@ -669,42 +669,38 @@ const ModelRoutingWorkbench = () => {
       },
     },
     {
-      title: t('优先级'),
-      dataIndex: 'priority',
-      width: 130,
+      title: (
+        <div className='grid grid-cols-2 gap-2'>
+          <span>{t('优先级')}</span>
+          <span>{t('权重')}</span>
+        </div>
+      ),
+      dataIndex: 'routing',
+      width: 190,
       render: (_, record) => {
         const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
         const updating = Boolean(statusUpdatingIds[record.id]);
         return (
-          <InputNumber
-            min={0}
-            value={getFieldValue(record, routingChanges, 'priority')}
-            disabled={!isEnabled || updating}
-            onChange={(value) =>
-              handleRoutingFieldChange(record, 'priority', value)
-            }
-            style={{ width: 90 }}
-          />
-        );
-      },
-    },
-    {
-      title: t('权重'),
-      dataIndex: 'weight',
-      width: 130,
-      render: (_, record) => {
-        const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
-        const updating = Boolean(statusUpdatingIds[record.id]);
-        return (
-          <InputNumber
-            min={0}
-            value={getFieldValue(record, routingChanges, 'weight')}
-            disabled={!isEnabled || updating}
-            onChange={(value) =>
-              handleRoutingFieldChange(record, 'weight', value)
-            }
-            style={{ width: 90 }}
-          />
+          <div className='grid grid-cols-2 gap-2'>
+            <InputNumber
+              min={0}
+              value={getFieldValue(record, routingChanges, 'priority')}
+              disabled={!isEnabled || updating}
+              onChange={(value) =>
+                handleRoutingFieldChange(record, 'priority', value)
+              }
+              style={{ width: '100%' }}
+            />
+            <InputNumber
+              min={0}
+              value={getFieldValue(record, routingChanges, 'weight')}
+              disabled={!isEnabled || updating}
+              onChange={(value) =>
+                handleRoutingFieldChange(record, 'weight', value)
+              }
+              style={{ width: '100%' }}
+            />
+          </div>
         );
       },
     },
@@ -892,7 +888,7 @@ const ModelRoutingWorkbench = () => {
                 rowKey='id'
                 pagination={false}
                 size='small'
-                scroll={{ x: 1050 }}
+                scroll={{ x: 980 }}
               />
             )}
           </div>

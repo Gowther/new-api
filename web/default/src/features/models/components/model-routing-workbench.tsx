@@ -803,18 +803,22 @@ export function ModelRoutingWorkbench() {
               <EmptyState title={t('No channels support this model')} />
             )}
             {!isLoading && selectedModel && channelsForModel.length > 0 && (
-              <Table className='min-w-[64rem] table-fixed'>
+              <Table className='min-w-[58rem] table-fixed'>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className='w-[24rem]'>
+                    <TableHead className='w-80'>
                       {t('Channel')}
                     </TableHead>
-                    <TableHead className='w-20'>{t('Actions')}</TableHead>
-                    <TableHead className='w-36'>{t('Type')}</TableHead>
-                    <TableHead className='w-32'>{t('Group')}</TableHead>
-                    <TableHead className='w-44'>{t('Status')}</TableHead>
-                    <TableHead className='w-28'>{t('Priority')}</TableHead>
-                    <TableHead className='w-28'>{t('Weight')}</TableHead>
+                    <TableHead className='w-16'>{t('Actions')}</TableHead>
+                    <TableHead className='w-28'>{t('Type')}</TableHead>
+                    <TableHead className='w-24'>{t('Group')}</TableHead>
+                    <TableHead className='w-36'>{t('Status')}</TableHead>
+                    <TableHead className='w-48'>
+                      <div className='grid grid-cols-2 gap-2'>
+                        <span>{t('Priority')}</span>
+                        <span>{t('Weight')}</span>
+                      </div>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -841,7 +845,7 @@ export function ModelRoutingWorkbench() {
                         key={channel.id}
                         className={!isEnabled ? 'bg-muted/30 opacity-75' : ''}
                       >
-                        <TableCell className='w-[24rem] max-w-[24rem]'>
+                        <TableCell className='w-80 max-w-80'>
                           <div className='min-w-0 space-y-1'>
                             <div className='flex min-w-0 items-center gap-1.5'>
                               <StatusBadge
@@ -903,7 +907,7 @@ export function ModelRoutingWorkbench() {
                             </button>
                           </div>
                         </TableCell>
-                        <TableCell className='w-20'>
+                        <TableCell className='w-16'>
                           <div className='flex items-center gap-1'>
                             <Button
                               type='button'
@@ -929,10 +933,10 @@ export function ModelRoutingWorkbench() {
                             </Button>
                           </div>
                         </TableCell>
-                        <TableCell className='w-36'>
+                        <TableCell className='w-28'>
                           <div className='truncate'>{t(channelType)}</div>
                         </TableCell>
-                        <TableCell className='w-32'>
+                        <TableCell className='w-24'>
                           <StatusBadge
                             label={channel.group}
                             variant='neutral'
@@ -940,7 +944,7 @@ export function ModelRoutingWorkbench() {
                             copyable={false}
                           />
                         </TableCell>
-                        <TableCell className='w-44'>
+                        <TableCell className='w-36'>
                           <div className='flex min-w-0 items-center gap-2'>
                             <Switch
                               size='sm'
@@ -959,47 +963,47 @@ export function ModelRoutingWorkbench() {
                             />
                           </div>
                         </TableCell>
-                        <TableCell className='w-28'>
-                          <Input
-                            type='number'
-                            min={0}
-                            value={getFieldValue(
-                              channel,
-                              routingChanges,
-                              'priority'
-                            )}
-                            onChange={(event) =>
-                              handleRoutingFieldChange(
+                        <TableCell className='w-48'>
+                          <div className='grid grid-cols-2 gap-2'>
+                            <Input
+                              type='number'
+                              min={0}
+                              value={getFieldValue(
                                 channel,
-                                'priority',
-                                event.target.value
-                              )
-                            }
-                            disabled={!isEnabled || isStatusUpdating}
-                            className='h-8 w-24'
-                            aria-label={t('Priority')}
-                          />
-                        </TableCell>
-                        <TableCell className='w-28'>
-                          <Input
-                            type='number'
-                            min={0}
-                            value={getFieldValue(
-                              channel,
-                              routingChanges,
-                              'weight'
-                            )}
-                            onChange={(event) =>
-                              handleRoutingFieldChange(
+                                routingChanges,
+                                'priority'
+                              )}
+                              onChange={(event) =>
+                                handleRoutingFieldChange(
+                                  channel,
+                                  'priority',
+                                  event.target.value
+                                )
+                              }
+                              disabled={!isEnabled || isStatusUpdating}
+                              className='h-8 w-full'
+                              aria-label={t('Priority')}
+                            />
+                            <Input
+                              type='number'
+                              min={0}
+                              value={getFieldValue(
                                 channel,
-                                'weight',
-                                event.target.value
-                              )
-                            }
-                            disabled={!isEnabled || isStatusUpdating}
-                            className='h-8 w-24'
-                            aria-label={t('Weight')}
-                          />
+                                routingChanges,
+                                'weight'
+                              )}
+                              onChange={(event) =>
+                                handleRoutingFieldChange(
+                                  channel,
+                                  'weight',
+                                  event.target.value
+                                )
+                              }
+                              disabled={!isEnabled || isStatusUpdating}
+                              className='h-8 w-full'
+                              aria-label={t('Weight')}
+                            />
+                          </div>
                         </TableCell>
                       </TableRow>
                     )

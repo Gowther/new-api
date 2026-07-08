@@ -24,6 +24,7 @@ import {
   Input,
   InputNumber,
   List,
+  Modal,
   Spin,
   Switch,
   Table,
@@ -32,6 +33,7 @@ import {
   Typography,
 } from '@douyinfe/semi-ui';
 import {
+  IconDelete,
   IconEdit,
   IconRefresh,
   IconSave,
@@ -195,6 +197,7 @@ const ModelRoutingWorkbench = () => {
   const [statusUpdatingIds, setStatusUpdatingIds] = useState({});
   const [editingChannel, setEditingChannel] = useState({ id: undefined });
   const [showEditChannel, setShowEditChannel] = useState(false);
+  const [deletingChannelId, setDeletingChannelId] = useState(null);
 
   const loadRoutingData = useCallback(async () => {
     setLoading(true);
@@ -410,6 +413,46 @@ const ModelRoutingWorkbench = () => {
     }
   };
 
+  const handleDeleteChannel = (channel) => {
+    Modal.confirm({
+      title: t('删除渠道'),
+      content: (
+        <div className='flex flex-col gap-1'>
+          <div>
+            {t('渠道')}: <Text strong>{channel.name}</Text>
+          </div>
+          <div>{t('此操作将永久删除该渠道，且无法撤销。')}</div>
+        </div>
+      ),
+      okText: t('删除'),
+      cancelText: t('取消'),
+      okButtonProps: { type: 'danger' },
+      onOk: async () => {
+        setDeletingChannelId(channel.id);
+        try {
+          const res = await API.delete(`/api/channel/${channel.id}/`);
+          const { success, message } = res.data || {};
+          if (!success) {
+            showError(message || t('删除失败'));
+            return;
+          }
+
+          setChannels((prev) => prev.filter((item) => item.id !== channel.id));
+          setRoutingChanges((prev) => {
+            const next = { ...prev };
+            delete next[channel.id];
+            return next;
+          });
+          showSuccess(t('删除成功'));
+        } catch (error) {
+          showError(error.message || t('删除失败'));
+        } finally {
+          setDeletingChannelId(null);
+        }
+      },
+    });
+  };
+
   const handleSaveRouting = async () => {
     if (changedCount === 0) {
       showInfo(t('没有需要保存的修改'));
@@ -545,6 +588,15 @@ const ModelRoutingWorkbench = () => {
               onClick={() => openChannelEditor(record)}
             >
               {t('编辑')}
+            </Button>
+            <Button
+              type='danger'
+              size='small'
+              icon={<IconDelete />}
+              loading={deletingChannelId === record.id}
+              onClick={() => handleDeleteChannel(record)}
+            >
+              {t('删除')}
             </Button>
           </div>
         );

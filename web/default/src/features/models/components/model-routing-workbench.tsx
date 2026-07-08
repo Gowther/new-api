@@ -18,12 +18,13 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Pencil, RefreshCw, Save, Search } from 'lucide-react'
+import { Loader2, Pencil, RefreshCw, Save, Search, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { StatusBadge } from '@/components/status-badge'
 import { ProviderBadge } from '@/components/provider-badge'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import {
   Empty,
@@ -52,6 +53,7 @@ import {
 import { cn } from '@/lib/utils'
 import { getLobeIcon } from '@/lib/lobe-icon'
 import {
+  deleteChannel,
   getChannels,
   updateChannel,
   updateChannelStatus,
@@ -228,6 +230,8 @@ export function ModelRoutingWorkbench() {
   >({})
   const [editingChannel, setEditingChannel] = useState<Channel | null>(null)
   const [channelEditorOpen, setChannelEditorOpen] = useState(false)
+  const [deletingChannel, setDeletingChannel] = useState<Channel | null>(null)
+  const [isDeletingChannel, setIsDeletingChannel] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
   const pricingQuery = useQuery({
@@ -387,6 +391,11 @@ export function ModelRoutingWorkbench() {
     void pricingQuery.refetch()
   }
 
+  const handleDeleteDialogOpenChange = (open: boolean) => {
+    if (open || isDeletingChannel) return
+    setDeletingChannel(null)
+  }
+
   const handleRoutingFieldChange = (
     channel: Channel,
     field: RoutingField,
@@ -468,6 +477,41 @@ export function ModelRoutingWorkbench() {
     },
     [queryClient, t, updateLocalChannel]
   )
+
+  const handleConfirmDeleteChannel = async () => {
+    if (!deletingChannel) return
+
+    setIsDeletingChannel(true)
+    try {
+      const response = await deleteChannel(deletingChannel.id)
+      if (!response.success) {
+        toast.error(response.message || t(ERROR_MESSAGES.DELETE_FAILED))
+        return
+      }
+
+      setChannels((prev) =>
+        prev.filter((channel) => channel.id !== deletingChannel.id)
+      )
+      setRoutingChanges((prev) => {
+        const next = { ...prev }
+        delete next[deletingChannel.id]
+        return next
+      })
+      await queryClient.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
+      await queryClient.invalidateQueries({
+        queryKey: ['model-routing', 'channels'],
+      })
+      await queryClient.invalidateQueries({
+        queryKey: ['model-routing', 'pricing'],
+      })
+      toast.success(t(SUCCESS_MESSAGES.DELETED))
+      setDeletingChannel(null)
+    } catch {
+      toast.error(t(ERROR_MESSAGES.DELETE_FAILED))
+    } finally {
+      setIsDeletingChannel(false)
+    }
+  }
 
   const handleSaveRouting = async () => {
     if (changedCount === 0) {
@@ -855,6 +899,16 @@ export function ModelRoutingWorkbench() {
                               <Pencil className='size-4' />
                               {t('Edit')}
                             </Button>
+                            <Button
+                              type='button'
+                              variant='ghost'
+                              size='sm'
+                              className='text-destructive hover:text-destructive shrink-0'
+                              onClick={() => setDeletingChannel(channel)}
+                            >
+                              <Trash2 className='size-4' />
+                              {t('Delete')}
+                            </Button>
                           </div>
                         </TableCell>
                         <TableCell>{t(channelType)}</TableCell>
@@ -942,6 +996,23 @@ export function ModelRoutingWorkbench() {
           onOpenChange={handleChannelEditorOpenChange}
         />
       </ChannelsProvider>
+      <ConfirmDialog
+        open={deletingChannel !== null}
+        onOpenChange={handleDeleteDialogOpenChange}
+        title={
+          <span className='break-words'>
+            {t('Delete Channel')}: {deletingChannel?.name}
+          </span>
+        }
+        desc={t(
+          'Are you sure you want to delete channel "{{name}}"? This action cannot be undone.',
+          { name: deletingChannel?.name ?? '' }
+        )}
+        confirmText={t('Delete')}
+        destructive
+        isLoading={isDeletingChannel}
+        handleConfirm={handleConfirmDeleteChannel}
+      />
     </div>
   )
 }

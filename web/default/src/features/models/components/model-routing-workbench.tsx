@@ -77,6 +77,8 @@ const ROUTING_PAGE_SIZE = 100
 const UNASSIGNED_PROVIDER_KEY = '__unassigned__'
 const EMPTY_PRICING_MODELS: PricingModel[] = []
 const EMPTY_PRICING_VENDORS: PricingVendor[] = []
+const ROUTING_ROLE_LABEL_KEYS = ['Primary', 'Backup', 'Fallback'] as const
+const ROUTING_ROLE_VARIANTS = ['green', 'blue', 'amber'] as const
 
 type ProviderOption = {
   key: string
@@ -610,11 +612,11 @@ export function ModelRoutingWorkbench() {
             </div>
           </div>
           <ScrollArea className='min-h-0 flex-1'>
-            {isLoading ? (
-              <LoadingState />
-            ) : filteredProviders.length === 0 ? (
+            {isLoading && <LoadingState />}
+            {!isLoading && filteredProviders.length === 0 && (
               <EmptyState title={t('No vendors found')} />
-            ) : (
+            )}
+            {!isLoading && filteredProviders.length > 0 && (
               <div className='space-y-1 p-2'>
                 {filteredProviders.map((provider) => (
                   <button
@@ -676,11 +678,11 @@ export function ModelRoutingWorkbench() {
             </div>
           </div>
           <ScrollArea className='min-h-0 flex-1'>
-            {isLoading ? (
-              <LoadingState />
-            ) : filteredModels.length === 0 ? (
+            {isLoading && <LoadingState />}
+            {!isLoading && filteredModels.length === 0 && (
               <EmptyState title={t('No models found')} />
-            ) : (
+            )}
+            {!isLoading && filteredModels.length > 0 && (
               <div className='space-y-1 p-2'>
                 {filteredModels.map((model) => (
                   <button
@@ -742,13 +744,14 @@ export function ModelRoutingWorkbench() {
           </div>
 
           <div className='min-h-0 flex-1 overflow-auto'>
-            {isLoading ? (
-              <LoadingState />
-            ) : !selectedModel ? (
+            {isLoading && <LoadingState />}
+            {!isLoading && !selectedModel && (
               <EmptyState title={t('Select a model')} />
-            ) : channelsForModel.length === 0 ? (
+            )}
+            {!isLoading && selectedModel && channelsForModel.length === 0 && (
               <EmptyState title={t('No channels support this model')} />
-            ) : (
+            )}
+            {!isLoading && selectedModel && channelsForModel.length > 0 && (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -763,11 +766,15 @@ export function ModelRoutingWorkbench() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {channelsForModel.map((channel) => {
+                  {channelsForModel.map((channel, index) => {
                     const isEnabled = channel.status === CHANNEL_STATUS.ENABLED
                     const isStatusUpdating = Boolean(
                       statusUpdatingIds[channel.id]
                     )
+                    const routeRoleLabelKey =
+                      isEnabled && index < ROUTING_ROLE_LABEL_KEYS.length
+                        ? ROUTING_ROLE_LABEL_KEYS[index]
+                        : null
                     const statusConfig =
                       CHANNEL_STATUS_CONFIG[
                         channel.status as keyof typeof CHANNEL_STATUS_CONFIG
@@ -785,39 +792,55 @@ export function ModelRoutingWorkbench() {
                         <TableCell className='min-w-[15rem]'>
                           <div className='flex min-w-0 items-start justify-between gap-2'>
                             <div className='min-w-0 space-y-1'>
-                              {channelRemark ? (
-                                <TooltipProvider delay={200}>
-                                  <Tooltip>
-                                    <TooltipTrigger
-                                      render={
-                                        <div
-                                          className={cn(
-                                            'block max-w-full truncate font-medium cursor-help',
-                                            !isEnabled && 'line-through'
-                                          )}
-                                        />
-                                      }
-                                    >
-                                      {channel.name}
-                                    </TooltipTrigger>
-                                    <TooltipContent
-                                      side='top'
-                                      className='max-w-xs break-words'
-                                    >
-                                      {channelRemark}
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              ) : (
-                                <div
-                                  className={cn(
-                                    'truncate font-medium',
-                                    !isEnabled && 'line-through'
-                                  )}
-                                >
-                                  {channel.name}
-                                </div>
-                              )}
+                              <div className='flex min-w-0 items-center gap-1.5'>
+                                <StatusBadge
+                                  label={`#${index + 1}`}
+                                  variant='neutral'
+                                  size='sm'
+                                  copyable={false}
+                                />
+                                {routeRoleLabelKey ? (
+                                  <StatusBadge
+                                    label={t(routeRoleLabelKey)}
+                                    variant={ROUTING_ROLE_VARIANTS[index]}
+                                    size='sm'
+                                    copyable={false}
+                                  />
+                                ) : null}
+                                {channelRemark ? (
+                                  <TooltipProvider delay={200}>
+                                    <Tooltip>
+                                      <TooltipTrigger
+                                        render={
+                                          <div
+                                            className={cn(
+                                              'block min-w-0 flex-1 truncate font-medium cursor-help',
+                                              !isEnabled && 'line-through'
+                                            )}
+                                          />
+                                        }
+                                      >
+                                        {channel.name}
+                                      </TooltipTrigger>
+                                      <TooltipContent
+                                        side='top'
+                                        className='max-w-xs break-words'
+                                      >
+                                        {channelRemark}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                ) : (
+                                  <div
+                                    className={cn(
+                                      'min-w-0 flex-1 truncate font-medium',
+                                      !isEnabled && 'line-through'
+                                    )}
+                                  >
+                                    {channel.name}
+                                  </div>
+                                )}
+                              </div>
                               <div className='text-muted-foreground text-xs'>
                                 ID: {channel.id}
                               </div>

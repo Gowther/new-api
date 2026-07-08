@@ -54,6 +54,8 @@ const { Text } = Typography;
 
 const ROUTING_PAGE_SIZE = 100;
 const UNASSIGNED_PROVIDER_KEY = '__unassigned__';
+const ROUTING_ROLE_LABELS = ['主', '备', '兜底'];
+const ROUTING_ROLE_COLORS = ['green', 'blue', 'orange'];
 
 const CHANNEL_STATUS = {
   UNKNOWN: 0,
@@ -482,9 +484,13 @@ const ModelRoutingWorkbench = () => {
     {
       title: t('渠道'),
       dataIndex: 'name',
-      render: (_, record) => {
+      render: (_, record, index) => {
         const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
         const remark = record.remark?.trim();
+        const routeRoleLabel =
+          isEnabled && index < ROUTING_ROLE_LABELS.length
+            ? ROUTING_ROLE_LABELS[index]
+            : null;
         const nameNode = (
           <Text
             strong
@@ -500,6 +506,18 @@ const ModelRoutingWorkbench = () => {
           <div className='flex min-w-0 items-center justify-between gap-2'>
             <div className='min-w-0'>
               <div className='flex min-w-0 items-center gap-2'>
+                <Tag color='grey' shape='circle' size='small'>
+                  #{index + 1}
+                </Tag>
+                {routeRoleLabel ? (
+                  <Tag
+                    color={ROUTING_ROLE_COLORS[index]}
+                    shape='circle'
+                    size='small'
+                  >
+                    {t(routeRoleLabel)}
+                  </Tag>
+                ) : null}
                 {remark ? (
                   <Tooltip
                     content={

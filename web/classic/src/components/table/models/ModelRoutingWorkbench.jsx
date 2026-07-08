@@ -562,6 +562,8 @@ const ModelRoutingWorkbench = () => {
             strong
             ellipsis
             style={{
+              display: 'block',
+              width: '100%',
               textDecoration: isEnabled ? 'none' : 'line-through',
             }}
           >
@@ -569,20 +571,37 @@ const ModelRoutingWorkbench = () => {
           </Text>
         );
         return (
-          <div className='min-w-0'>
-            <div className='flex min-w-0 items-center gap-2'>
-              <Tag color='grey' shape='circle' size='small'>
-                #{index + 1}
-              </Tag>
-              {routeRoleLabel ? (
-                <Tag
-                  color={ROUTING_ROLE_COLORS[index]}
-                  shape='circle'
-                  size='small'
-                >
-                  {t(routeRoleLabel)}
+          <div className='grid min-w-0 grid-cols-[150px_minmax(0,1fr)] items-center gap-2'>
+            <div className='flex min-w-0 items-center gap-1'>
+              <span className='inline-flex w-9 shrink-0'>
+                <Tag color='grey' shape='circle' size='small'>
+                  #{index + 1}
                 </Tag>
-              ) : null}
+              </span>
+              <button
+                type='button'
+                className='w-14 shrink-0 truncate text-left font-mono text-xs text-[var(--semi-color-text-2)] hover:underline'
+                title={t('打开使用日志')}
+                aria-label={`${t('打开使用日志')} #${record.id}`}
+                onClick={() => openChannelUsageLogs(record.id)}
+              >
+                ID:{record.id}
+              </button>
+              {routeRoleLabel ? (
+                <span className='inline-flex w-11 shrink-0'>
+                  <Tag
+                    color={ROUTING_ROLE_COLORS[index]}
+                    shape='circle'
+                    size='small'
+                  >
+                    {t(routeRoleLabel)}
+                  </Tag>
+                </span>
+              ) : (
+                <span className='w-11 shrink-0' aria-hidden='true' />
+              )}
+            </div>
+            <div className='min-w-0'>
               {remark ? (
                 <Tooltip
                   content={
@@ -596,15 +615,6 @@ const ModelRoutingWorkbench = () => {
               ) : (
                 nameNode
               )}
-              <button
-                type='button'
-                className='text-xs text-[var(--semi-color-text-2)] hover:underline'
-                title={t('打开使用日志')}
-                aria-label={`${t('打开使用日志')} #${record.id}`}
-                onClick={() => openChannelUsageLogs(record.id)}
-              >
-                ID: {record.id}
-              </button>
             </div>
           </div>
         );
@@ -750,7 +760,7 @@ const ModelRoutingWorkbench = () => {
         </div>
       </div>
 
-      <div className='grid flex-1 grid-cols-1 gap-3 xl:grid-cols-[280px_360px_minmax(0,1fr)]'>
+      <div className='grid flex-1 grid-cols-1 gap-3 xl:grid-cols-[280px_320px_minmax(0,1fr)]'>
         <section className='flex min-h-[360px] flex-col rounded border border-[var(--semi-color-border)] bg-[var(--semi-color-bg-0)]'>
           <div className='border-b border-[var(--semi-color-border)] p-3'>
             <Text strong>{t('供应商')}</Text>

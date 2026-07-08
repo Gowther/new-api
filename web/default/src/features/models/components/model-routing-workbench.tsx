@@ -698,7 +698,7 @@ export function ModelRoutingWorkbench() {
         </div>
       </div>
 
-      <div className='grid min-h-0 flex-1 gap-3 lg:grid-cols-[17rem_22rem_minmax(0,1fr)]'>
+      <div className='grid min-h-0 flex-1 gap-3 lg:grid-cols-[17rem_20rem_minmax(0,1fr)]'>
         <section className='bg-background flex min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-lg border'>
           <div className='border-b p-3'>
             <div className='mb-2 text-sm font-medium'>{t('Vendors')}</div>
@@ -908,22 +908,37 @@ export function ModelRoutingWorkbench() {
                         className={!isEnabled ? 'bg-muted/30 opacity-75' : ''}
                       >
                         <TableCell className='w-80 max-w-80'>
-                          <div className='min-w-0 space-y-1'>
-                            <div className='flex min-w-0 items-center gap-1.5'>
+                          <div className='grid min-w-0 grid-cols-[9.5rem_minmax(0,1fr)] items-center gap-2'>
+                            <div className='flex min-w-0 items-center gap-1'>
                               <StatusBadge
                                 label={`#${index + 1}`}
                                 variant='neutral'
                                 size='sm'
                                 copyable={false}
+                                className='w-9 justify-center'
                               />
+                              <button
+                                type='button'
+                                className='text-muted-foreground hover:text-foreground w-14 truncate text-left font-mono text-xs transition-colors hover:underline'
+                                title={t('Open usage logs')}
+                                aria-label={`${t('Open usage logs')} #${channel.id}`}
+                                onClick={() => openChannelUsageLogs(channel.id)}
+                              >
+                                ID:{channel.id}
+                              </button>
                               {routeRoleLabelKey ? (
                                 <StatusBadge
                                   label={t(routeRoleLabelKey)}
                                   variant={ROUTING_ROLE_VARIANTS[index]}
                                   size='sm'
                                   copyable={false}
+                                  className='w-12 justify-center'
                                 />
-                              ) : null}
+                              ) : (
+                                <span className='w-12' aria-hidden='true' />
+                              )}
+                            </div>
+                            <div className='min-w-0'>
                               {channelRemark ? (
                                 <TooltipProvider delay={200}>
                                   <Tooltip>
@@ -931,7 +946,7 @@ export function ModelRoutingWorkbench() {
                                       render={
                                         <div
                                           className={cn(
-                                            'block min-w-0 flex-1 truncate font-medium cursor-help',
+                                            'block min-w-0 truncate font-medium cursor-help',
                                             !isEnabled && 'line-through'
                                           )}
                                         />
@@ -950,7 +965,7 @@ export function ModelRoutingWorkbench() {
                               ) : (
                                 <div
                                   className={cn(
-                                    'min-w-0 flex-1 truncate font-medium',
+                                    'min-w-0 truncate font-medium',
                                     !isEnabled && 'line-through'
                                   )}
                                 >
@@ -958,15 +973,6 @@ export function ModelRoutingWorkbench() {
                                 </div>
                               )}
                             </div>
-                            <button
-                              type='button'
-                              className='text-muted-foreground hover:text-foreground text-xs transition-colors hover:underline'
-                              title={t('Open usage logs')}
-                              aria-label={`${t('Open usage logs')} #${channel.id}`}
-                              onClick={() => openChannelUsageLogs(channel.id)}
-                            >
-                              ID: {channel.id}
-                            </button>
                           </div>
                         </TableCell>
                         <TableCell className='w-16'>

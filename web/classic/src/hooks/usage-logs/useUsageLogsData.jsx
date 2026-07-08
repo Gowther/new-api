@@ -51,6 +51,18 @@ function getInitialAutoRefreshSeconds() {
   return AUTO_REFRESH_INTERVALS.includes(stored) ? stored : 0;
 }
 
+function getInitialUrlFilters() {
+  if (typeof window === 'undefined') {
+    return { channel: '' };
+  }
+
+  const searchParams = new URLSearchParams(window.location.search);
+  return {
+    channel:
+      searchParams.get('channel') || searchParams.get('channel_id') || '',
+  };
+}
+
 export const useLogsData = () => {
   const { t } = useTranslation();
 
@@ -86,6 +98,7 @@ export const useLogsData = () => {
     getInitialAutoRefreshSeconds,
   );
   const autoRefreshCallbackRef = useRef(null);
+  const initialUrlFiltersRef = useRef(getInitialUrlFilters());
 
   const setAutoRefreshSeconds = (seconds) => {
     const next = AUTO_REFRESH_INTERVALS.includes(Number(seconds))
@@ -118,7 +131,7 @@ export const useLogsData = () => {
     username: '',
     token_name: '',
     model_name: '',
-    channel: '',
+    channel: initialUrlFiltersRef.current.channel,
     group: '',
     request_id: '',
     dateRange: [
@@ -256,7 +269,7 @@ export const useLogsData = () => {
 
   // 获取表单值的辅助函数，确保所有值都是字符串
   const getFormValues = () => {
-    const formValues = formApi ? formApi.getValues() : {};
+    const formValues = formApi ? formApi.getValues() : formInitValues;
 
     let start_timestamp = timestamp2string(getTodayStartTimestamp());
     let end_timestamp = timestamp2string(now.getTime() / 1000 + 3600);

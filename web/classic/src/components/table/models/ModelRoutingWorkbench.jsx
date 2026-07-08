@@ -97,6 +97,13 @@ const getModelInitial = (modelName) => {
   return (modelName || '').trim().charAt(0).toUpperCase() || '?';
 };
 
+const openChannelUsageLogs = (channelId) => {
+  const targetUrl = `/console/log?channel=${encodeURIComponent(
+    String(channelId),
+  )}`;
+  window.open(targetUrl, '_blank', 'noopener,noreferrer');
+};
+
 const channelSupportsModel = (channel, modelNames) => {
   if (modelNames.length === 0) return false;
   const channelModels = new Set(splitCsv(channel.models));
@@ -574,9 +581,15 @@ const ModelRoutingWorkbench = () => {
               ) : (
                 nameNode
               )}
-              <Text type='tertiary' size='small'>
+              <button
+                type='button'
+                className='text-xs text-[var(--semi-color-text-2)] hover:underline'
+                title={t('打开使用日志')}
+                aria-label={`${t('打开使用日志')} #${record.id}`}
+                onClick={() => openChannelUsageLogs(record.id)}
+              >
                 ID: {record.id}
-              </Text>
+              </button>
             </div>
           </div>
         );

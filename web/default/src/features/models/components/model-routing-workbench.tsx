@@ -384,6 +384,13 @@ export function ModelRoutingWorkbench() {
     setChannelEditorOpen(true)
   }
 
+  const openChannelUsageLogs = (channelId: number) => {
+    const targetUrl = `/usage-logs/common?channel=${encodeURIComponent(
+      String(channelId)
+    )}`
+    window.open(targetUrl, '_blank', 'noopener,noreferrer')
+  }
+
   const handleChannelEditorOpenChange = (open: boolean) => {
     setChannelEditorOpen(open)
     if (open) return
@@ -885,9 +892,15 @@ export function ModelRoutingWorkbench() {
                                 </div>
                               )}
                             </div>
-                            <div className='text-muted-foreground text-xs'>
+                            <button
+                              type='button'
+                              className='text-muted-foreground hover:text-foreground text-xs transition-colors hover:underline'
+                              title={t('Open usage logs')}
+                              aria-label={`${t('Open usage logs')} #${channel.id}`}
+                              onClick={() => openChannelUsageLogs(channel.id)}
+                            >
                               ID: {channel.id}
-                            </div>
+                            </button>
                           </div>
                         </TableCell>
                         <TableCell className='w-20'>

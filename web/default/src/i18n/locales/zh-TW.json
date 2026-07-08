@@ -4212,6 +4212,7 @@
     "Set a tag for": "設定標籤為",
     "Set API key access restrictions": "設定令牌的存取限制",
     "Set API key basic information": "設定令牌的基本資訊",
+    "Set as default model": "設為預設模型",
     "Set default ranges and charts for model analytics.": "設定模型分析的預設時間範圍和圖表。",
     "Set Field": "設定欄位",
     "Set filters to customize your dashboard statistics and charts.": "設定篩選器以自訂您的儀表板統計數據和圖表。",

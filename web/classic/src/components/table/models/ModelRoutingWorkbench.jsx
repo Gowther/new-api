@@ -33,6 +33,7 @@ import {
   Typography,
 } from '@douyinfe/semi-ui';
 import {
+  IconBookmark,
   IconDelete,
   IconEdit,
   IconPlus,
@@ -59,6 +60,10 @@ const ROUTING_PAGE_SIZE = 100;
 const UNASSIGNED_PROVIDER_KEY = '__unassigned__';
 const ROUTING_ROLE_LABELS = ['主', '备', '兜底'];
 const ROUTING_ROLE_COLORS = ['green', 'blue', 'orange'];
+const ROUTING_DEFAULT_SELECTION_KEY = 'model-routing-default-selection';
+const ROUTING_LAST_SELECTION_KEY = 'model-routing-last-selection';
+const PREFERRED_DEFAULT_VENDOR_NAME = 'OpenAI';
+const PREFERRED_DEFAULT_MODEL_NAME = 'gpt-5.5';
 
 const CHANNEL_STATUS = {
   UNKNOWN: 0,
@@ -89,6 +94,66 @@ const splitCsv = (value) => {
 
 const getProviderKey = (model) =>
   model.vendor_id ? String(model.vendor_id) : UNASSIGNED_PROVIDER_KEY;
+
+const getRoutingSelectionFromModel = (model) => ({
+  providerKey: getProviderKey(model),
+  modelName: model.model_name,
+});
+
+const readStoredRoutingSelection = (key) => {
+  try {
+    const rawValue = window.localStorage.getItem(key);
+    if (!rawValue) return null;
+    const parsed = JSON.parse(rawValue);
+    if (!parsed?.providerKey || !parsed?.modelName) return null;
+    return {
+      providerKey: String(parsed.providerKey),
+      modelName: String(parsed.modelName),
+    };
+  } catch {
+    return null;
+  }
+};
+
+const writeStoredRoutingSelection = (key, selection) => {
+  window.localStorage.setItem(key, JSON.stringify(selection));
+};
+
+const findModelForSelection = (models, selection) => {
+  if (!selection) return null;
+  return (
+    models.find(
+      (model) =>
+        getProviderKey(model) === selection.providerKey &&
+        model.model_name === selection.modelName,
+    ) || null
+  );
+};
+
+const findPreferredDefaultModel = (models) =>
+  models.find(
+    (model) =>
+      model.vendor_name === PREFERRED_DEFAULT_VENDOR_NAME &&
+      model.model_name === PREFERRED_DEFAULT_MODEL_NAME,
+  ) || null;
+
+const resolveInitialRoutingSelection = (models, defaultSelection) => {
+  const validDefault = findModelForSelection(models, defaultSelection);
+  if (validDefault) return getRoutingSelectionFromModel(validDefault);
+
+  const lastSelection = readStoredRoutingSelection(ROUTING_LAST_SELECTION_KEY);
+  const validLast = findModelForSelection(models, lastSelection);
+  if (validLast) return getRoutingSelectionFromModel(validLast);
+
+  const preferredDefault = findPreferredDefaultModel(models);
+  return preferredDefault
+    ? getRoutingSelectionFromModel(preferredDefault)
+    : null;
+};
+
+const isSameRoutingSelection = (first, second) =>
+  first?.providerKey === second?.providerKey &&
+  first?.modelName === second?.modelName;
 
 const getRoutingModelNames = (model) => {
   return model ? [model.model_name] : [];
@@ -206,6 +271,9 @@ const ModelRoutingWorkbench = () => {
   const [editingChannel, setEditingChannel] = useState({ id: undefined });
   const [showEditChannel, setShowEditChannel] = useState(false);
   const [deletingChannelId, setDeletingChannelId] = useState(null);
+  const [defaultRoutingSelection, setDefaultRoutingSelection] = useState(() =>
+    readStoredRoutingSelection(ROUTING_DEFAULT_SELECTION_KEY),
+  );
 
   const loadRoutingData = useCallback(async () => {
     setLoading(true);
@@ -299,6 +367,21 @@ const ModelRoutingWorkbench = () => {
     );
   }, [providerModels, selectedModelName]);
 
+  const selectedRoutingSelection = useMemo(
+    () => (selectedModel ? getRoutingSelectionFromModel(selectedModel) : null),
+    [selectedModel],
+  );
+
+  const initialRoutingSelection = useMemo(
+    () => resolveInitialRoutingSelection(models, defaultRoutingSelection),
+    [defaultRoutingSelection, models],
+  );
+
+  const isSelectedDefaultModel = isSameRoutingSelection(
+    selectedRoutingSelection,
+    defaultRoutingSelection,
+  );
+
   const channelCreateInitialValues = useMemo(() => {
     if (!selectedModel) return undefined;
     return {
@@ -329,13 +412,18 @@ const ModelRoutingWorkbench = () => {
       if (exists) return;
     }
 
-    const firstProvider = providerOptions.find(
-      (provider) => provider.modelCount > 0,
-    );
+    const initialProvider = initialRoutingSelection
+      ? providerOptions.find(
+          (provider) => provider.key === initialRoutingSelection.providerKey,
+        )
+      : null;
+    const firstProvider =
+      initialProvider ||
+      providerOptions.find((provider) => provider.modelCount > 0);
     setSelectedProviderKey(
       firstProvider?.key || providerOptions[0]?.key || null,
     );
-  }, [providerOptions, selectedProviderKey]);
+  }, [initialRoutingSelection, providerOptions, selectedProviderKey]);
 
   useEffect(() => {
     if (!selectedProviderKey) {
@@ -348,13 +436,44 @@ const ModelRoutingWorkbench = () => {
     );
     if (exists) return;
 
-    setSelectedModelName(providerModels[0]?.model_name || null);
-  }, [providerModels, selectedModelName, selectedProviderKey]);
+    const initialModel =
+      initialRoutingSelection?.providerKey === selectedProviderKey
+        ? providerModels.find(
+            (model) => model.model_name === initialRoutingSelection.modelName,
+          )
+        : null;
+    setSelectedModelName(
+      initialModel?.model_name || providerModels[0]?.model_name || null,
+    );
+  }, [
+    initialRoutingSelection,
+    providerModels,
+    selectedModelName,
+    selectedProviderKey,
+  ]);
+
+  useEffect(() => {
+    if (!selectedRoutingSelection) return;
+    writeStoredRoutingSelection(
+      ROUTING_LAST_SELECTION_KEY,
+      selectedRoutingSelection,
+    );
+  }, [selectedRoutingSelection]);
 
   const handleProviderSelect = (providerKey) => {
     setSelectedProviderKey(providerKey);
     setSelectedModelName(null);
     setModelSearch('');
+  };
+
+  const handleSetDefaultModel = () => {
+    if (!selectedRoutingSelection) return;
+    writeStoredRoutingSelection(
+      ROUTING_DEFAULT_SELECTION_KEY,
+      selectedRoutingSelection,
+    );
+    setDefaultRoutingSelection(selectedRoutingSelection);
+    showSuccess(t('保存成功'));
   };
 
   const openChannelEditor = (channel) => {
@@ -820,9 +939,21 @@ const ModelRoutingWorkbench = () => {
               <Text strong ellipsis>
                 {selectedProvider?.label || t('模型')}
               </Text>
-              <Tag color='grey' shape='circle' size='small'>
-                {providerModels.length}
-              </Tag>
+              <div className='flex shrink-0 items-center gap-2'>
+                <Tag color='grey' shape='circle' size='small'>
+                  {providerModels.length}
+                </Tag>
+                <Button
+                  theme={isSelectedDefaultModel ? 'solid' : 'borderless'}
+                  type={isSelectedDefaultModel ? 'warning' : 'tertiary'}
+                  size='small'
+                  icon={<IconBookmark />}
+                  disabled={!selectedModel}
+                  title={t('默认')}
+                  aria-label={t('默认')}
+                  onClick={handleSetDefaultModel}
+                />
+              </div>
             </div>
             <Input
               prefix={<IconSearch />}

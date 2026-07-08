@@ -25,6 +25,7 @@ import {
   RefreshCw,
   Save,
   Search,
+  Star,
   Trash2,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -93,6 +94,10 @@ const EMPTY_PRICING_MODELS: PricingModel[] = []
 const EMPTY_PRICING_VENDORS: PricingVendor[] = []
 const ROUTING_ROLE_LABEL_KEYS = ['Primary', 'Backup', 'Fallback'] as const
 const ROUTING_ROLE_VARIANTS = ['green', 'blue', 'amber'] as const
+const ROUTING_DEFAULT_SELECTION_KEY = 'model-routing-default-selection'
+const ROUTING_LAST_SELECTION_KEY = 'model-routing-last-selection'
+const PREFERRED_DEFAULT_VENDOR_NAME = 'OpenAI'
+const PREFERRED_DEFAULT_MODEL_NAME = 'gpt-5.5'
 
 type ProviderOption = {
   key: string
@@ -111,6 +116,11 @@ type RoutingChanges = Record<number, RoutingChange>
 type PricingRoutingData = {
   models: PricingModel[]
   vendors: PricingVendor[]
+}
+
+type StoredRoutingSelection = {
+  providerKey: string
+  modelName: string
 }
 
 async function fetchPricingRoutingData(): Promise<PricingRoutingData> {
@@ -169,6 +179,95 @@ function splitCsv(value?: string | null): string[] {
 
 function getProviderKey(model: Pick<PricingModel, 'vendor_id'>): string {
   return model.vendor_id ? String(model.vendor_id) : UNASSIGNED_PROVIDER_KEY
+}
+
+function getRoutingSelectionFromModel(
+  model: PricingModel
+): StoredRoutingSelection {
+  return {
+    providerKey: getProviderKey(model),
+    modelName: model.model_name,
+  }
+}
+
+function readStoredRoutingSelection(
+  key: string
+): StoredRoutingSelection | null {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const rawValue = window.localStorage.getItem(key)
+    if (!rawValue) return null
+    const parsed = JSON.parse(rawValue) as Partial<StoredRoutingSelection>
+    if (!parsed.providerKey || !parsed.modelName) return null
+    return {
+      providerKey: String(parsed.providerKey),
+      modelName: String(parsed.modelName),
+    }
+  } catch {
+    return null
+  }
+}
+
+function writeStoredRoutingSelection(
+  key: string,
+  selection: StoredRoutingSelection
+) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(key, JSON.stringify(selection))
+}
+
+function findModelForSelection(
+  models: PricingModel[],
+  selection: StoredRoutingSelection | null
+): PricingModel | null {
+  if (!selection) return null
+  return (
+    models.find(
+      (model) =>
+        getProviderKey(model) === selection.providerKey &&
+        model.model_name === selection.modelName
+    ) ?? null
+  )
+}
+
+function findPreferredDefaultModel(
+  models: PricingModel[]
+): PricingModel | null {
+  return (
+    models.find(
+      (model) =>
+        model.vendor_name === PREFERRED_DEFAULT_VENDOR_NAME &&
+        model.model_name === PREFERRED_DEFAULT_MODEL_NAME
+    ) ?? null
+  )
+}
+
+function resolveInitialRoutingSelection(
+  models: PricingModel[],
+  defaultSelection: StoredRoutingSelection | null
+): StoredRoutingSelection | null {
+  const validDefault = findModelForSelection(models, defaultSelection)
+  if (validDefault) return getRoutingSelectionFromModel(validDefault)
+
+  const lastSelection = readStoredRoutingSelection(ROUTING_LAST_SELECTION_KEY)
+  const validLast = findModelForSelection(models, lastSelection)
+  if (validLast) return getRoutingSelectionFromModel(validLast)
+
+  const preferredDefault = findPreferredDefaultModel(models)
+  return preferredDefault
+    ? getRoutingSelectionFromModel(preferredDefault)
+    : null
+}
+
+function isSameRoutingSelection(
+  first: StoredRoutingSelection | null,
+  second: StoredRoutingSelection | null
+): boolean {
+  return (
+    first?.providerKey === second?.providerKey &&
+    first?.modelName === second?.modelName
+  )
 }
 
 function getRoutingModelNames(model: PricingModel | null): string[] {
@@ -251,6 +350,10 @@ export function ModelRoutingWorkbench() {
   const [deletingChannel, setDeletingChannel] = useState<Channel | null>(null)
   const [isDeletingChannel, setIsDeletingChannel] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [defaultRoutingSelection, setDefaultRoutingSelection] =
+    useState<StoredRoutingSelection | null>(() =>
+      readStoredRoutingSelection(ROUTING_DEFAULT_SELECTION_KEY)
+    )
 
   const pricingQuery = useQuery({
     queryKey: ['model-routing', 'pricing'],
@@ -344,6 +447,21 @@ export function ModelRoutingWorkbench() {
     )
   }, [providerModels, selectedModelName])
 
+  const selectedRoutingSelection = useMemo(
+    () => (selectedModel ? getRoutingSelectionFromModel(selectedModel) : null),
+    [selectedModel]
+  )
+
+  const initialRoutingSelection = useMemo(
+    () => resolveInitialRoutingSelection(models, defaultRoutingSelection),
+    [defaultRoutingSelection, models]
+  )
+
+  const isSelectedDefaultModel = isSameRoutingSelection(
+    selectedRoutingSelection,
+    defaultRoutingSelection
+  )
+
   const channelCreateInitialValues = useMemo<
     Partial<ChannelFormValues> | undefined
   >(() => {
@@ -384,13 +502,18 @@ export function ModelRoutingWorkbench() {
       if (exists) return
     }
 
-    const firstProvider = providerOptions.find(
-      (provider) => provider.modelCount > 0
-    )
+    const initialProvider = initialRoutingSelection
+      ? providerOptions.find(
+          (provider) => provider.key === initialRoutingSelection.providerKey
+        )
+      : null
+    const firstProvider =
+      initialProvider ??
+      providerOptions.find((provider) => provider.modelCount > 0)
     setSelectedProviderKey(
       firstProvider?.key ?? providerOptions[0]?.key ?? null
     )
-  }, [providerOptions, selectedProviderKey])
+  }, [initialRoutingSelection, providerOptions, selectedProviderKey])
 
   useEffect(() => {
     if (!selectedProviderKey) {
@@ -403,8 +526,29 @@ export function ModelRoutingWorkbench() {
     )
     if (modelExists) return
 
-    setSelectedModelName(providerModels[0]?.model_name ?? null)
-  }, [providerModels, selectedModelName, selectedProviderKey])
+    const initialModel =
+      initialRoutingSelection?.providerKey === selectedProviderKey
+        ? providerModels.find(
+            (model) => model.model_name === initialRoutingSelection.modelName
+          )
+        : null
+    setSelectedModelName(
+      initialModel?.model_name ?? providerModels[0]?.model_name ?? null
+    )
+  }, [
+    initialRoutingSelection,
+    providerModels,
+    selectedModelName,
+    selectedProviderKey,
+  ])
+
+  useEffect(() => {
+    if (!selectedRoutingSelection) return
+    writeStoredRoutingSelection(
+      ROUTING_LAST_SELECTION_KEY,
+      selectedRoutingSelection
+    )
+  }, [selectedRoutingSelection])
 
   const refreshRoutingData = useCallback(async () => {
     await Promise.all([pricingQuery.refetch(), channelsQuery.refetch()])
@@ -414,6 +558,16 @@ export function ModelRoutingWorkbench() {
     setSelectedProviderKey(providerKey)
     setModelSearch('')
     setSelectedModelName(null)
+  }
+
+  const handleSetDefaultModel = () => {
+    if (!selectedRoutingSelection) return
+    writeStoredRoutingSelection(
+      ROUTING_DEFAULT_SELECTION_KEY,
+      selectedRoutingSelection
+    )
+    setDefaultRoutingSelection(selectedRoutingSelection)
+    toast.success(t('Saved successfully'))
   }
 
   const openChannelEditor = (channel: Channel) => {
@@ -767,6 +921,26 @@ export function ModelRoutingWorkbench() {
               <span className='text-muted-foreground shrink-0 text-xs tabular-nums'>
                 {providerModels.length}
               </span>
+              <Button
+                type='button'
+                variant='ghost'
+                size='icon-sm'
+                onClick={handleSetDefaultModel}
+                disabled={!selectedModel}
+                title={t('Set as default model')}
+                aria-label={t('Set as default model')}
+                className={cn(
+                  'shrink-0',
+                  isSelectedDefaultModel && 'text-warning'
+                )}
+              >
+                <Star
+                  className={cn(
+                    'size-4',
+                    isSelectedDefaultModel && 'fill-current'
+                  )}
+                />
+              </Button>
             </div>
             <div className='relative'>
               <Search className='text-muted-foreground pointer-events-none absolute top-2.5 left-2.5 size-4' />

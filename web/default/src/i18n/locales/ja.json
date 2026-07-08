@@ -4212,6 +4212,7 @@
     "Set a tag for": "のタグを設定",
     "Set API key access restrictions": "API キーのアクセス制限を設定",
     "Set API key basic information": "API キーの基本情報を設定",
+    "Set as default model": "デフォルトモデルに設定",
     "Set default ranges and charts for model analytics.": "モデル分析の既定の範囲とチャートを設定します。",
     "Set Field": "フィールドを設定",
     "Set filters to customize your dashboard statistics and charts.": "ダッシュボードの統計とグラフをカスタマイズするためにフィルターを設定します。",

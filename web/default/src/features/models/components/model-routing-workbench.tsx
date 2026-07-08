@@ -36,6 +36,12 @@ import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Switch } from '@/components/ui/switch'
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
   Table,
   TableBody,
   TableCell,
@@ -769,6 +775,7 @@ export function ModelRoutingWorkbench() {
                     const channelType =
                       CHANNEL_TYPES[channel.type as keyof typeof CHANNEL_TYPES] ??
                       CHANNEL_TYPES[0]
+                    const channelRemark = channel.remark?.trim()
 
                     return (
                       <TableRow
@@ -778,14 +785,39 @@ export function ModelRoutingWorkbench() {
                         <TableCell className='min-w-[15rem]'>
                           <div className='flex min-w-0 items-start justify-between gap-2'>
                             <div className='min-w-0 space-y-1'>
-                              <div
-                                className={cn(
-                                  'truncate font-medium',
-                                  !isEnabled && 'line-through'
-                                )}
-                              >
-                                {channel.name}
-                              </div>
+                              {channelRemark ? (
+                                <TooltipProvider delay={200}>
+                                  <Tooltip>
+                                    <TooltipTrigger
+                                      render={
+                                        <div
+                                          className={cn(
+                                            'block max-w-full truncate font-medium cursor-help',
+                                            !isEnabled && 'line-through'
+                                          )}
+                                        />
+                                      }
+                                    >
+                                      {channel.name}
+                                    </TooltipTrigger>
+                                    <TooltipContent
+                                      side='top'
+                                      className='max-w-xs break-words'
+                                    >
+                                      {channelRemark}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              ) : (
+                                <div
+                                  className={cn(
+                                    'truncate font-medium',
+                                    !isEnabled && 'line-through'
+                                  )}
+                                >
+                                  {channel.name}
+                                </div>
+                              )}
                               <div className='text-muted-foreground text-xs'>
                                 ID: {channel.id}
                               </div>

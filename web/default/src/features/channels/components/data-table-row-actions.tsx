@@ -385,7 +385,11 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
       <ConfirmDialog
         open={deleteConfirmOpen}
         onOpenChange={setDeleteConfirmOpen}
-        title={t('Delete Channel')}
+        title={
+          <span className='break-words'>
+            {t('Delete Channel')}: {channel.name}
+          </span>
+        }
         desc={t(
           'Are you sure you want to delete channel "{{name}}"? This action cannot be undone.',
           { name: channel.name }

@@ -28,6 +28,7 @@ import {
   Switch,
   Table,
   Tag,
+  Tooltip,
   Typography,
 } from '@douyinfe/semi-ui';
 import {
@@ -483,19 +484,37 @@ const ModelRoutingWorkbench = () => {
       dataIndex: 'name',
       render: (_, record) => {
         const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
+        const remark = record.remark?.trim();
+        const nameNode = (
+          <Text
+            strong
+            ellipsis
+            style={{
+              textDecoration: isEnabled ? 'none' : 'line-through',
+            }}
+          >
+            {record.name}
+          </Text>
+        );
         return (
           <div className='flex min-w-0 items-center justify-between gap-2'>
             <div className='min-w-0'>
               <div className='flex min-w-0 items-center gap-2'>
-                <Text
-                  strong
-                  ellipsis
-                  style={{
-                    textDecoration: isEnabled ? 'none' : 'line-through',
-                  }}
-                >
-                  {record.name}
-                </Text>
+                {remark ? (
+                  <Tooltip
+                    content={
+                      <div className='max-w-xs break-words text-sm'>
+                        {remark}
+                      </div>
+                    }
+                    trigger='hover'
+                    position='topLeft'
+                  >
+                    {nameNode}
+                  </Tooltip>
+                ) : (
+                  nameNode
+                )}
                 <Text type='tertiary' size='small'>
                   ID: {record.id}
                 </Text>

@@ -700,7 +700,15 @@ export const getChannelsColumns = ({
               onClick: () => {
                 Modal.confirm({
                   title: t('确定是否要删除此渠道？'),
-                  content: t('此修改将不可逆'),
+                  content: (
+                    <div className='flex flex-col gap-1'>
+                      <div>
+                        {t('渠道')}:{' '}
+                        <Typography.Text strong>{record.name}</Typography.Text>
+                      </div>
+                      <div>{t('此修改将不可逆')}</div>
+                    </div>
+                  ),
                   onOk: () => {
                     (async () => {
                       await manageChannel(record.id, 'delete', record);

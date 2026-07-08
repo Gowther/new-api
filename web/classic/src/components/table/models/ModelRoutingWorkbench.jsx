@@ -382,14 +382,6 @@ const ModelRoutingWorkbench = () => {
     defaultRoutingSelection,
   );
 
-  const channelCreateInitialValues = useMemo(() => {
-    if (!selectedModel) return undefined;
-    return {
-      models: [selectedModel.model_name],
-      test_model: selectedModel.model_name,
-    };
-  }, [selectedModel]);
-
   const selectedModelNames = useMemo(
     () => getRoutingModelNames(selectedModel),
     [selectedModel],
@@ -1065,11 +1057,6 @@ const ModelRoutingWorkbench = () => {
         visible={showEditChannel}
         handleClose={closeChannelEditor}
         editingChannel={editingChannel}
-        initialValues={
-          editingChannel.id === undefined
-            ? channelCreateInitialValues
-            : undefined
-        }
       />
     </div>
   );

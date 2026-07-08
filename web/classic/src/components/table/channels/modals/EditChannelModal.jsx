@@ -913,11 +913,6 @@ const EditChannelModal = (props) => {
           localModels = getChannelModels(nextValue);
           break;
       }
-      if (selectedModels.length === 0) {
-        const normalizedLocalModels = normalizeChannelModels(localModels);
-        setSelectedModels(normalizedLocalModels);
-        setInputs((inputs) => ({ ...inputs, models: normalizedLocalModels }));
-      }
       setBasicModels(localModels);
 
       // 重置手动输入模式状态
@@ -1655,12 +1650,7 @@ const EditChannelModal = (props) => {
     fetchGroups().then();
     if (!isEdit) {
       const initialValues = getInitValues();
-      let localModels = initialValues.models;
-      if (localModels.length === 0) {
-        localModels = normalizeChannelModels(
-          getChannelModels(initialValues.type),
-        );
-      }
+      const localModels = initialValues.models;
       initialBaseUrlRef.current = '';
       setInputs({ ...initialValues, models: localModels });
       setSelectedModels(localModels);
@@ -1668,7 +1658,7 @@ const EditChannelModal = (props) => {
       if (formApiRef.current) {
         formApiRef.current.setValues({ ...initialValues, models: localModels });
       }
-      setBasicModels(localModels);
+      setBasicModels(getChannelModels(initialValues.type));
     }
   }, [props.editingChannel.id]);
 
@@ -1685,15 +1675,11 @@ const EditChannelModal = (props) => {
         loadChannel();
       } else {
         const initialValues = getInitValues();
-        let initialModels = initialValues.models;
-        if (initialModels.length === 0) {
-          initialModels = normalizeChannelModels(
-            getChannelModels(initialValues.type),
-          );
-        }
+        const initialModels = initialValues.models;
         const nextValues = { ...initialValues, models: initialModels };
         setSelectedModels(initialModels);
         setInputs(nextValues);
+        setBasicModels(getChannelModels(initialValues.type));
         setSplitByModelVendor(false);
         setModelVendorGroups([]);
         formApiRef.current?.setValues(nextValues);

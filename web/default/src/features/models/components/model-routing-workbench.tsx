@@ -75,7 +75,6 @@ import {
   SUCCESS_MESSAGES,
 } from '@/features/channels/constants'
 import { channelsQueryKeys } from '@/features/channels/lib'
-import type { ChannelFormValues } from '@/features/channels/lib/channel-form'
 import type { Channel } from '@/features/channels/types'
 import { getPricing } from '@/features/pricing/api'
 import type { PricingModel, PricingVendor } from '@/features/pricing/types'
@@ -461,16 +460,6 @@ export function ModelRoutingWorkbench() {
     selectedRoutingSelection,
     defaultRoutingSelection
   )
-
-  const channelCreateInitialValues = useMemo<
-    Partial<ChannelFormValues> | undefined
-  >(() => {
-    if (!selectedModel) return undefined
-    return {
-      models: selectedModel.model_name,
-      test_model: selectedModel.model_name,
-    }
-  }, [selectedModel])
 
   const selectedModelNames = useMemo(
     () => getRoutingModelNames(selectedModel),
@@ -1260,9 +1249,6 @@ export function ModelRoutingWorkbench() {
         <ChannelMutateDrawer
           open={channelEditorOpen}
           currentRow={editingChannel}
-          initialValues={
-            editingChannel ? undefined : channelCreateInitialValues
-          }
           onOpenChange={handleChannelEditorOpenChange}
         />
       </ChannelsProvider>

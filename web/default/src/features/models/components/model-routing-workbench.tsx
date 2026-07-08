@@ -796,15 +796,16 @@ export function ModelRoutingWorkbench() {
               <EmptyState title={t('No channels support this model')} />
             )}
             {!isLoading && selectedModel && channelsForModel.length > 0 && (
-              <Table>
+              <Table className='min-w-[64rem] table-fixed'>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className='min-w-[15rem]'>
+                    <TableHead className='w-[24rem]'>
                       {t('Channel')}
                     </TableHead>
-                    <TableHead>{t('Type')}</TableHead>
-                    <TableHead>{t('Group')}</TableHead>
-                    <TableHead>{t('Status')}</TableHead>
+                    <TableHead className='w-20'>{t('Actions')}</TableHead>
+                    <TableHead className='w-36'>{t('Type')}</TableHead>
+                    <TableHead className='w-32'>{t('Group')}</TableHead>
+                    <TableHead className='w-44'>{t('Status')}</TableHead>
                     <TableHead className='w-28'>{t('Priority')}</TableHead>
                     <TableHead className='w-28'>{t('Weight')}</TableHead>
                   </TableRow>
@@ -833,86 +834,92 @@ export function ModelRoutingWorkbench() {
                         key={channel.id}
                         className={!isEnabled ? 'bg-muted/30 opacity-75' : ''}
                       >
-                        <TableCell className='min-w-[15rem]'>
-                          <div className='flex min-w-0 items-start justify-between gap-2'>
-                            <div className='min-w-0 space-y-1'>
-                              <div className='flex min-w-0 items-center gap-1.5'>
+                        <TableCell className='w-[24rem] max-w-[24rem]'>
+                          <div className='min-w-0 space-y-1'>
+                            <div className='flex min-w-0 items-center gap-1.5'>
+                              <StatusBadge
+                                label={`#${index + 1}`}
+                                variant='neutral'
+                                size='sm'
+                                copyable={false}
+                              />
+                              {routeRoleLabelKey ? (
                                 <StatusBadge
-                                  label={`#${index + 1}`}
-                                  variant='neutral'
+                                  label={t(routeRoleLabelKey)}
+                                  variant={ROUTING_ROLE_VARIANTS[index]}
                                   size='sm'
                                   copyable={false}
                                 />
-                                {routeRoleLabelKey ? (
-                                  <StatusBadge
-                                    label={t(routeRoleLabelKey)}
-                                    variant={ROUTING_ROLE_VARIANTS[index]}
-                                    size='sm'
-                                    copyable={false}
-                                  />
-                                ) : null}
-                                {channelRemark ? (
-                                  <TooltipProvider delay={200}>
-                                    <Tooltip>
-                                      <TooltipTrigger
-                                        render={
-                                          <div
-                                            className={cn(
-                                              'block min-w-0 flex-1 truncate font-medium cursor-help',
-                                              !isEnabled && 'line-through'
-                                            )}
-                                          />
-                                        }
-                                      >
-                                        {channel.name}
-                                      </TooltipTrigger>
-                                      <TooltipContent
-                                        side='top'
-                                        className='max-w-xs break-words'
-                                      >
-                                        {channelRemark}
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                ) : (
-                                  <div
-                                    className={cn(
-                                      'min-w-0 flex-1 truncate font-medium',
-                                      !isEnabled && 'line-through'
-                                    )}
-                                  >
-                                    {channel.name}
-                                  </div>
-                                )}
-                              </div>
-                              <div className='text-muted-foreground text-xs'>
-                                ID: {channel.id}
-                              </div>
+                              ) : null}
+                              {channelRemark ? (
+                                <TooltipProvider delay={200}>
+                                  <Tooltip>
+                                    <TooltipTrigger
+                                      render={
+                                        <div
+                                          className={cn(
+                                            'block min-w-0 flex-1 truncate font-medium cursor-help',
+                                            !isEnabled && 'line-through'
+                                          )}
+                                        />
+                                      }
+                                    >
+                                      {channel.name}
+                                    </TooltipTrigger>
+                                    <TooltipContent
+                                      side='top'
+                                      className='max-w-xs break-words'
+                                    >
+                                      {channelRemark}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              ) : (
+                                <div
+                                  className={cn(
+                                    'min-w-0 flex-1 truncate font-medium',
+                                    !isEnabled && 'line-through'
+                                  )}
+                                >
+                                  {channel.name}
+                                </div>
+                              )}
                             </div>
+                            <div className='text-muted-foreground text-xs'>
+                              ID: {channel.id}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className='w-20'>
+                          <div className='flex items-center gap-1'>
                             <Button
                               type='button'
                               variant='ghost'
-                              size='sm'
+                              size='icon-sm'
                               className='shrink-0'
+                              title={t('Edit')}
+                              aria-label={t('Edit')}
                               onClick={() => openChannelEditor(channel)}
                             >
                               <Pencil className='size-4' />
-                              {t('Edit')}
                             </Button>
                             <Button
                               type='button'
                               variant='ghost'
-                              size='sm'
+                              size='icon-sm'
                               className='text-destructive hover:text-destructive shrink-0'
+                              title={t('Delete')}
+                              aria-label={t('Delete')}
                               onClick={() => setDeletingChannel(channel)}
                             >
                               <Trash2 className='size-4' />
-                              {t('Delete')}
                             </Button>
                           </div>
                         </TableCell>
-                        <TableCell>{t(channelType)}</TableCell>
-                        <TableCell>
+                        <TableCell className='w-36'>
+                          <div className='truncate'>{t(channelType)}</div>
+                        </TableCell>
+                        <TableCell className='w-32'>
                           <StatusBadge
                             label={channel.group}
                             variant='neutral'
@@ -920,8 +927,8 @@ export function ModelRoutingWorkbench() {
                             copyable={false}
                           />
                         </TableCell>
-                        <TableCell>
-                          <div className='flex items-center gap-2'>
+                        <TableCell className='w-44'>
+                          <div className='flex min-w-0 items-center gap-2'>
                             <Switch
                               size='sm'
                               checked={isEnabled}
@@ -935,10 +942,11 @@ export function ModelRoutingWorkbench() {
                               label={t(statusConfig.label)}
                               variant={statusConfig.variant}
                               copyable={false}
+                              className='min-w-0'
                             />
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className='w-28'>
                           <Input
                             type='number'
                             min={0}
@@ -959,7 +967,7 @@ export function ModelRoutingWorkbench() {
                             aria-label={t('Priority')}
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell className='w-28'>
                           <Input
                             type='number'
                             min={0}

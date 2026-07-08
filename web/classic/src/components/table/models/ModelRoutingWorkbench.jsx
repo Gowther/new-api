@@ -527,6 +527,7 @@ const ModelRoutingWorkbench = () => {
     {
       title: t('渠道'),
       dataIndex: 'name',
+      width: 360,
       render: (_, record, index) => {
         const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
         const remark = record.remark?.trim();
@@ -546,58 +547,63 @@ const ModelRoutingWorkbench = () => {
           </Text>
         );
         return (
-          <div className='flex min-w-0 items-center justify-between gap-2'>
-            <div className='min-w-0'>
-              <div className='flex min-w-0 items-center gap-2'>
-                <Tag color='grey' shape='circle' size='small'>
-                  #{index + 1}
+          <div className='min-w-0'>
+            <div className='flex min-w-0 items-center gap-2'>
+              <Tag color='grey' shape='circle' size='small'>
+                #{index + 1}
+              </Tag>
+              {routeRoleLabel ? (
+                <Tag
+                  color={ROUTING_ROLE_COLORS[index]}
+                  shape='circle'
+                  size='small'
+                >
+                  {t(routeRoleLabel)}
                 </Tag>
-                {routeRoleLabel ? (
-                  <Tag
-                    color={ROUTING_ROLE_COLORS[index]}
-                    shape='circle'
-                    size='small'
-                  >
-                    {t(routeRoleLabel)}
-                  </Tag>
-                ) : null}
-                {remark ? (
-                  <Tooltip
-                    content={
-                      <div className='max-w-xs break-words text-sm'>
-                        {remark}
-                      </div>
-                    }
-                    trigger='hover'
-                    position='topLeft'
-                  >
-                    {nameNode}
-                  </Tooltip>
-                ) : (
-                  nameNode
-                )}
-                <Text type='tertiary' size='small'>
-                  ID: {record.id}
-                </Text>
-              </div>
+              ) : null}
+              {remark ? (
+                <Tooltip
+                  content={
+                    <div className='max-w-xs break-words text-sm'>{remark}</div>
+                  }
+                  trigger='hover'
+                  position='topLeft'
+                >
+                  {nameNode}
+                </Tooltip>
+              ) : (
+                nameNode
+              )}
+              <Text type='tertiary' size='small'>
+                ID: {record.id}
+              </Text>
             </div>
+          </div>
+        );
+      },
+    },
+    {
+      title: t('操作'),
+      dataIndex: 'actions',
+      width: 110,
+      render: (_, record) => {
+        return (
+          <div className='flex items-center gap-2'>
             <Button
               type='tertiary'
               size='small'
               icon={<IconEdit />}
+              aria-label={t('编辑')}
               onClick={() => openChannelEditor(record)}
-            >
-              {t('编辑')}
-            </Button>
+            />
             <Button
               type='danger'
               size='small'
               icon={<IconDelete />}
+              aria-label={t('删除')}
               loading={deletingChannelId === record.id}
               onClick={() => handleDeleteChannel(record)}
-            >
-              {t('删除')}
-            </Button>
+            />
           </div>
         );
       },
@@ -873,6 +879,7 @@ const ModelRoutingWorkbench = () => {
                 rowKey='id'
                 pagination={false}
                 size='small'
+                scroll={{ x: 1050 }}
               />
             )}
           </div>

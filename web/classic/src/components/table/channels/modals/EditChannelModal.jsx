@@ -745,7 +745,14 @@ const EditChannelModal = (props) => {
     system_prompt: '',
   });
   const showApiConfigCard = true; // 控制是否显示 API 配置卡片
-  const getInitValues = () => ({ ...originInputs });
+  const getInitValues = () => {
+    const values = {
+      ...originInputs,
+      ...(props.initialValues || {}),
+    };
+    values.models = normalizeChannelModels(values.models);
+    return values;
+  };
 
   // 处理渠道额外设置的更新
   const handleChannelSettingsChange = (key, value) => {
@@ -1647,18 +1654,21 @@ const EditChannelModal = (props) => {
     fetchModels().then();
     fetchGroups().then();
     if (!isEdit) {
+      const initialValues = getInitValues();
+      let localModels = initialValues.models;
+      if (localModels.length === 0) {
+        localModels = normalizeChannelModels(
+          getChannelModels(initialValues.type),
+        );
+      }
       initialBaseUrlRef.current = '';
-      setInputs(originInputs);
-      setSelectedModels([]);
+      setInputs({ ...initialValues, models: localModels });
+      setSelectedModels(localModels);
       setSelectedModelVendorIds([]);
       if (formApiRef.current) {
-        formApiRef.current.setValues(originInputs);
+        formApiRef.current.setValues({ ...initialValues, models: localModels });
       }
-      let localModels = getChannelModels(inputs.type);
       setBasicModels(localModels);
-      const normalizedLocalModels = normalizeChannelModels(localModels);
-      setSelectedModels(normalizedLocalModels);
-      setInputs((inputs) => ({ ...inputs, models: normalizedLocalModels }));
     }
   }, [props.editingChannel.id]);
 
@@ -1675,9 +1685,12 @@ const EditChannelModal = (props) => {
         loadChannel();
       } else {
         const initialValues = getInitValues();
-        const initialModels = normalizeChannelModels(
-          getChannelModels(initialValues.type),
-        );
+        let initialModels = initialValues.models;
+        if (initialModels.length === 0) {
+          initialModels = normalizeChannelModels(
+            getChannelModels(initialValues.type),
+          );
+        }
         const nextValues = { ...initialValues, models: initialModels };
         setSelectedModels(initialModels);
         setInputs(nextValues);

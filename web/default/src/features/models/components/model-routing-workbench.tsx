@@ -18,13 +18,21 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Pencil, RefreshCw, Save, Search, Trash2 } from 'lucide-react'
+import {
+  Loader2,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Save,
+  Search,
+  Trash2,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
-import { StatusBadge } from '@/components/status-badge'
-import { ProviderBadge } from '@/components/provider-badge'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { ProviderBadge } from '@/components/provider-badge'
+import { StatusBadge } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
 import {
   Empty,
@@ -37,12 +45,6 @@ import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Switch } from '@/components/ui/switch'
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
-import {
   Table,
   TableBody,
   TableCell,
@@ -50,8 +52,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { cn } from '@/lib/utils'
-import { getLobeIcon } from '@/lib/lobe-icon'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import {
   deleteChannel,
   getChannels,
@@ -68,12 +74,18 @@ import {
   SUCCESS_MESSAGES,
 } from '@/features/channels/constants'
 import { channelsQueryKeys } from '@/features/channels/lib'
+import type { ChannelFormValues } from '@/features/channels/lib/channel-form'
 import type { Channel } from '@/features/channels/types'
 import { getPricing } from '@/features/pricing/api'
-import type {
-  PricingModel,
-  PricingVendor,
-} from '@/features/pricing/types'
+import type { PricingModel, PricingVendor } from '@/features/pricing/types'
+import {
+  ADMIN_PERMISSION_ACTIONS,
+  ADMIN_PERMISSION_RESOURCES,
+  hasPermission,
+} from '@/lib/admin-permissions'
+import { getLobeIcon } from '@/lib/lobe-icon'
+import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/stores/auth-store'
 
 const ROUTING_PAGE_SIZE = 100
 const UNASSIGNED_PROVIDER_KEY = '__unassigned__'
@@ -215,6 +227,12 @@ function getChangedCount(changes: RoutingChanges): number {
 export function ModelRoutingWorkbench() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const currentUser = useAuthStore((state) => state.auth.user)
+  const canEditSensitive = hasPermission(
+    currentUser,
+    ADMIN_PERMISSION_RESOURCES.CHANNEL,
+    ADMIN_PERMISSION_ACTIONS.SENSITIVE_WRITE
+  )
   const [providerSearch, setProviderSearch] = useState('')
   const [modelSearch, setModelSearch] = useState('')
   const [selectedProviderKey, setSelectedProviderKey] = useState<string | null>(
@@ -297,8 +315,9 @@ export function ModelRoutingWorkbench() {
   const selectedProvider = useMemo(() => {
     if (!selectedProviderKey) return null
     return (
-      providerOptions.find((provider) => provider.key === selectedProviderKey) ??
-      null
+      providerOptions.find(
+        (provider) => provider.key === selectedProviderKey
+      ) ?? null
     )
   }, [providerOptions, selectedProviderKey])
 
@@ -325,6 +344,16 @@ export function ModelRoutingWorkbench() {
     )
   }, [providerModels, selectedModelName])
 
+  const channelCreateInitialValues = useMemo<
+    Partial<ChannelFormValues> | undefined
+  >(() => {
+    if (!selectedModel) return undefined
+    return {
+      models: selectedModel.model_name,
+      test_model: selectedModel.model_name,
+    }
+  }, [selectedModel])
+
   const selectedModelNames = useMemo(
     () => getRoutingModelNames(selectedModel),
     [selectedModel]
@@ -340,6 +369,12 @@ export function ModelRoutingWorkbench() {
   const isLoading = pricingQuery.isLoading || channelsQuery.isLoading
   const isFetching = pricingQuery.isFetching || channelsQuery.isFetching
   const changedCount = getChangedCount(routingChanges)
+  let createChannelButtonTitle: string | undefined
+  if (!canEditSensitive) {
+    createChannelButtonTitle = t('No permission to perform this action')
+  } else if (!selectedModel) {
+    createChannelButtonTitle = t('Select a model')
+  }
 
   useEffect(() => {
     if (selectedProviderKey && providerOptions.length > 0) {
@@ -352,7 +387,9 @@ export function ModelRoutingWorkbench() {
     const firstProvider = providerOptions.find(
       (provider) => provider.modelCount > 0
     )
-    setSelectedProviderKey(firstProvider?.key ?? providerOptions[0]?.key ?? null)
+    setSelectedProviderKey(
+      firstProvider?.key ?? providerOptions[0]?.key ?? null
+    )
   }, [providerOptions, selectedProviderKey])
 
   useEffect(() => {
@@ -384,6 +421,12 @@ export function ModelRoutingWorkbench() {
     setChannelEditorOpen(true)
   }
 
+  const openChannelCreator = () => {
+    if (!selectedModel || !canEditSensitive) return
+    setEditingChannel(null)
+    setChannelEditorOpen(true)
+  }
+
   const openChannelUsageLogs = (channelId: number) => {
     const targetUrl = `/usage-logs/common?channel=${encodeURIComponent(
       String(channelId)
@@ -394,6 +437,7 @@ export function ModelRoutingWorkbench() {
   const handleChannelEditorOpenChange = (open: boolean) => {
     setChannelEditorOpen(open)
     if (open) return
+    setEditingChannel(null)
     void channelsQuery.refetch()
     void pricingQuery.refetch()
   }
@@ -472,7 +516,9 @@ export function ModelRoutingWorkbench() {
         )
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : t(ERROR_MESSAGES.UPDATE_FAILED)
+          error instanceof Error
+            ? error.message
+            : t(ERROR_MESSAGES.UPDATE_FAILED)
         )
       } finally {
         setStatusUpdatingIds((prev) => {
@@ -504,7 +550,9 @@ export function ModelRoutingWorkbench() {
         delete next[deletingChannel.id]
         return next
       })
-      await queryClient.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
+      await queryClient.invalidateQueries({
+        queryKey: channelsQueryKeys.lists(),
+      })
       await queryClient.invalidateQueries({
         queryKey: ['model-routing', 'channels'],
       })
@@ -550,8 +598,9 @@ export function ModelRoutingWorkbench() {
       const successfulUpdates = results.flatMap((result) =>
         result.status === 'fulfilled' ? [result.value] : []
       )
-      const failCount = results.filter((result) => result.status === 'rejected')
-        .length
+      const failCount = results.filter(
+        (result) => result.status === 'rejected'
+      ).length
 
       if (successfulUpdates.length > 0) {
         setChannels((prev) => {
@@ -590,7 +639,9 @@ export function ModelRoutingWorkbench() {
       }
 
       if (failCount > 0) {
-        toast.error(t('{{count}} channel(s) failed to update', { count: failCount }))
+        toast.error(
+          t('{{count}} channel(s) failed to update', { count: failCount })
+        )
       }
     } catch {
       toast.error(t('Failed to update routing'))
@@ -602,7 +653,7 @@ export function ModelRoutingWorkbench() {
   return (
     <div className='flex h-full min-h-0 flex-col gap-3'>
       <div className='flex flex-wrap items-center justify-between gap-2'>
-        <div className='flex min-w-0 items-center gap-2 text-sm text-muted-foreground'>
+        <div className='text-muted-foreground flex min-w-0 items-center gap-2 text-sm'>
           {changedCount > 0 ? (
             <StatusBadge
               label={t('{{count}} unsaved change(s)', { count: changedCount })}
@@ -648,11 +699,11 @@ export function ModelRoutingWorkbench() {
       </div>
 
       <div className='grid min-h-0 flex-1 gap-3 lg:grid-cols-[17rem_22rem_minmax(0,1fr)]'>
-        <section className='flex min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-lg border bg-background'>
+        <section className='bg-background flex min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-lg border'>
           <div className='border-b p-3'>
             <div className='mb-2 text-sm font-medium'>{t('Vendors')}</div>
             <div className='relative'>
-              <Search className='pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground' />
+              <Search className='text-muted-foreground pointer-events-none absolute top-2.5 left-2.5 size-4' />
               <Input
                 value={providerSearch}
                 onChange={(event) => setProviderSearch(event.target.value)}
@@ -707,7 +758,7 @@ export function ModelRoutingWorkbench() {
           </ScrollArea>
         </section>
 
-        <section className='flex min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-lg border bg-background'>
+        <section className='bg-background flex min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-lg border'>
           <div className='border-b p-3'>
             <div className='mb-2 flex min-w-0 items-center justify-between gap-2'>
               <div className='truncate text-sm font-medium'>
@@ -718,7 +769,7 @@ export function ModelRoutingWorkbench() {
               </span>
             </div>
             <div className='relative'>
-              <Search className='pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground' />
+              <Search className='text-muted-foreground pointer-events-none absolute top-2.5 left-2.5 size-4' />
               <Input
                 value={modelSearch}
                 onChange={(event) => setModelSearch(event.target.value)}
@@ -778,7 +829,7 @@ export function ModelRoutingWorkbench() {
           </ScrollArea>
         </section>
 
-        <section className='flex min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-lg border bg-background'>
+        <section className='bg-background flex min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-lg border'>
           <div className='flex min-h-14 items-center justify-between gap-3 border-b p-3'>
             <div className='min-w-0'>
               <div className='truncate text-sm font-medium'>
@@ -792,6 +843,18 @@ export function ModelRoutingWorkbench() {
                 </div>
               ) : null}
             </div>
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              onClick={openChannelCreator}
+              disabled={!selectedModel || !canEditSensitive}
+              title={createChannelButtonTitle}
+              aria-label={t('Create Channel')}
+            >
+              <Plus className='size-4' />
+              <span className='max-sm:hidden'>{t('Create Channel')}</span>
+            </Button>
           </div>
 
           <div className='min-h-0 flex-1 overflow-auto'>
@@ -806,9 +869,7 @@ export function ModelRoutingWorkbench() {
               <Table className='min-w-[58rem] table-fixed'>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className='w-80'>
-                      {t('Channel')}
-                    </TableHead>
+                    <TableHead className='w-80'>{t('Channel')}</TableHead>
                     <TableHead className='w-16'>{t('Actions')}</TableHead>
                     <TableHead className='w-28'>{t('Type')}</TableHead>
                     <TableHead className='w-24'>{t('Group')}</TableHead>
@@ -836,8 +897,9 @@ export function ModelRoutingWorkbench() {
                         channel.status as keyof typeof CHANNEL_STATUS_CONFIG
                       ] || CHANNEL_STATUS_CONFIG[CHANNEL_STATUS.UNKNOWN]
                     const channelType =
-                      CHANNEL_TYPES[channel.type as keyof typeof CHANNEL_TYPES] ??
-                      CHANNEL_TYPES[0]
+                      CHANNEL_TYPES[
+                        channel.type as keyof typeof CHANNEL_TYPES
+                      ] ?? CHANNEL_TYPES[0]
                     const channelRemark = channel.remark?.trim()
 
                     return (
@@ -1018,6 +1080,9 @@ export function ModelRoutingWorkbench() {
         <ChannelMutateDrawer
           open={channelEditorOpen}
           currentRow={editingChannel}
+          initialValues={
+            editingChannel ? undefined : channelCreateInitialValues
+          }
           onOpenChange={handleChannelEditorOpenChange}
         />
       </ChannelsProvider>

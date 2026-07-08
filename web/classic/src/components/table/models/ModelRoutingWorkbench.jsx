@@ -35,6 +35,7 @@ import {
 import {
   IconDelete,
   IconEdit,
+  IconPlus,
   IconRefresh,
   IconSave,
   IconSearch,
@@ -298,6 +299,14 @@ const ModelRoutingWorkbench = () => {
     );
   }, [providerModels, selectedModelName]);
 
+  const channelCreateInitialValues = useMemo(() => {
+    if (!selectedModel) return undefined;
+    return {
+      models: [selectedModel.model_name],
+      test_model: selectedModel.model_name,
+    };
+  }, [selectedModel]);
+
   const selectedModelNames = useMemo(
     () => getRoutingModelNames(selectedModel),
     [selectedModel],
@@ -350,6 +359,12 @@ const ModelRoutingWorkbench = () => {
 
   const openChannelEditor = (channel) => {
     setEditingChannel(channel);
+    setShowEditChannel(true);
+  };
+
+  const openChannelCreator = () => {
+    if (!selectedModel) return;
+    setEditingChannel({ id: undefined });
     setShowEditChannel(true);
   };
 
@@ -870,6 +885,16 @@ const ModelRoutingWorkbench = () => {
                   </div>
                 ) : null}
               </div>
+              <Button
+                theme='light'
+                type='primary'
+                size='small'
+                icon={<IconPlus />}
+                disabled={!selectedModel}
+                onClick={openChannelCreator}
+              >
+                {t('添加渠道')}
+              </Button>
             </div>
           </div>
           <div className='min-h-0 flex-1 overflow-auto p-2'>
@@ -899,6 +924,11 @@ const ModelRoutingWorkbench = () => {
         visible={showEditChannel}
         handleClose={closeChannelEditor}
         editingChannel={editingChannel}
+        initialValues={
+          editingChannel.id === undefined
+            ? channelCreateInitialValues
+            : undefined
+        }
       />
     </div>
   );

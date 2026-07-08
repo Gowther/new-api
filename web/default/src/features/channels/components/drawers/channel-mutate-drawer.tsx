@@ -201,6 +201,7 @@ type ChannelMutateDrawerProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   currentRow?: Channel | null
+  initialValues?: Partial<ChannelFormValues>
 }
 
 type ModelMappingGuardrail = {
@@ -601,6 +602,7 @@ export function ChannelMutateDrawer({
   open,
   onOpenChange,
   currentRow,
+  initialValues,
 }: ChannelMutateDrawerProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
@@ -1228,13 +1230,18 @@ export function ChannelMutateDrawer({
       initialStatusCodeMappingRef.current =
         channelData.data.status_code_mapping || ''
     } else if (!isEditing) {
-      form.reset(CHANNEL_FORM_DEFAULT_VALUES)
+      const createDefaults = {
+        ...CHANNEL_FORM_DEFAULT_VALUES,
+        ...initialValues,
+      }
+      form.reset(createDefaults)
       setAdvancedSettingsOpen(false)
-      initialModelsRef.current = []
-      initialModelMappingRef.current = ''
-      initialStatusCodeMappingRef.current = ''
+      initialModelsRef.current = parseModelsString(createDefaults.models || '')
+      initialModelMappingRef.current = createDefaults.model_mapping || ''
+      initialStatusCodeMappingRef.current =
+        createDefaults.status_code_mapping || ''
     }
-  }, [isEditing, channelData, form])
+  }, [isEditing, channelData, form, initialValues])
 
   // Handle type change - set default values for specific types
   useEffect(() => {

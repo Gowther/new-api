@@ -106,6 +106,22 @@ type officialPriceEntry struct {
 	CacheReadPrice *float64
 }
 
+type officialPriceSource struct {
+	Name string
+	URL  string
+}
+
+var officialPriceSources = []officialPriceSource{
+	{
+		Name: officialPriceSourceModelsDev,
+		URL:  modelsDevPresetBaseURL + modelsDevPath,
+	},
+	{
+		Name: officialPriceSourceBaseLLM,
+		URL:  officialRatioPresetBaseURL + officialRatioPresetEndpoint,
+	},
+}
+
 func GetOfficialPriceMappings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -119,7 +135,10 @@ func PreviewOfficialPriceSync(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), time.Duration(timeoutSec)*time.Second)
 	defer cancel()
 
-	entries, sourceResults := fetchOfficialPriceEntries(ctx)
+	entries, sourceResults := fetchOfficialPriceEntries(
+		ctx,
+		previewOfficialPriceSourceNames(c.Query("sources")),
+	)
 	mappings := loadOfficialPriceMappings()
 	localData := getLocalPricingSyncData()
 	pricingByModel := getPricingByModel()
@@ -181,7 +200,10 @@ func ApplyOfficialPriceSync(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), time.Duration(timeoutSec)*time.Second)
 	defer cancel()
 
-	entries, sourceResults := fetchOfficialPriceEntries(ctx)
+	entries, sourceResults := fetchOfficialPriceEntries(
+		ctx,
+		officialPriceMappingSourceNames(targetMappings),
+	)
 	entryByKey := make(map[string]officialPriceEntry, len(entries))
 	for _, entry := range entries {
 		entryByKey[officialPriceEntryKey(entry.Source, entry.Provider, entry.UpstreamModel)] = entry
@@ -278,47 +300,81 @@ func normalizeOfficialPriceMapping(mapping dto.OfficialPriceMapping) dto.Officia
 	}
 }
 
-func fetchOfficialPriceEntries(ctx context.Context) ([]officialPriceEntry, []dto.OfficialPriceSourceResult) {
-	type source struct {
-		name string
-		url  string
+func previewOfficialPriceSourceNames(rawSources string) []string {
+	if strings.TrimSpace(rawSources) == "" {
+		sourceNames := make([]string, 0, len(officialPriceSources))
+		for _, source := range officialPriceSources {
+			sourceNames = append(sourceNames, source.Name)
+		}
+		return sourceNames
 	}
-	sources := []source{
-		{
-			name: officialPriceSourceModelsDev,
-			url:  modelsDevPresetBaseURL + modelsDevPath,
-		},
-		{
-			name: officialPriceSourceBaseLLM,
-			url:  officialRatioPresetBaseURL + officialRatioPresetEndpoint,
-		},
+
+	return officialPriceSourceNames([]string{rawSources})
+}
+
+func officialPriceMappingSourceNames(mappings map[string]dto.OfficialPriceMapping) []string {
+	sourceNames := make([]string, 0, len(mappings))
+	for _, mapping := range mappings {
+		sourceNames = append(sourceNames, mapping.Source)
+	}
+	return officialPriceSourceNames(sourceNames)
+}
+
+func officialPriceSourceNames(values []string) []string {
+	requestedSources := make(map[string]struct{})
+	for _, value := range values {
+		for _, sourceName := range strings.Split(value, ",") {
+			sourceName = strings.TrimSpace(sourceName)
+			if sourceName != "" {
+				requestedSources[sourceName] = struct{}{}
+			}
+		}
+	}
+
+	sourceNames := make([]string, 0, len(requestedSources))
+	for _, source := range officialPriceSources {
+		if _, ok := requestedSources[source.Name]; ok {
+			sourceNames = append(sourceNames, source.Name)
+		}
+	}
+	return sourceNames
+}
+
+func fetchOfficialPriceEntries(ctx context.Context, sourceNames []string) ([]officialPriceEntry, []dto.OfficialPriceSourceResult) {
+	selectedSources := make(map[string]struct{}, len(sourceNames))
+	for _, sourceName := range sourceNames {
+		selectedSources[sourceName] = struct{}{}
 	}
 
 	client := officialPriceHTTPClient()
 	entries := make([]officialPriceEntry, 0)
-	results := make([]dto.OfficialPriceSourceResult, 0, len(sources))
-	for _, src := range sources {
-		body, err := fetchOfficialPriceSource(ctx, client, src.url)
+	results := make([]dto.OfficialPriceSourceResult, 0, len(sourceNames))
+	for _, source := range officialPriceSources {
+		if _, ok := selectedSources[source.Name]; !ok {
+			continue
+		}
+
+		body, err := fetchOfficialPriceSource(ctx, client, source.URL)
 		if err != nil {
-			logger.LogWarn(ctx, "official price source fetch failed: "+src.name+": "+err.Error())
-			results = append(results, dto.OfficialPriceSourceResult{Name: src.name, Status: "error", Error: err.Error()})
+			logger.LogWarn(ctx, "official price source fetch failed: "+source.Name+": "+err.Error())
+			results = append(results, dto.OfficialPriceSourceResult{Name: source.Name, Status: "error", Error: err.Error()})
 			continue
 		}
 
 		var parsed []officialPriceEntry
-		switch src.name {
+		switch source.Name {
 		case officialPriceSourceModelsDev:
 			parsed, err = parseModelsDevOfficialPriceEntries(bytes.NewReader(body))
 		case officialPriceSourceBaseLLM:
 			parsed, err = parseBaseLLMOfficialPriceEntries(bytes.NewReader(body))
 		}
 		if err != nil {
-			logger.LogWarn(ctx, "official price source parse failed: "+src.name+": "+err.Error())
-			results = append(results, dto.OfficialPriceSourceResult{Name: src.name, Status: "error", Error: err.Error()})
+			logger.LogWarn(ctx, "official price source parse failed: "+source.Name+": "+err.Error())
+			results = append(results, dto.OfficialPriceSourceResult{Name: source.Name, Status: "error", Error: err.Error()})
 			continue
 		}
 		entries = append(entries, parsed...)
-		results = append(results, dto.OfficialPriceSourceResult{Name: src.name, Status: "success", Count: len(parsed)})
+		results = append(results, dto.OfficialPriceSourceResult{Name: source.Name, Status: "success", Count: len(parsed)})
 	}
 	return entries, results
 }

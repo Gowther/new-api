@@ -21,6 +21,7 @@ package controller
 import (
 	"testing"
 
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/stretchr/testify/require"
 )
@@ -47,4 +48,35 @@ func TestMergeOfficialPriceLocalModelNamesIncludesEnabledChannelModels(t *testin
 		"priced-model",
 		"pricing-model",
 	}, modelNames)
+}
+
+func TestPreviewOfficialPriceSourceNamesDefaultsToAllSources(t *testing.T) {
+	require.Equal(t, []string{
+		officialPriceSourceModelsDev,
+		officialPriceSourceBaseLLM,
+	}, previewOfficialPriceSourceNames(""))
+}
+
+func TestOfficialPriceSourceNamesFiltersUnsupportedSources(t *testing.T) {
+	require.Equal(t, []string{
+		officialPriceSourceModelsDev,
+		officialPriceSourceBaseLLM,
+	}, officialPriceSourceNames([]string{
+		officialPriceSourceBaseLLM + "," + officialPriceSourceModelsDev,
+		"unsupported-source",
+		officialPriceSourceBaseLLM,
+	}))
+}
+
+func TestOfficialPriceMappingSourceNamesUsesSavedMappingSources(t *testing.T) {
+	require.Equal(t, []string{officialPriceSourceBaseLLM}, officialPriceMappingSourceNames(
+		map[string]dto.OfficialPriceMapping{
+			"saved-model": {
+				Source: officialPriceSourceBaseLLM,
+			},
+			"unknown-source-model": {
+				Source: "unsupported-source",
+			},
+		},
+	))
 }

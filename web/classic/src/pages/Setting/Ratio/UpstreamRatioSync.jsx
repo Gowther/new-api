@@ -60,6 +60,10 @@ const MODELS_DEV_PRESET_ID = -101;
 const MODELS_DEV_PRESET_NAME = 'models.dev 价格预设';
 const MODELS_DEV_PRESET_BASE_URL = 'https://models.dev';
 const MODELS_DEV_PRESET_ENDPOINT = 'https://models.dev/api.json';
+const OFFICIAL_PRICE_SOURCES = [
+  { value: 'models.dev', label: 'models.dev' },
+  { value: 'basellm', label: 'BaseLLM' },
+];
 
 function ConflictConfirmModal({ t, visible, items, loading, onOk, onCancel }) {
   const isMobile = useIsMobile();
@@ -182,6 +186,9 @@ function OfficialPriceSyncPanel({ t, disabled, refresh }) {
   const [previewData, setPreviewData] = useState(null);
   const [selectedMappings, setSelectedMappings] = useState({});
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [selectedSources, setSelectedSources] = useState(
+    OFFICIAL_PRICE_SOURCES.map((source) => source.value),
+  );
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
 
@@ -245,7 +252,9 @@ function OfficialPriceSyncPanel({ t, disabled, refresh }) {
   const fetchOfficialPreview = async () => {
     setLoading(true);
     try {
-      const res = await API.get('/api/ratio_sync/official/preview');
+      const res = await API.get('/api/ratio_sync/official/preview', {
+        params: { sources: selectedSources.join(',') },
+      });
       if (!res.data.success) {
         showError(res.data.message || t('官方价格预览失败'));
         return;
@@ -313,6 +322,18 @@ function OfficialPriceSyncPanel({ t, disabled, refresh }) {
       }
       return { ...prev, [modelName]: mapping };
     });
+  };
+
+  const toggleOfficialPriceSource = (source, checked) => {
+    setSelectedSources((previous) => {
+      if (checked) {
+        return previous.includes(source) ? previous : [...previous, source];
+      }
+      return previous.filter((value) => value !== source);
+    });
+    setPreviewData(null);
+    setSelectedMappings({});
+    setSearchKeyword('');
   };
 
   const selectedCount = Object.keys(selectedMappings).length;
@@ -449,6 +470,22 @@ function OfficialPriceSyncPanel({ t, disabled, refresh }) {
           ))}
         </div>
 
+        <div className='flex flex-wrap items-center gap-3'>
+          <span className='text-sm text-gray-500'>{t('价格来源')}</span>
+          {OFFICIAL_PRICE_SOURCES.map((source) => (
+            <Checkbox
+              key={source.value}
+              checked={selectedSources.includes(source.value)}
+              disabled={panelDisabled}
+              onChange={(event) =>
+                toggleOfficialPriceSource(source.value, event.target.checked)
+              }
+            >
+              {source.label}
+            </Checkbox>
+          ))}
+        </div>
+
         <div className='flex flex-col gap-2 sm:flex-row sm:items-center'>
           <Input
             prefix={<IconSearch size={14} />}
@@ -461,7 +498,7 @@ function OfficialPriceSyncPanel({ t, disabled, refresh }) {
           />
           <Button
             icon={<RefreshCcw size={14} />}
-            disabled={panelDisabled}
+            disabled={panelDisabled || selectedSources.length === 0}
             loading={loading}
             onClick={fetchOfficialPreview}
           >

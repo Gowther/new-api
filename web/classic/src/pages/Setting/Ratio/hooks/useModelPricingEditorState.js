@@ -713,7 +713,11 @@ export function useModelPricingEditorState({
         : true;
       const conflictMatch = conflictOnly ? model.hasConflict : true;
       const officialMappingMatch =
-        officialMappingFilter !== 'saved' || !!officialMappings[model.name];
+        officialMappingFilter === 'saved'
+          ? !!officialMappings[model.name]
+          : officialMappingFilter === 'unsaved'
+            ? !officialMappings[model.name]
+            : true;
       return keywordMatch && conflictMatch && officialMappingMatch;
     });
   }, [

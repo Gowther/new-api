@@ -24,7 +24,9 @@ import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Table,
   TableBody,
@@ -67,6 +69,11 @@ const PRICE_FIELD_ORDER = [
 const EXTRA_FIELD_LABELS: Record<string, string> = {
   billing_mode: 'Billing mode',
 }
+
+const OFFICIAL_PRICE_SOURCES = [
+  { value: 'models.dev', label: 'models.dev' },
+  { value: 'basellm', label: 'BaseLLM' },
+] as const
 
 function mappingKey(mapping?: OfficialPriceMapping) {
   if (!mapping) return ''
@@ -236,6 +243,9 @@ export function OfficialPriceSync() {
     Record<string, OfficialPriceMapping>
   >({})
   const [search, setSearch] = useState('')
+  const [selectedSources, setSelectedSources] = useState<string[]>(() =>
+    OFFICIAL_PRICE_SOURCES.map((source) => source.value)
+  )
 
   const previewMutation = useMutation({
     mutationFn: previewOfficialPriceSync,
@@ -322,6 +332,18 @@ export function OfficialPriceSync() {
     })
   }
 
+  const handleSourceChange = (source: string, checked: boolean) => {
+    setSelectedSources((previous) => {
+      if (checked) {
+        return previous.includes(source) ? previous : [...previous, source]
+      }
+      return previous.filter((value) => value !== source)
+    })
+    setPreviewData(undefined)
+    setSelectedMappings({})
+    setSearch('')
+  }
+
   const handleApplySelected = () => {
     if (selectedCount === 0) {
       toast.warning(t('No official price selection'))
@@ -361,6 +383,30 @@ export function OfficialPriceSync() {
           })}
         </div>
 
+        <div className='flex flex-wrap items-center gap-3'>
+          <span className='text-muted-foreground text-sm'>
+            {t('Price sources')}
+          </span>
+          {OFFICIAL_PRICE_SOURCES.map((source) => {
+            const id = `official-price-source-${source.value}`
+            return (
+              <div key={source.value} className='flex items-center gap-2'>
+                <Checkbox
+                  id={id}
+                  checked={selectedSources.includes(source.value)}
+                  onCheckedChange={(checked) =>
+                    handleSourceChange(source.value, !!checked)
+                  }
+                  disabled={isLoading}
+                />
+                <Label htmlFor={id} className='cursor-pointer text-sm'>
+                  {source.label}
+                </Label>
+              </div>
+            )
+          })}
+        </div>
+
         <div className='flex flex-col gap-2 sm:flex-row sm:items-center'>
           <div className='relative sm:w-64'>
             <Search className='text-muted-foreground absolute top-1/2 left-2 h-4 w-4 -translate-y-1/2' />
@@ -374,8 +420,8 @@ export function OfficialPriceSync() {
           </div>
           <Button
             variant='outline'
-            onClick={() => previewMutation.mutate()}
-            disabled={isLoading}
+            onClick={() => previewMutation.mutate(selectedSources)}
+            disabled={isLoading || selectedSources.length === 0}
           >
             {previewMutation.isPending ? (
               <Loader2 className='animate-spin' />

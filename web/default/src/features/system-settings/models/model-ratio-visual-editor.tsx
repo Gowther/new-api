@@ -447,6 +447,8 @@ const ModelRatioVisualEditorComponent = forwardRef<
     () => models.filter((model) => model.officialMapping).length,
     [models]
   )
+  const unsyncedOfficialMappingCount =
+    models.length - savedOfficialMappingCount
 
   const { table } = useDataTable({
     data: models,
@@ -684,6 +686,11 @@ const ModelRatioVisualEditorComponent = forwardRef<
                     label: t('Saved'),
                     value: 'saved',
                     count: savedOfficialMappingCount,
+                  },
+                  {
+                    label: t('Not synced'),
+                    value: 'unsaved',
+                    count: unsyncedOfficialMappingCount,
                   },
                 ],
               },

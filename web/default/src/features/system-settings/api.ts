@@ -133,9 +133,12 @@ export async function fetchUpstreamRatios(request: FetchUpstreamRatiosRequest) {
   return res.data
 }
 
-export async function previewOfficialPriceSync() {
+export async function previewOfficialPriceSync(sources: string[]) {
   const res = await api.get<OfficialPricePreviewResponse>(
-    '/api/ratio_sync/official/preview'
+    '/api/ratio_sync/official/preview',
+    {
+      params: { sources: sources.join(',') },
+    }
   )
   return res.data
 }

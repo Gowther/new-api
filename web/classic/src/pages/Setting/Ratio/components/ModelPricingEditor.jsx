@@ -338,6 +338,9 @@ export default function ModelPricingEditor({
             <Select.Option value='saved'>
               {`${t('官方价格同步')} · ${t('已保存')}`}
             </Select.Option>
+            <Select.Option value='unsaved'>
+              {`${t('官方价格同步')} · ${t('未同步')}`}
+            </Select.Option>
           </Select>
           {showConflictFilter ? (
             <Checkbox

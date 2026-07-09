@@ -300,10 +300,11 @@ export const useLogsData = () => {
 
   // 获取表单值的辅助函数，确保所有值都是字符串
   const getFormValues = () => {
+    const defaultFormValues = getDefaultLogFormValues();
     const formValues = formApi ? formApi.getValues() : formInitValues;
 
-    let start_timestamp = timestamp2string(getTodayStartTimestamp());
-    let end_timestamp = timestamp2string(now.getTime() / 1000 + 3600);
+    let start_timestamp = defaultFormValues.dateRange[0];
+    let end_timestamp = defaultFormValues.dateRange[1];
 
     if (
       formValues.dateRange &&

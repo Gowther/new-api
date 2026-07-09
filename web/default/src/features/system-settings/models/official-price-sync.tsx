@@ -18,15 +18,24 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Check, CheckSquare, Loader2, RefreshCcw, Search } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import { Dialog } from '@/components/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -235,17 +244,43 @@ function CandidateButton({
   )
 }
 
-export function OfficialPriceSync() {
+type OfficialPriceSyncProps = {
+  modelNames?: string[]
+  embedded?: boolean
+  onApplied?: (data?: OfficialPriceApplyData) => void
+}
+
+type MappingFilter = 'all' | 'saved' | 'unsaved'
+type CandidateFilter = 'all' | 'matched' | 'unmatched'
+
+export function OfficialPriceSync({
+  modelNames,
+  embedded = false,
+  onApplied,
+}: OfficialPriceSyncProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const isScoped = modelNames !== undefined
+  const modelNamesKey = modelNames?.join('\u0000') ?? ''
   const [previewData, setPreviewData] = useState<OfficialPricePreviewData>()
   const [selectedMappings, setSelectedMappings] = useState<
     Record<string, OfficialPriceMapping>
   >({})
   const [search, setSearch] = useState('')
+  const [mappingFilter, setMappingFilter] = useState<MappingFilter>('all')
+  const [candidateFilter, setCandidateFilter] =
+    useState<CandidateFilter>('all')
   const [selectedSources, setSelectedSources] = useState<string[]>(() =>
     OFFICIAL_PRICE_SOURCES.map((source) => source.value)
   )
+
+  useEffect(() => {
+    setPreviewData(undefined)
+    setSelectedMappings({})
+    setSearch('')
+    setMappingFilter('all')
+    setCandidateFilter('all')
+  }, [modelNamesKey])
 
   const previewMutation = useMutation({
     mutationFn: previewOfficialPriceSync,
@@ -285,6 +320,7 @@ export function OfficialPriceSync() {
       queryClient.invalidateQueries({ queryKey: ['system-options'] })
       queryClient.invalidateQueries({ queryKey: ['model-pricing-health'] })
       queryClient.invalidateQueries({ queryKey: ['official-price-mappings'] })
+      onApplied?.(data.data)
 
       const updatedCount = data.data?.updated_models?.length ?? 0
       toast.success(
@@ -301,9 +337,18 @@ export function OfficialPriceSync() {
   const filteredModels = useMemo(() => {
     const models = previewData?.models || []
     const keyword = search.trim().toLowerCase()
-    if (!keyword) return models
 
     return models.filter((model) => {
+      const matchesMapping =
+        mappingFilter === 'all' ||
+        (mappingFilter === 'saved' && !!model.mapping) ||
+        (mappingFilter === 'unsaved' && !model.mapping)
+      const matchesCandidates =
+        candidateFilter === 'all' ||
+        (candidateFilter === 'matched' && model.candidates.length > 0) ||
+        (candidateFilter === 'unmatched' && model.candidates.length === 0)
+      if (!matchesMapping || !matchesCandidates) return false
+      if (!keyword) return true
       if (model.model_name.toLowerCase().includes(keyword)) return true
       return model.candidates.some(
         (candidate) =>
@@ -312,7 +357,7 @@ export function OfficialPriceSync() {
           (candidate.provider || '').toLowerCase().includes(keyword)
       )
     })
-  }, [previewData?.models, search])
+  }, [candidateFilter, mappingFilter, previewData?.models, search])
 
   const isLoading = previewMutation.isPending || applyMutation.isPending
   const selectedCount = Object.keys(selectedMappings).length
@@ -342,6 +387,8 @@ export function OfficialPriceSync() {
     setPreviewData(undefined)
     setSelectedMappings({})
     setSearch('')
+    setMappingFilter('all')
+    setCandidateFilter('all')
   }
 
   const handleApplySelected = () => {
@@ -356,8 +403,19 @@ export function OfficialPriceSync() {
     applyMutation.mutate({ mappings: {}, apply_all: true })
   }
 
+  const mappingFilterItems = [
+    { value: 'all', label: t('All') },
+    { value: 'saved', label: t('Saved') },
+    { value: 'unsaved', label: t('Not synced') },
+  ]
+  const candidateFilterItems = [
+    { value: 'all', label: t('All') },
+    { value: 'matched', label: t('Has candidates') },
+    { value: 'unmatched', label: t('No candidates') },
+  ]
+
   return (
-    <div className='space-y-4 rounded-md border p-4'>
+    <div className={cn('space-y-4', !embedded && 'rounded-md border p-4')}>
       <div className='flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between'>
         <div className='flex flex-wrap items-center gap-2'>
           <Badge variant='outline'>{t('Official Sync')}</Badge>
@@ -407,7 +465,7 @@ export function OfficialPriceSync() {
           })}
         </div>
 
-        <div className='flex flex-col gap-2 sm:flex-row sm:items-center'>
+        <div className='flex flex-wrap items-center gap-2'>
           <div className='relative sm:w-64'>
             <Search className='text-muted-foreground absolute top-1/2 left-2 h-4 w-4 -translate-y-1/2' />
             <Input
@@ -418,9 +476,72 @@ export function OfficialPriceSync() {
               disabled={isLoading || !previewData}
             />
           </div>
+          <div className='flex items-center gap-1.5'>
+            <span className='text-muted-foreground text-sm'>
+              {t('Official Sync')}
+            </span>
+            <Select
+              items={mappingFilterItems}
+              value={mappingFilter}
+              onValueChange={(value) => {
+                if (value) setMappingFilter(value as MappingFilter)
+              }}
+              disabled={isLoading || !previewData}
+            >
+              <SelectTrigger
+                className='w-[132px]'
+                aria-label={t('Official Sync')}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false}>
+                <SelectGroup>
+                  {mappingFilterItems.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className='flex items-center gap-1.5'>
+            <span className='text-muted-foreground text-sm'>
+              {t('Candidate status')}
+            </span>
+            <Select
+              items={candidateFilterItems}
+              value={candidateFilter}
+              onValueChange={(value) => {
+                if (value) setCandidateFilter(value as CandidateFilter)
+              }}
+              disabled={isLoading || !previewData}
+            >
+              <SelectTrigger
+                className='w-[144px]'
+                aria-label={t('Candidate status')}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false}>
+                <SelectGroup>
+                  {candidateFilterItems.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
           <Button
             variant='outline'
-            onClick={() => previewMutation.mutate(selectedSources)}
+            onClick={() =>
+              previewMutation.mutate({
+                sources: selectedSources,
+                model_names: modelNames,
+              })
+            }
             disabled={isLoading || selectedSources.length === 0}
           >
             {previewMutation.isPending ? (
@@ -430,18 +551,20 @@ export function OfficialPriceSync() {
             )}
             {t('Preview Official Prices')}
           </Button>
-          <Button
-            variant='secondary'
-            onClick={handleApplySaved}
-            disabled={isLoading}
-          >
-            {applyMutation.isPending ? (
-              <Loader2 className='animate-spin' />
-            ) : (
-              <RefreshCcw />
-            )}
-            {t('Sync Saved Official Prices')}
-          </Button>
+          {!isScoped && (
+            <Button
+              variant='secondary'
+              onClick={handleApplySaved}
+              disabled={isLoading}
+            >
+              {applyMutation.isPending ? (
+                <Loader2 className='animate-spin' />
+              ) : (
+                <RefreshCcw />
+              )}
+              {t('Sync Saved Official Prices')}
+            </Button>
+          )}
           <Button
             onClick={handleApplySelected}
             disabled={isLoading || selectedCount === 0}
@@ -451,7 +574,9 @@ export function OfficialPriceSync() {
             ) : (
               <CheckSquare />
             )}
-            {t('Apply Selected Official Prices')}
+            {isScoped
+              ? t('Save and apply official prices')
+              : t('Apply Selected Official Prices')}
           </Button>
         </div>
       </div>
@@ -483,11 +608,16 @@ export function OfficialPriceSync() {
                 <TableCell className='whitespace-normal'>
                   <div className='flex min-w-[220px] flex-col gap-1'>
                     <span className='font-medium'>{model.model_name}</span>
-                    {model.mapping && (
+                    <div className='flex flex-wrap gap-1'>
                       <Badge variant='outline' className='w-fit'>
-                        {t('Saved')}
+                        {model.mapping ? t('Saved') : t('Not synced')}
                       </Badge>
-                    )}
+                      {model.candidates.length === 0 && (
+                        <Badge variant='secondary' className='w-fit'>
+                          {t('No candidates')}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </TableCell>
                 <TableCell className='whitespace-normal'>
@@ -526,5 +656,43 @@ export function OfficialPriceSync() {
         </Table>
       )}
     </div>
+  )
+}
+
+type OfficialPriceSyncDialogProps = {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  modelNames: string[]
+  onApplied?: (data?: OfficialPriceApplyData) => void
+}
+
+export function OfficialPriceSyncDialog({
+  open,
+  onOpenChange,
+  modelNames,
+  onApplied,
+}: OfficialPriceSyncDialogProps) {
+  const { t } = useTranslation()
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={t('Official price matching')}
+      contentClassName='max-h-[90vh] !max-w-[min(80rem,calc(100vw-2rem))]'
+      contentHeight='min(74vh, 760px)'
+      bodyClassName='space-y-4'
+    >
+      {open && (
+        <OfficialPriceSync
+          modelNames={modelNames}
+          embedded
+          onApplied={(data) => {
+            onApplied?.(data)
+            onOpenChange(false)
+          }}
+        />
+      )}
+    </Dialog>
   )
 }

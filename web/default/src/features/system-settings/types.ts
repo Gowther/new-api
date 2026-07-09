@@ -523,6 +523,11 @@ export type OfficialPricePreviewData = {
   source_results: OfficialPriceSourceResult[]
 }
 
+export type OfficialPricePreviewRequest = {
+  sources: string[]
+  model_names?: string[]
+}
+
 export type OfficialPriceApplyRequest = {
   mappings: Record<string, OfficialPriceMapping>
   apply_all: boolean

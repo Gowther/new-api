@@ -25,7 +25,7 @@ import {
   type SortingState,
 } from '@tanstack/react-table'
 import { useQuery } from '@tanstack/react-query'
-import { Copy, Plus } from 'lucide-react'
+import { Copy, Plus, RefreshCcw } from 'lucide-react'
 import {
   useState,
   useMemo,
@@ -65,6 +65,7 @@ import {
   type ModelRow,
 } from './model-pricing-snapshots'
 import { buildModelRatioColumns } from './model-ratio-table-columns'
+import { OfficialPriceSyncDialog } from './official-price-sync'
 
 type ModelRatioVisualEditorProps = {
   savedModelPrice: string
@@ -138,6 +139,11 @@ const ModelRatioVisualEditorComponent = forwardRef<
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [globalFilter, setGlobalFilter] = useState('')
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
+  const [officialPriceDialogOpen, setOfficialPriceDialogOpen] =
+    useState(false)
+  const [officialPriceModelNames, setOfficialPriceModelNames] = useState<
+    string[]
+  >([])
   const editorPanelRef = useRef<ModelPricingEditorPanelHandle>(null)
   const officialMappingsQuery = useQuery({
     queryKey: ['official-price-mappings'],
@@ -632,6 +638,23 @@ const ModelRatioVisualEditorComponent = forwardRef<
     )
   }, [editData, persistPricingData, t, table])
 
+  const handleOfficialPriceMatching = useCallback(() => {
+    const modelNames = table
+      .getFilteredSelectedRowModel()
+      .rows.map((row) => row.original.name)
+    if (modelNames.length === 0) {
+      toast.error(t('Select at least one target model'))
+      return
+    }
+    setOfficialPriceModelNames(modelNames)
+    setOfficialPriceDialogOpen(true)
+  }, [t, table])
+
+  const handleOfficialPriceApplied = useCallback(() => {
+    table.resetRowSelection()
+    void officialMappingsQuery.refetch()
+  }, [officialMappingsQuery, table])
+
   useImperativeHandle(
     ref,
     () => ({
@@ -792,6 +815,10 @@ const ModelRatioVisualEditorComponent = forwardRef<
       </div>
 
       <DataTableBulkActions table={table} entityName={t('model')}>
+        <Button size='sm' onClick={handleOfficialPriceMatching}>
+          <RefreshCcw data-icon='inline-start' />
+          {t('Official price matching')}
+        </Button>
         <Button size='sm' disabled={!editData} onClick={handleBatchCopy}>
           <Copy data-icon='inline-start' />
           {editData
@@ -799,6 +826,13 @@ const ModelRatioVisualEditorComponent = forwardRef<
             : t('Open a source model first')}
         </Button>
       </DataTableBulkActions>
+
+      <OfficialPriceSyncDialog
+        open={officialPriceDialogOpen}
+        onOpenChange={setOfficialPriceDialogOpen}
+        modelNames={officialPriceModelNames}
+        onApplied={handleOfficialPriceApplied}
+      />
 
       {isMobile && (
         <ModelPricingSheet

@@ -39,6 +39,11 @@ type OfficialPricePreviewData struct {
 	SourceResults []OfficialPriceSourceResult     `json:"source_results"`
 }
 
+type OfficialPricePreviewRequest struct {
+	Sources    []string `json:"sources"`
+	ModelNames []string `json:"model_names"`
+}
+
 type OfficialPriceApplyRequest struct {
 	Mappings map[string]OfficialPriceMapping `json:"mappings"`
 	ApplyAll bool                            `json:"apply_all"`

@@ -55,6 +55,10 @@ func TestPreviewOfficialPriceSourceNamesDefaultsToAllSources(t *testing.T) {
 		officialPriceSourceModelsDev,
 		officialPriceSourceBaseLLM,
 	}, previewOfficialPriceSourceNames(""))
+	require.Equal(t, []string{
+		officialPriceSourceModelsDev,
+		officialPriceSourceBaseLLM,
+	}, previewOfficialPriceSourceNamesFromSlice(nil))
 }
 
 func TestOfficialPriceSourceNamesFiltersUnsupportedSources(t *testing.T) {
@@ -78,5 +82,15 @@ func TestOfficialPriceMappingSourceNamesUsesSavedMappingSources(t *testing.T) {
 				Source: "unsupported-source",
 			},
 		},
+	))
+}
+
+func TestFilterOfficialPriceLocalModelsUsesRequestedExistingModels(t *testing.T) {
+	require.Equal(t, []string{
+		"gpt-4.1",
+		"gpt-5",
+	}, filterOfficialPriceLocalModels(
+		[]string{"gpt-4.1", "gpt-5", "qwen-max"},
+		[]string{"gpt-5", " ", "missing-model", "gpt-4.1", "gpt-5"},
 	))
 }

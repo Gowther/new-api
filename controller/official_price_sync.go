@@ -131,19 +131,39 @@ func GetOfficialPriceMappings(c *gin.Context) {
 }
 
 func PreviewOfficialPriceSync(c *gin.Context) {
+	previewOfficialPriceSync(
+		c,
+		previewOfficialPriceSourceNames(c.Query("sources")),
+		nil,
+	)
+}
+
+func PreviewSelectedOfficialPriceSync(c *gin.Context) {
+	var req dto.OfficialPricePreviewRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请求参数格式错误"})
+		return
+	}
+
+	previewOfficialPriceSync(
+		c,
+		previewOfficialPriceSourceNamesFromSlice(req.Sources),
+		req.ModelNames,
+	)
+}
+
+func previewOfficialPriceSync(c *gin.Context, sourceNames, requestedModelNames []string) {
 	timeoutSec := common.GetEnvOrDefault("SYNC_HTTP_TIMEOUT_SECONDS", defaultTimeoutSeconds)
 	ctx, cancel := context.WithTimeout(c.Request.Context(), time.Duration(timeoutSec)*time.Second)
 	defer cancel()
 
-	entries, sourceResults := fetchOfficialPriceEntries(
-		ctx,
-		previewOfficialPriceSourceNames(c.Query("sources")),
-	)
+	entries, sourceResults := fetchOfficialPriceEntries(ctx, sourceNames)
 	mappings := loadOfficialPriceMappings()
 	localData := getLocalPricingSyncData()
 	pricingByModel := getPricingByModel()
 
 	localModels := collectOfficialPriceLocalModels(localData, pricingByModel)
+	localModels = filterOfficialPriceLocalModels(localModels, requestedModelNames)
 	models := make([]dto.OfficialPriceModelPreview, 0, len(localModels))
 	for _, modelName := range localModels {
 		var mapping *dto.OfficialPriceMapping
@@ -302,14 +322,27 @@ func normalizeOfficialPriceMapping(mapping dto.OfficialPriceMapping) dto.Officia
 
 func previewOfficialPriceSourceNames(rawSources string) []string {
 	if strings.TrimSpace(rawSources) == "" {
-		sourceNames := make([]string, 0, len(officialPriceSources))
-		for _, source := range officialPriceSources {
-			sourceNames = append(sourceNames, source.Name)
-		}
-		return sourceNames
+		return allOfficialPriceSourceNames()
 	}
 
 	return officialPriceSourceNames([]string{rawSources})
+}
+
+func previewOfficialPriceSourceNamesFromSlice(sourceNames []string) []string {
+	for _, sourceName := range sourceNames {
+		if strings.TrimSpace(sourceName) != "" {
+			return officialPriceSourceNames(sourceNames)
+		}
+	}
+	return allOfficialPriceSourceNames()
+}
+
+func allOfficialPriceSourceNames() []string {
+	sourceNames := make([]string, 0, len(officialPriceSources))
+	for _, source := range officialPriceSources {
+		sourceNames = append(sourceNames, source.Name)
+	}
+	return sourceNames
 }
 
 func officialPriceMappingSourceNames(mappings map[string]dto.OfficialPriceMapping) []string {
@@ -567,6 +600,27 @@ func collectOfficialPriceLocalModels(localData map[string]any, pricingByModel ma
 		model.GetEnabledModels(),
 		syncOfficialModels,
 	)
+}
+
+func filterOfficialPriceLocalModels(localModels, requestedModels []string) []string {
+	if len(requestedModels) == 0 {
+		return localModels
+	}
+
+	requestedSet := make(map[string]struct{}, len(requestedModels))
+	for _, modelName := range requestedModels {
+		if modelName = strings.TrimSpace(modelName); modelName != "" {
+			requestedSet[modelName] = struct{}{}
+		}
+	}
+
+	filteredModels := make([]string, 0, len(requestedSet))
+	for _, modelName := range localModels {
+		if _, ok := requestedSet[modelName]; ok {
+			filteredModels = append(filteredModels, modelName)
+		}
+	}
+	return filteredModels
 }
 
 func mergeOfficialPriceLocalModelNames(

@@ -26,6 +26,7 @@ import {
 export const PAGE_SIZE = 10;
 export const PRICE_SUFFIX = '$/1M tokens';
 const EMPTY_CANDIDATE_MODEL_NAMES = [];
+const EMPTY_OFFICIAL_PRICE_MAPPINGS = {};
 
 const EMPTY_MODEL = {
   name: '',
@@ -624,6 +625,8 @@ export function useModelPricingEditorState({
   t,
   candidateModelNames = EMPTY_CANDIDATE_MODEL_NAMES,
   filterMode = 'all',
+  officialMappings = EMPTY_OFFICIAL_PRICE_MAPPINGS,
+  officialMappingFilter = 'all',
 }) {
   const [models, setModels] = useState([]);
   const [initialVisibleModelNames, setInitialVisibleModelNames] = useState([]);
@@ -652,6 +655,7 @@ export function useModelPricingEditorState({
 
     const names = new Set([
       ...candidateModelNames,
+      ...Object.keys(officialMappings),
       ...Object.keys(sourceMaps.ModelPrice),
       ...Object.keys(sourceMaps.ModelRatio),
       ...Object.keys(sourceMaps.CompletionRatio),
@@ -693,7 +697,7 @@ export function useModelPricingEditorState({
           : nextModels;
       return nextVisibleModels[0]?.name || '';
     });
-  }, [candidateModelNames, filterMode, options]);
+  }, [candidateModelNames, filterMode, officialMappings, options]);
 
   const visibleModels = useMemo(() => {
     return filterMode === 'unset'
@@ -708,9 +712,17 @@ export function useModelPricingEditorState({
         ? model.name.toLowerCase().includes(keyword)
         : true;
       const conflictMatch = conflictOnly ? model.hasConflict : true;
-      return keywordMatch && conflictMatch;
+      const officialMappingMatch =
+        officialMappingFilter !== 'saved' || !!officialMappings[model.name];
+      return keywordMatch && conflictMatch && officialMappingMatch;
     });
-  }, [conflictOnly, searchText, visibleModels]);
+  }, [
+    conflictOnly,
+    officialMappingFilter,
+    officialMappings,
+    searchText,
+    visibleModels,
+  ]);
 
   const pagedData = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE;
@@ -735,7 +747,13 @@ export function useModelPricingEditorState({
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchText, conflictOnly, filterMode, candidateModelNames]);
+  }, [
+    searchText,
+    conflictOnly,
+    filterMode,
+    candidateModelNames,
+    officialMappingFilter,
+  ]);
 
   useEffect(() => {
     setSelectedModelNames((previous) =>

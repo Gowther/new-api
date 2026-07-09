@@ -274,6 +274,7 @@ export function OfficialPriceSync() {
       )
       queryClient.invalidateQueries({ queryKey: ['system-options'] })
       queryClient.invalidateQueries({ queryKey: ['model-pricing-health'] })
+      queryClient.invalidateQueries({ queryKey: ['official-price-mappings'] })
 
       const updatedCount = data.data?.updated_models?.length ?? 0
       toast.success(

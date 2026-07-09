@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { splitBillingExprAndRequestRules } from '@/features/pricing/lib/billing-expr'
 
+import type { OfficialPriceMapping } from '../types'
 import { safeJsonParse } from '../utils/json-parser'
 import { formatPricingNumber } from './pricing-format'
 
@@ -51,6 +52,7 @@ export type ModelPricingSnapshot = {
 }
 
 export type ModelRow = ModelPricingSnapshot & {
+  officialMapping?: OfficialPriceMapping
   saved?: ModelPricingSnapshot
   draft?: ModelPricingSnapshot
   isDraftChanged: boolean

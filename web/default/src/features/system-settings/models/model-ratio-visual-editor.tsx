@@ -24,6 +24,7 @@ import {
   type VisibilityState,
   type SortingState,
 } from '@tanstack/react-table'
+import { useQuery } from '@tanstack/react-query'
 import { Copy, Plus } from 'lucide-react'
 import {
   useState,
@@ -50,6 +51,7 @@ import { Button } from '@/components/ui/button'
 import { combineBillingExpr } from '@/features/pricing/lib/billing-expr'
 import { useMediaQuery } from '@/hooks'
 
+import { getOfficialPriceMappings } from '../api'
 import { safeJsonParse } from '../utils/json-parser'
 import {
   ModelPricingEditorPanel,
@@ -137,6 +139,14 @@ const ModelRatioVisualEditorComponent = forwardRef<
   const [globalFilter, setGlobalFilter] = useState('')
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const editorPanelRef = useRef<ModelPricingEditorPanelHandle>(null)
+  const officialMappingsQuery = useQuery({
+    queryKey: ['official-price-mappings'],
+    queryFn: getOfficialPriceMappings,
+  })
+  const officialMappings = useMemo(
+    () => officialMappingsQuery.data?.data ?? {},
+    [officialMappingsQuery.data?.data]
+  )
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
     pageSize: 20,
@@ -208,18 +218,23 @@ const ModelRatioVisualEditorComponent = forwardRef<
 
     const savedByName = new Map(savedRows.map((row) => [row.name, row]))
     const draftByName = new Map(draftRows.map((row) => [row.name, row]))
-    const modelNames = new Set([...savedByName.keys(), ...draftByName.keys()])
+    const modelNames = new Set([
+      ...savedByName.keys(),
+      ...draftByName.keys(),
+      ...Object.keys(officialMappings),
+    ])
 
     return Array.from(modelNames)
       .map((name) => {
         const saved = savedByName.get(name)
         const draft = draftByName.get(name)
-        const displayed = saved ?? draft
+        const displayed = saved ?? draft ?? { name, hasConflict: false }
         const savedSignature = getSnapshotSignature(saved)
         const draftSignature = getSnapshotSignature(draft)
 
         return {
-          ...displayed!,
+          ...displayed,
+          officialMapping: officialMappings[name],
           saved,
           draft,
           isDraftChanged: savedSignature !== draftSignature,
@@ -250,6 +265,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
     audioCompletionRatio,
     billingMode,
     billingExpr,
+    officialMappings,
   ])
 
   const modeCounts = useMemo(
@@ -426,6 +442,10 @@ const ModelRatioVisualEditorComponent = forwardRef<
         t,
       }),
     [handleEdit, handleDelete, t]
+  )
+  const savedOfficialMappingCount = useMemo(
+    () => models.filter((model) => model.officialMapping).length,
+    [models]
   )
 
   const { table } = useDataTable({
@@ -656,6 +676,17 @@ const ModelRatioVisualEditorComponent = forwardRef<
                   },
                 ],
               },
+              {
+                columnId: 'officialMapping',
+                title: t('Official Sync'),
+                options: [
+                  {
+                    label: t('Saved'),
+                    value: 'saved',
+                    count: savedOfficialMappingCount,
+                  },
+                ],
+              },
             ]}
             preActions={
               <Button onClick={handleAdd}>
@@ -676,7 +707,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
               table={table}
               containerClassName='min-h-0 flex-1 rounded-md'
               tableContainerClassName='h-full'
-              tableClassName='min-w-[852px] table-fixed'
+              tableClassName='min-w-[1012px] table-fixed'
               tableHeaderClassName='[&_tr]:border-b-0'
               splitHeaderScrollClassName='h-full'
               bodyContainerClassName='[scrollbar-gutter:stable]'
@@ -690,9 +721,10 @@ const ModelRatioVisualEditorComponent = forwardRef<
               colgroup={
                 <colgroup>
                   <col className='w-9' />
-                  <col className='w-[300px]' />
+                  <col className='w-[240px]' />
+                  <col className='w-[160px]' />
                   <col className='w-[120px]' />
-                  <col className='w-[300px]' />
+                  <col className='w-[260px]' />
                   <col className='w-auto' />
                 </colgroup>
               }

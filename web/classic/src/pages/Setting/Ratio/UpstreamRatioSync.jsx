@@ -24,6 +24,7 @@ import {
   Tag,
   Empty,
   Checkbox,
+  Collapse,
   Form,
   Input,
   Tooltip,
@@ -1483,14 +1484,21 @@ export default function UpstreamRatioSync(props) {
 
   return (
     <>
-      <Form.Section text={renderHeader()}>
+      <Form.Section text={t('官方价格同步')}>
         <OfficialPriceSyncPanel
           t={t}
           disabled={loading || syncLoading || confirmLoading}
           refresh={props.refresh}
         />
-        {renderDifferenceTable()}
       </Form.Section>
+      <Collapse className='mt-4'>
+        <Collapse.Panel header={t('渠道价格同步')} itemKey='channel-price-sync'>
+          <div className='pt-3'>
+            {renderHeader()}
+            {renderDifferenceTable()}
+          </div>
+        </Collapse.Panel>
+      </Collapse>
 
       <ChannelSelectorModal
         ref={channelSelectorRef}

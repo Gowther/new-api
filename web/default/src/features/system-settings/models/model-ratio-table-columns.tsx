@@ -22,6 +22,11 @@ import { DataTableColumnHeader } from '@/components/data-table/core/column-heade
 import { StaticRowActions } from '@/components/data-table/static/static-row-actions'
 import { StatusBadge } from '@/components/status-badge'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 import {
   getModeLabel,
@@ -101,6 +106,44 @@ export function buildModelRatioColumns({
         </div>
       ),
       enableHiding: false,
+    },
+    {
+      id: 'officialMapping',
+      accessorFn: (row) => (row.officialMapping ? 'saved' : 'unsaved'),
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title={t('Official Sync')} />
+      ),
+      cell: ({ row }) => {
+        const mapping = row.original.officialMapping
+        if (!mapping) {
+          return <span className='text-muted-foreground'>-</span>
+        }
+
+        const mappingDetails = [
+          mapping.source,
+          mapping.provider,
+          mapping.upstream_model,
+        ]
+          .filter(Boolean)
+          .join(' / ')
+
+        return (
+          <Tooltip>
+            <TooltipTrigger>
+              <StatusBadge
+                label={t('Saved')}
+                variant='info'
+                copyable={false}
+              />
+            </TooltipTrigger>
+            <TooltipContent>{mappingDetails}</TooltipContent>
+          </Tooltip>
+        )
+      },
+      filterFn: (row, id, value) =>
+        filterBySelectedValues(row.getValue(id), value),
+      meta: { label: t('Official Sync') },
+      enableSorting: false,
     },
     {
       accessorKey: 'billingMode',

@@ -497,6 +497,28 @@ func getPricingByModel() map[string]model.Pricing {
 }
 
 func collectOfficialPriceLocalModels(localData map[string]any, pricingByModel map[string]model.Pricing) []string {
+	var metas []model.Model
+	_ = model.DB.Select("model_name").Where("status = ? AND sync_official <> 0 AND name_rule = ?", 1, model.NameRuleExact).Find(&metas).Error
+
+	syncOfficialModels := make([]string, 0, len(metas))
+	for _, meta := range metas {
+		syncOfficialModels = append(syncOfficialModels, meta.ModelName)
+	}
+
+	return mergeOfficialPriceLocalModelNames(
+		localData,
+		pricingByModel,
+		model.GetEnabledModels(),
+		syncOfficialModels,
+	)
+}
+
+func mergeOfficialPriceLocalModelNames(
+	localData map[string]any,
+	pricingByModel map[string]model.Pricing,
+	enabledModels []string,
+	syncOfficialModels []string,
+) []string {
 	modelSet := make(map[string]struct{})
 	for _, field := range pricingSyncFields {
 		for modelName := range valueMap(localData[field]) {
@@ -510,12 +532,14 @@ func collectOfficialPriceLocalModels(localData map[string]any, pricingByModel ma
 			modelSet[modelName] = struct{}{}
 		}
 	}
-
-	var metas []model.Model
-	_ = model.DB.Select("model_name").Where("status = ? AND sync_official <> 0 AND name_rule = ?", 1, model.NameRuleExact).Find(&metas).Error
-	for _, meta := range metas {
-		if strings.TrimSpace(meta.ModelName) != "" {
-			modelSet[meta.ModelName] = struct{}{}
+	for _, modelName := range enabledModels {
+		if strings.TrimSpace(modelName) != "" {
+			modelSet[modelName] = struct{}{}
+		}
+	}
+	for _, modelName := range syncOfficialModels {
+		if strings.TrimSpace(modelName) != "" {
+			modelSet[modelName] = struct{}{}
 		}
 	}
 

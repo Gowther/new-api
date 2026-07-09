@@ -482,6 +482,12 @@ export type OfficialPriceMapping = {
   upstream_model: string
 }
 
+export type OfficialPriceMappingsResponse = {
+  success: boolean
+  message: string
+  data: Record<string, OfficialPriceMapping>
+}
+
 export type OfficialPriceFieldValue = string | number | boolean | null
 
 export type OfficialPriceCandidate = {

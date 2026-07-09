@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Banner,
   Button,
@@ -28,10 +28,12 @@ import {
   Modal,
   Radio,
   RadioGroup,
+  Select,
   Space,
   Switch,
   Table,
   Tag,
+  Tooltip,
   Typography,
 } from '@douyinfe/semi-ui';
 import {
@@ -41,6 +43,7 @@ import {
   IconSearch,
 } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
+import { API } from '../../../../helpers';
 import {
   PAGE_SIZE,
   PRICE_SUFFIX,
@@ -102,6 +105,24 @@ export default function ModelPricingEditor({
   const [addVisible, setAddVisible] = useState(false);
   const [batchVisible, setBatchVisible] = useState(false);
   const [newModelName, setNewModelName] = useState('');
+  const [officialMappings, setOfficialMappings] = useState({});
+  const [officialMappingFilter, setOfficialMappingFilter] = useState('all');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    API.get('/api/ratio_sync/official/mappings')
+      .then((res) => {
+        if (!cancelled && res.data.success) {
+          setOfficialMappings(res.data.data || {});
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [options]);
 
   const {
     selectedModel,
@@ -136,6 +157,8 @@ export default function ModelPricingEditor({
     t,
     candidateModelNames,
     filterMode,
+    officialMappings,
+    officialMappingFilter,
   });
 
   const getExprModeLabel = useCallback((model) => {
@@ -178,6 +201,21 @@ export default function ModelPricingEditor({
               <Tag color='red' shape='circle'>
                 {t('矛盾')}
               </Tag>
+            ) : null}
+            {officialMappings[record.name] ? (
+              <Tooltip
+                content={[
+                  officialMappings[record.name].source,
+                  officialMappings[record.name].provider,
+                  officialMappings[record.name].upstream_model,
+                ]
+                  .filter(Boolean)
+                  .join(' / ')}
+              >
+                <Tag color='blue' shape='circle'>
+                  {t('官方价格同步')}
+                </Tag>
+              </Tooltip>
             ) : null}
           </Space>
         ),
@@ -235,6 +273,7 @@ export default function ModelPricingEditor({
       selectedModelNames,
       setSelectedModelName,
       t,
+      officialMappings,
     ],
   );
 
@@ -288,6 +327,18 @@ export default function ModelPricingEditor({
             style={{ width: isMobile ? '100%' : 220 }}
             showClear
           />
+          <Select
+            value={officialMappingFilter}
+            onChange={setOfficialMappingFilter}
+            style={{ width: isMobile ? '100%' : 190 }}
+          >
+            <Select.Option value='all'>
+              {`${t('官方价格同步')} · ${t('全部')}`}
+            </Select.Option>
+            <Select.Option value='saved'>
+              {`${t('官方价格同步')} · ${t('已保存')}`}
+            </Select.Option>
+          </Select>
           {showConflictFilter ? (
             <Checkbox
               checked={conflictOnly}

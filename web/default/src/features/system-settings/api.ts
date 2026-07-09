@@ -26,6 +26,7 @@ import type {
   ModelPricingHealthResponse,
   OfficialPriceApplyRequest,
   OfficialPriceApplyResponse,
+  OfficialPriceMappingsResponse,
   OfficialPricePreviewResponse,
   SystemOptionsResponse,
   SystemTaskListResponse,
@@ -135,6 +136,13 @@ export async function fetchUpstreamRatios(request: FetchUpstreamRatiosRequest) {
 export async function previewOfficialPriceSync() {
   const res = await api.get<OfficialPricePreviewResponse>(
     '/api/ratio_sync/official/preview'
+  )
+  return res.data
+}
+
+export async function getOfficialPriceMappings() {
+  const res = await api.get<OfficialPriceMappingsResponse>(
+    '/api/ratio_sync/official/mappings'
   )
   return res.data
 }

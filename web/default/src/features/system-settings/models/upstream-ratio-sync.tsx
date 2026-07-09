@@ -17,12 +17,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckSquare, RefreshCcw } from 'lucide-react'
+import { CheckSquare, ChevronDown, RefreshCcw } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
+import { cn } from '@/lib/utils'
 
 import {
   fetchUpstreamRatios,
@@ -155,6 +161,7 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
   const [resolutions, setResolutions] = useState<ResolutionsMap>({})
   const [conflictItems, setConflictItems] = useState<ConflictItem[]>([])
   const [confirmLoading, setConfirmLoading] = useState(false)
+  const [legacySyncOpen, setLegacySyncOpen] = useState(false)
 
   const { data: channelsData } = useQuery({
     queryKey: ['upstream-channels'],
@@ -523,34 +530,56 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
     <div className='space-y-4'>
       <OfficialPriceSync />
 
-      <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
-        <div className='flex flex-col gap-2 sm:flex-row'>
-          <Button onClick={handleOpenChannelDialog} disabled={isLoading}>
-            <RefreshCcw className='mr-2 h-4 w-4' />
-            {t('Select Sync Channels')}
-          </Button>
-          <Button
-            variant='secondary'
-            onClick={handleApplySync}
-            disabled={!hasSelections || isLoading}
-          >
-            {(isSyncPending || confirmLoading) && (
-              <span className='mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent' />
+      <Collapsible open={legacySyncOpen} onOpenChange={setLegacySyncOpen}>
+        <CollapsibleTrigger
+          render={
+            <button
+              type='button'
+              className='hover:bg-muted/40 border-border/60 flex w-full items-center justify-between rounded-md border px-3 py-2.5 text-left transition-colors'
+              aria-expanded={legacySyncOpen}
+            />
+          }
+        >
+          <span className='text-sm font-medium'>{t('Channel Price Sync')}</span>
+          <ChevronDown
+            className={cn(
+              'text-muted-foreground h-4 w-4 transition-transform',
+              legacySyncOpen && 'rotate-180'
             )}
-            <CheckSquare className='mr-2 h-4 w-4' />
-            {t('Apply Sync')}
-          </Button>
-        </div>
-      </div>
+            aria-hidden='true'
+          />
+        </CollapsibleTrigger>
+        <CollapsibleContent className='mt-3 flex flex-col gap-3'>
+          <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
+            <div className='flex flex-col gap-2 sm:flex-row'>
+              <Button onClick={handleOpenChannelDialog} disabled={isLoading}>
+                <RefreshCcw className='mr-2 h-4 w-4' />
+                {t('Select Sync Channels')}
+              </Button>
+              <Button
+                variant='secondary'
+                onClick={handleApplySync}
+                disabled={!hasSelections || isLoading}
+              >
+                {(isSyncPending || confirmLoading) && (
+                  <span className='mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent' />
+                )}
+                <CheckSquare className='mr-2 h-4 w-4' />
+                {t('Apply Sync')}
+              </Button>
+            </div>
+          </div>
 
-      <UpstreamRatioSyncTable
-        differences={differences}
-        resolutions={resolutions}
-        isDisabled={isLoading}
-        isSyncing={fetchMutation.isPending}
-        onSelectValue={handleSelectValue}
-        onUnselectValue={handleUnselectValue}
-      />
+          <UpstreamRatioSyncTable
+            differences={differences}
+            resolutions={resolutions}
+            isDisabled={isLoading}
+            isSyncing={fetchMutation.isPending}
+            onSelectValue={handleSelectValue}
+            onUnselectValue={handleUnselectValue}
+          />
+        </CollapsibleContent>
+      </Collapsible>
 
       <ChannelSelectorDialog
         open={channelDialogOpen}

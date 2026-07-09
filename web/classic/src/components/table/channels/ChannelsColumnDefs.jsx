@@ -50,6 +50,7 @@ import {
   IconAlertTriangle,
 } from '@douyinfe/semi-icons';
 import { FaRandom } from 'react-icons/fa';
+import { LinkifiedText } from '../../common/LinkifiedText';
 
 // Render functions
 const renderType = (type, record = {}, t) => {
@@ -353,7 +354,9 @@ export const getChannelsColumns = ({
             <Tooltip
               content={
                 <div className='flex flex-col gap-2 max-w-xs'>
-                  <div className='text-sm'>{record.remark}</div>
+                  <div className='text-sm'>
+                    <LinkifiedText text={record.remark} />
+                  </div>
                   <Button
                     size='small'
                     type='primary'

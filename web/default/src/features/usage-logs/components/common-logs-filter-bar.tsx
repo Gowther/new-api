@@ -209,12 +209,21 @@ export function CommonLogsFilterBar<TData>(
       type: [LOG_TYPE_ALL_VALUE],
       startTime: start.getTime(),
       endTime: end.getTime(),
+      filter: undefined,
+      channel: undefined,
+      model: undefined,
+      token: undefined,
+      group: undefined,
+      username: undefined,
+      requestId: undefined,
+      upstreamRequestId: undefined,
     }
     setDraft({
       sourceKey: buildSearchSourceKey(resetSearch),
       filters: resetFilters,
       logType: LOG_TYPE_ALL_VALUE,
     })
+    props.table.setColumnFilters([])
 
     navigate({
       to: '/usage-logs/$section',
@@ -226,7 +235,7 @@ export function CommonLogsFilterBar<TData>(
     })
     queryClient.invalidateQueries({ queryKey: ['logs'] })
     queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] })
-  }, [navigate, queryClient])
+  }, [navigate, props.table, queryClient])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

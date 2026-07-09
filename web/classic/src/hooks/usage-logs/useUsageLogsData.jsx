@@ -63,6 +63,38 @@ function getInitialUrlFilters() {
   };
 }
 
+function getDefaultLogFormValues(channel = '') {
+  const now = new Date();
+  return {
+    username: '',
+    token_name: '',
+    model_name: '',
+    channel,
+    group: '',
+    request_id: '',
+    dateRange: [
+      timestamp2string(getTodayStartTimestamp()),
+      timestamp2string(now.getTime() / 1000 + 3600),
+    ],
+    logType: '0',
+  };
+}
+
+function clearChannelSearchParams() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const url = new URL(window.location.href);
+  url.searchParams.delete('channel');
+  url.searchParams.delete('channel_id');
+  window.history.replaceState(
+    {},
+    '',
+    `${url.pathname}${url.search}${url.hash}`,
+  );
+}
+
 function buildLogQueryString(params) {
   const queryParams = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -136,20 +168,9 @@ export const useLogsData = () => {
 
   // Form state
   const [formApi, setFormApi] = useState(null);
-  let now = new Date();
-  const formInitValues = {
-    username: '',
-    token_name: '',
-    model_name: '',
-    channel: initialUrlFiltersRef.current.channel,
-    group: '',
-    request_id: '',
-    dateRange: [
-      timestamp2string(getTodayStartTimestamp()),
-      timestamp2string(now.getTime() / 1000 + 3600),
-    ],
-    logType: '0',
-  };
+  const formInitValues = getDefaultLogFormValues(
+    initialUrlFiltersRef.current.channel,
+  );
 
   // Get default column visibility based on user role
   const getDefaultColumnVisibility = () => {
@@ -889,6 +910,22 @@ export const useLogsData = () => {
     await loadLogs(1, pageSize);
   };
 
+  const resetFilters = () => {
+    if (!formApi) {
+      return;
+    }
+
+    const resetValues = getDefaultLogFormValues();
+    initialUrlFiltersRef.current = { channel: '' };
+    clearChannelSearchParams();
+    formApi.setValues(resetValues);
+    setLogType(0);
+
+    setTimeout(() => {
+      refresh();
+    }, 100);
+  };
+
   const applyColumnFilter = (field, value) => {
     const filterValue = String(value || '').trim();
     if (!filterValue || !formApi) {
@@ -1018,6 +1055,7 @@ export const useLogsData = () => {
     handlePageChange,
     handlePageSizeChange,
     refresh,
+    resetFilters,
     applyColumnFilter,
     copyText,
     handleEyeClick,

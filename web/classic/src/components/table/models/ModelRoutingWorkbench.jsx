@@ -43,6 +43,7 @@ import {
 } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
 
+import { LinkifiedText } from '../../common/LinkifiedText';
 import { CHANNEL_OPTIONS } from '../../../constants';
 import {
   API,
@@ -716,7 +717,9 @@ const ModelRoutingWorkbench = () => {
               {remark ? (
                 <Tooltip
                   content={
-                    <div className='max-w-xs break-words text-sm'>{remark}</div>
+                    <div className='max-w-xs break-words text-sm'>
+                      <LinkifiedText text={remark} />
+                    </div>
                   }
                   trigger='hover'
                   position='topLeft'

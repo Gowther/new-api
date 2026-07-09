@@ -34,6 +34,7 @@ import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { BadgeListCell } from '@/components/data-table'
 import { GroupBadge } from '@/components/group-badge'
+import { LinkifiedText } from '@/components/linkified-text'
 import { ProviderBadge } from '@/components/provider-badge'
 import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import { TableId } from '@/components/table-id'
@@ -46,12 +47,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { toIntlLocale } from '@/i18n/languages'
 import {
   formatCurrencyFromUSD,
   formatQuotaWithCurrency,
   getCurrencyLabel,
 } from '@/lib/currency'
-import { toIntlLocale } from '@/i18n/languages'
 import { formatTimestampToDate } from '@/lib/format'
 import { truncateText } from '@/lib/utils'
 
@@ -674,8 +675,11 @@ export function useChannelsColumns(
                       >
                         {truncateText(channel.remark, 40)}
                       </TooltipTrigger>
-                      <TooltipContent side='bottom' className='max-w-xs'>
-                        {channel.remark}
+                      <TooltipContent
+                        side='bottom'
+                        className='max-w-xs items-start text-left break-words'
+                      >
+                        <LinkifiedText text={channel.remark} />
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>

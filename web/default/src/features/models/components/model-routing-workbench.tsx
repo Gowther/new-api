@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Loader2,
@@ -28,10 +27,12 @@ import {
   Star,
   Trash2,
 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { LinkifiedText } from '@/components/linkified-text'
 import { ProviderBadge } from '@/components/provider-badge'
 import { StatusBadge } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
@@ -1119,9 +1120,9 @@ export function ModelRoutingWorkbench() {
                                     </TooltipTrigger>
                                     <TooltipContent
                                       side='top'
-                                      className='max-w-xs break-words'
+                                      className='max-w-xs items-start text-left break-words'
                                     >
-                                      {channelRemark}
+                                      <LinkifiedText text={channelRemark} />
                                     </TooltipContent>
                                   </Tooltip>
                                 </TooltipProvider>

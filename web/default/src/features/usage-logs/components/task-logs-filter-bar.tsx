@@ -117,18 +117,38 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
     []
   )
 
+  const applyFilters = useCallback(
+    (nextFilters: TaskLogsFilters) => {
+      const filterParams = buildSearchParams(nextFilters, props.logCategory)
+      navigate({
+        to: '/usage-logs/$section',
+        params: { section: props.logCategory },
+        search: {
+          ...filterParams,
+          page: 1,
+        },
+      })
+      queryClient.invalidateQueries({ queryKey: ['logs'] })
+    },
+    [navigate, props.logCategory, queryClient]
+  )
+
   const handleApply = useCallback(() => {
-    const filterParams = buildSearchParams(filters, props.logCategory)
-    navigate({
-      to: '/usage-logs/$section',
-      params: { section: props.logCategory },
-      search: {
-        ...filterParams,
-        page: 1,
-      },
-    })
-    queryClient.invalidateQueries({ queryKey: ['logs'] })
-  }, [filters, navigate, props.logCategory, queryClient])
+    applyFilters(filters)
+  }, [applyFilters, filters])
+
+  const handleDateRangeChange = useCallback(
+    (range: { start?: Date; end?: Date }) => {
+      const nextFilters = {
+        ...filters,
+        startTime: range.start,
+        endTime: range.end,
+      }
+      setFilters(nextFilters)
+      applyFilters(nextFilters)
+    },
+    [applyFilters, filters]
+  )
 
   const handleReset = useCallback(() => {
     const { start, end } = getDefaultTimeRange()
@@ -172,10 +192,7 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
       <CompactDateTimeRangePicker
         start={filters.startTime}
         end={filters.endTime}
-        onChange={({ start, end }) => {
-          handleChange('startTime', start)
-          handleChange('endTime', end)
-        }}
+        onChange={handleDateRangeChange}
       />
     </LogsFilterField>
   )

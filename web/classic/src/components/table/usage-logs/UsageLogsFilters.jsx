@@ -61,6 +61,18 @@ const LogsFilters = ({
                 start: preset.start(),
                 end: preset.end(),
               }))}
+              onChange={(value) => {
+                if (
+                  !value ||
+                  (Array.isArray(value) &&
+                    (value.length === 0 ||
+                      (value.length === 2 && value.every(Boolean))))
+                ) {
+                  setTimeout(() => {
+                    refresh();
+                  }, 0);
+                }
+              }}
             />
           </div>
 

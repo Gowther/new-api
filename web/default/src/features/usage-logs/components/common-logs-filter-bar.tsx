@@ -172,6 +172,24 @@ export function CommonLogsFilterBar<TData>(
   const filters = activeDraft.filters
   const logType = activeDraft.logType
 
+  const applyFilters = useCallback(
+    (nextFilters: CommonLogFilters, nextLogType: LogTypeValue) => {
+      const filterParams = buildSearchParams(nextFilters, 'common')
+      navigate({
+        to: '/usage-logs/$section',
+        params: { section: 'common' },
+        search: {
+          ...filterParams,
+          type: [nextLogType],
+          page: 1,
+        },
+      })
+      queryClient.invalidateQueries({ queryKey: ['logs'] })
+      queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] })
+    },
+    [navigate, queryClient]
+  )
+
   const handleChange = useCallback(
     (field: keyof CommonLogFilters, value: Date | string | undefined) => {
       setDraft((current) => {
@@ -188,19 +206,25 @@ export function CommonLogsFilterBar<TData>(
   )
 
   const handleApply = useCallback(() => {
-    const filterParams = buildSearchParams(filters, 'common')
-    navigate({
-      to: '/usage-logs/$section',
-      params: { section: 'common' },
-      search: {
-        ...filterParams,
-        type: [logType],
-        page: 1,
-      },
-    })
-    queryClient.invalidateQueries({ queryKey: ['logs'] })
-    queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] })
-  }, [filters, logType, navigate, queryClient])
+    applyFilters(filters, logType)
+  }, [applyFilters, filters, logType])
+
+  const handleDateRangeChange = useCallback(
+    (range: { start?: Date; end?: Date }) => {
+      const nextFilters = {
+        ...filters,
+        startTime: range.start,
+        endTime: range.end,
+      }
+      setDraft({
+        sourceKey: searchState.sourceKey,
+        filters: nextFilters,
+        logType,
+      })
+      applyFilters(nextFilters, logType)
+    },
+    [applyFilters, filters, logType, searchState.sourceKey]
+  )
 
   const handleReset = useCallback(() => {
     const { start, end } = getDefaultTimeRange()
@@ -308,10 +332,7 @@ export function CommonLogsFilterBar<TData>(
       <CompactDateTimeRangePicker
         start={filters.startTime}
         end={filters.endTime}
-        onChange={({ start, end }) => {
-          handleChange('startTime', start)
-          handleChange('endTime', end)
-        }}
+        onChange={handleDateRangeChange}
       />
     </LogsFilterField>
   )

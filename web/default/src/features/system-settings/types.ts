@@ -475,3 +475,69 @@ export type UpstreamRatiosResponse = {
     test_results: TestResult[]
   }
 }
+
+export type OfficialPriceMapping = {
+  source: string
+  provider?: string
+  upstream_model: string
+}
+
+export type OfficialPriceFieldValue = string | number | boolean | null
+
+export type OfficialPriceCandidate = {
+  source: string
+  provider?: string
+  upstream_model: string
+  fields: Record<string, OfficialPriceFieldValue>
+  input_price?: number
+  output_price?: number
+  cache_read_price?: number
+  score: number
+  reasons: string[]
+  selected: boolean
+}
+
+export type OfficialPriceModelPreview = {
+  model_name: string
+  current: Record<string, OfficialPriceFieldValue>
+  mapping?: OfficialPriceMapping
+  candidates: OfficialPriceCandidate[]
+}
+
+export type OfficialPriceSourceResult = {
+  name: string
+  status: 'success' | 'error'
+  error?: string
+  count?: number
+}
+
+export type OfficialPricePreviewData = {
+  models: OfficialPriceModelPreview[]
+  mappings: Record<string, OfficialPriceMapping>
+  source_results: OfficialPriceSourceResult[]
+}
+
+export type OfficialPriceApplyRequest = {
+  mappings: Record<string, OfficialPriceMapping>
+  apply_all: boolean
+}
+
+export type OfficialPriceApplyData = {
+  updated_models?: string[]
+  skipped_models?: string[]
+  mappings?: Record<string, OfficialPriceMapping>
+  source_results?: OfficialPriceSourceResult[]
+  updated_fields?: Record<string, Record<string, OfficialPriceFieldValue>>
+}
+
+export type OfficialPricePreviewResponse = {
+  success: boolean
+  message: string
+  data: OfficialPricePreviewData
+}
+
+export type OfficialPriceApplyResponse = {
+  success: boolean
+  message: string
+  data?: OfficialPriceApplyData
+}

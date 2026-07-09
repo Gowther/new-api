@@ -24,6 +24,9 @@ import type {
   FetchUpstreamRatiosRequest,
   LogCleanupTask,
   ModelPricingHealthResponse,
+  OfficialPriceApplyRequest,
+  OfficialPriceApplyResponse,
+  OfficialPricePreviewResponse,
   SystemOptionsResponse,
   SystemTaskListResponse,
   SystemTaskResponse,
@@ -124,6 +127,23 @@ export async function getUpstreamChannels() {
 export async function fetchUpstreamRatios(request: FetchUpstreamRatiosRequest) {
   const res = await api.post<UpstreamRatiosResponse>(
     '/api/ratio_sync/fetch',
+    request
+  )
+  return res.data
+}
+
+export async function previewOfficialPriceSync() {
+  const res = await api.get<OfficialPricePreviewResponse>(
+    '/api/ratio_sync/official/preview'
+  )
+  return res.data
+}
+
+export async function applyOfficialPriceSync(
+  request: OfficialPriceApplyRequest
+) {
+  const res = await api.post<OfficialPriceApplyResponse>(
+    '/api/ratio_sync/official/apply',
     request
   )
   return res.data

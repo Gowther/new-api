@@ -56,6 +56,7 @@ import {
   type ResolutionsMap,
 } from './upstream-ratio-sync-helpers'
 import { UpstreamRatioSyncTable } from './upstream-ratio-sync-table'
+import { OfficialPriceSync } from './official-price-sync'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -520,6 +521,8 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
 
   return (
     <div className='space-y-4'>
+      <OfficialPriceSync />
+
       <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
         <div className='flex flex-col gap-2 sm:flex-row'>
           <Button onClick={handleOpenChannelDialog} disabled={isLoading}>

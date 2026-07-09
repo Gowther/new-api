@@ -3770,6 +3770,22 @@
     "模型定价需要处理": "La tarification des modeles demande votre attention",
     "{{count}} 个已启用模型未设置明确价格或倍率。": "{{count}} modele(s) active(s) n ont pas de prix ou de ratio explicite configure.",
     "{{count}} 个模型定价已不在任何渠道中。": "{{count}} modele(s) de tarification n existent plus dans aucun canal.",
-    "清理已不存在模型定价": "Nettoyer la tarification obsolete"
+    "清理已不存在模型定价": "Nettoyer la tarification obsolete",
+    "分数 {{score}}": "Score {{score}}",
+    "匹配到的官方价格": "Prix officiels correspondants",
+    "同步已保存官方价格": "Synchroniser les prix officiels enregistrés",
+    "官方价格候选项已加载": "Candidats de prix officiels chargés",
+    "官方价格同步": "Synchronisation des prix officiels",
+    "官方价格同步失败": "Échec de la synchronisation des prix officiels",
+    "官方价格预览失败": "Échec de l’aperçu des prix officiels",
+    "已保存": "Enregistré",
+    "已更新 {{count}} 个模型": "{{count}} modèle(s) mis à jour",
+    "已选择": "Sélectionné",
+    "应用选中的官方价格": "Appliquer les prix officiels sélectionnés",
+    "无候选项": "Aucun candidat",
+    "暂无官方价格预览": "Aucun aperçu de prix officiel",
+    "未找到官方价格候选项": "Aucun prix officiel candidat trouvé",
+    "未找到官方价格匹配项": "Aucune correspondance de prix officiel trouvée",
+    "预览官方价格": "Aperçu des prix officiels"
   }
 }

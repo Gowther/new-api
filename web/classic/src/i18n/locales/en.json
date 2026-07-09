@@ -3917,6 +3917,8 @@
     "{{count}} 个已启用模型未设置明确价格或倍率。": "{{count}} enabled model(s) do not have explicit pricing or ratio configured.",
     "{{count}} 个模型定价已不在任何渠道中。": "{{count}} pricing model(s) no longer exist in any channel.",
     "清理已不存在模型定价": "Clean stale pricing",
+    "{{count}} 个失效模型定价可清理": "{{count}} stale model pricing item(s) can be cleaned",
+    "{{count}} 个已启用模型需要明确价格": "{{count}} enabled model(s) need explicit pricing",
     "分数 {{score}}": "Score {{score}}",
     "匹配到的官方价格": "Matched Official Prices",
     "同步已保存官方价格": "Sync Saved Official Prices",
@@ -3932,6 +3934,11 @@
     "暂无官方价格预览": "No official price preview yet",
     "未找到官方价格候选项": "No official price candidates found",
     "未找到官方价格匹配项": "No official price matches found",
+    "模型定价存在失效或缺失配置": "Model pricing has stale or missing entries",
+    "涉及模型": "Affected models",
+    "清理这些失效定价": "Clean stale entries",
+    "这些定价项引用的模型名已不在任何渠道中。清理只会移除这些失效定价，带通配符的模式配置会保留。": "These pricing entries reference model names that no longer exist in any channel. Cleaning only removes those stale entries; wildcard pattern entries are preserved.",
+    "这些已启用模型未设置明确价格、倍率或计费表达式。": "These enabled models do not have an explicit price, ratio, or billing expression configured.",
     "预览官方价格": "Preview Official Prices"
   }
 }

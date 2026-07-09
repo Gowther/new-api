@@ -3771,6 +3771,8 @@
     "{{count}} 个已启用模型未设置明确价格或倍率。": "{{count}} modele(s) active(s) n ont pas de prix ou de ratio explicite configure.",
     "{{count}} 个模型定价已不在任何渠道中。": "{{count}} modele(s) de tarification n existent plus dans aucun canal.",
     "清理已不存在模型定价": "Nettoyer la tarification obsolete",
+    "{{count}} 个失效模型定价可清理": "{{count}} entree(s) de tarification obsolete(s) peuvent etre nettoyees",
+    "{{count}} 个已启用模型需要明确价格": "{{count}} modele(s) actif(s) necessitent une tarification explicite",
     "分数 {{score}}": "Score {{score}}",
     "匹配到的官方价格": "Prix officiels correspondants",
     "同步已保存官方价格": "Synchroniser les prix officiels enregistrés",
@@ -3786,6 +3788,11 @@
     "暂无官方价格预览": "Aucun aperçu de prix officiel",
     "未找到官方价格候选项": "Aucun prix officiel candidat trouvé",
     "未找到官方价格匹配项": "Aucune correspondance de prix officiel trouvée",
+    "模型定价存在失效或缺失配置": "La tarification contient des entrees obsoletes ou manquantes",
+    "涉及模型": "Modeles concernes",
+    "清理这些失效定价": "Nettoyer ces entrees obsoletes",
+    "这些定价项引用的模型名已不在任何渠道中。清理只会移除这些失效定价，带通配符的模式配置会保留。": "Ces entrees de tarification referencent des modeles qui n existent plus dans aucun canal. Le nettoyage supprime seulement ces entrees obsoletes; les entrees avec caracteres generiques sont conservees.",
+    "这些已启用模型未设置明确价格、倍率或计费表达式。": "Ces modeles actifs n ont pas de prix, ratio ou expression de facturation explicite.",
     "预览官方价格": "Aperçu des prix officiels"
   }
 }

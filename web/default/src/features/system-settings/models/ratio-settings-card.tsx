@@ -443,47 +443,70 @@ export function RatioSettingsCard({
       return null
     }
 
+    const staleModelNames = staleItems.map((item) => item.model)
+    let title = t('Model pricing needs attention')
+    if (staleItems.length > 0 && unsetModels.length > 0) {
+      title = t('Model pricing has stale or missing entries')
+    } else if (staleItems.length > 0) {
+      title = t('{{count}} stale model pricing item(s) can be cleaned', {
+        count: staleItems.length,
+      })
+    } else {
+      title = t('{{count}} enabled model(s) need explicit pricing', {
+        count: unsetModels.length,
+      })
+    }
+
     return (
-      <Alert className='border-amber-200 bg-amber-50/70 text-amber-950 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-50'>
-        <AlertTriangle className='h-4 w-4' aria-hidden='true' />
-        <AlertTitle>{t('Model pricing needs attention')}</AlertTitle>
-        <AlertDescription className='space-y-3'>
-          {unsetModels.length > 0 && (
-            <p>
-              {t(
-                '{{count}} enabled model(s) do not have explicit pricing configured.',
-                { count: unsetModels.length }
-              )}{' '}
-              <span className='font-mono text-xs'>
-                {previewModelNames(unsetModels)}
-              </span>
-            </p>
-          )}
+      <Alert className='border-warning/35 bg-warning/10 text-foreground'>
+        <AlertTriangle aria-hidden='true' />
+        <AlertTitle>{title}</AlertTitle>
+        <AlertDescription className='flex flex-col gap-3'>
           {staleItems.length > 0 && (
-            <div className='space-y-2'>
-              <p>
+            <div className='flex flex-col gap-2'>
+              <div>
                 {t(
-                  '{{count}} pricing model(s) no longer exist in any channel.',
-                  { count: staleItems.length }
-                )}{' '}
-                <span className='font-mono text-xs'>
-                  {previewModelNames(staleItems.map((item) => item.model))}
+                  'These pricing entries reference model names that no longer exist in any channel. Cleaning only removes those stale entries; pattern entries are preserved.'
+                )}
+              </div>
+              <div>
+                <span>{t('Affected models')}</span>
+                {': '}
+                <span className='font-mono text-xs break-all'>
+                  {previewModelNames(staleModelNames)}
                 </span>
-              </p>
+              </div>
               <Button
                 type='button'
                 size='sm'
                 variant='outline'
+                className='w-fit'
                 disabled={cleanupMutation.isPending}
                 onClick={() => setCleanupConfirmOpen(true)}
               >
                 {cleanupMutation.isPending ? (
-                  <Loader2 className='h-3.5 w-3.5 animate-spin' />
+                  <Loader2 data-icon='inline-start' className='animate-spin' />
                 ) : (
-                  <Trash2 className='h-3.5 w-3.5' />
+                  <Trash2 data-icon='inline-start' />
                 )}
-                {t('Clean stale pricing')}
+                {t('Clean stale entries')}
               </Button>
+            </div>
+          )}
+          {unsetModels.length > 0 && (
+            <div className='flex flex-col gap-2'>
+              <div>
+                {t(
+                  'These enabled models do not have an explicit price, ratio, or billing expression configured.'
+                )}
+              </div>
+              <div>
+                <span>{t('Affected models')}</span>
+                {': '}
+                <span className='font-mono text-xs break-all'>
+                  {previewModelNames(unsetModels)}
+                </span>
+              </div>
             </div>
           )}
         </AlertDescription>

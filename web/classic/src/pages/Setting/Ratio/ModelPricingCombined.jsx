@@ -105,35 +105,49 @@ export default function ModelPricingCombined({ options, refresh }) {
       return null;
     }
 
+    const staleModelNames = staleItems.map((item) => item.model);
+    let title = t('模型定价需要处理');
+    if (staleItems.length > 0 && unsetModels.length > 0) {
+      title = t('模型定价存在失效或缺失配置');
+    } else if (staleItems.length > 0) {
+      title = t('{{count}} 个失效模型定价可清理', {
+        count: staleItems.length,
+      });
+    } else {
+      title = t('{{count}} 个已启用模型需要明确价格', {
+        count: unsetModels.length,
+      });
+    }
+
     return (
       <Banner
         type='warning'
+        closeIcon={null}
         icon={
           <IconAlertTriangle
             size='large'
             style={{ color: 'var(--semi-color-warning)' }}
           />
         }
-        title={t('模型定价需要处理')}
+        title={title}
         description={
-          <div>
-            {unsetModels.length > 0 && (
-              <div>
-                {t('{{count}} 个已启用模型未设置明确价格或倍率。', {
-                  count: unsetModels.length,
-                })}{' '}
-                <Text code>{previewModels(unsetModels)}</Text>
-              </div>
-            )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {staleItems.length > 0 && (
-              <div style={{ marginTop: unsetModels.length > 0 ? 8 : 0 }}>
+              <div>
                 <Space vertical align='start'>
                   <div>
-                    {t('{{count}} 个模型定价已不在任何渠道中。', {
-                      count: staleItems.length,
-                    })}{' '}
-                    <Text code>
-                      {previewModels(staleItems.map((item) => item.model))}
+                    {t(
+                      '这些定价项引用的模型名已不在任何渠道中。清理只会移除这些失效定价，带通配符的模式配置会保留。',
+                    )}
+                  </div>
+                  <div>
+                    {t('涉及模型')}
+                    {': '}
+                    <Text
+                      code
+                      style={{ whiteSpace: 'normal', wordBreak: 'break-all' }}
+                    >
+                      {previewModels(staleModelNames)}
                     </Text>
                   </div>
                   <Button
@@ -143,14 +157,38 @@ export default function ModelPricingCombined({ options, refresh }) {
                     icon={<IconDelete />}
                     onClick={cleanupStalePricing}
                   >
-                    {t('清理已不存在模型定价')}
+                    {t('清理这些失效定价')}
                   </Button>
+                </Space>
+              </div>
+            )}
+            {unsetModels.length > 0 && (
+              <div>
+                <Space vertical align='start'>
+                  <div>
+                    {t('这些已启用模型未设置明确价格、倍率或计费表达式。')}
+                  </div>
+                  <div>
+                    {t('涉及模型')}
+                    {': '}
+                    <Text
+                      code
+                      style={{ whiteSpace: 'normal', wordBreak: 'break-all' }}
+                    >
+                      {previewModels(unsetModels)}
+                    </Text>
+                  </div>
                 </Space>
               </div>
             )}
           </div>
         }
-        style={{ marginBottom: 16 }}
+        style={{
+          marginBottom: 16,
+          background: 'var(--semi-color-fill-0)',
+          border: '1px solid var(--semi-color-warning-light-hover)',
+          borderRadius: 6,
+        }}
       />
     );
   };

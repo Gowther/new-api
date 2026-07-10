@@ -616,8 +616,30 @@ export default function ErrorWorkbench() {
         <Space vertical align='start' spacing={6}>
           <Space spacing={4} wrap>
             {renderStatusCode(record.status_code)}
-            {record.error_type && <Tag color='red'>{record.error_type}</Tag>}
-            {record.error_code && <Tag color='orange'>{record.error_code}</Tag>}
+            {record.error_type && (
+              <Tag
+                color='red'
+                style={{
+                  maxWidth: 460,
+                  whiteSpace: 'normal',
+                  wordBreak: 'break-all',
+                }}
+              >
+                {record.error_type}
+              </Tag>
+            )}
+            {record.error_code && (
+              <Tag
+                color='orange'
+                style={{
+                  maxWidth: 460,
+                  whiteSpace: 'normal',
+                  wordBreak: 'break-all',
+                }}
+              >
+                {record.error_code}
+              </Tag>
+            )}
           </Space>
           <Tooltip
             position='topLeft'
@@ -630,7 +652,7 @@ export default function ErrorWorkbench() {
             <Typography.Text
               strong
               ellipsis={{ showTooltip: false }}
-              style={{ maxWidth: 460 }}
+              style={{ maxWidth: 460, wordBreak: 'break-all' }}
             >
               {record.error_summary || t('无错误内容')}
             </Typography.Text>

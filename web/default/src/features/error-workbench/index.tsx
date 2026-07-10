@@ -851,54 +851,57 @@ export function ErrorWorkbench() {
                           {formatTimestampToDate(record.channel_test_time)}
                         </div>
                       </TableCell>
-                      <TableCell className='max-w-[420px] align-top whitespace-normal'>
-                        <div className='flex flex-wrap items-center gap-1'>
-                          <Badge
-                            variant='outline'
-                            className={[
-                              statusCodeClassName(record.status_code),
-                              'font-semibold',
-                            ].join(' ')}
-                          >
-                            {record.status_code || t('No status code')}
-                          </Badge>
-                          {record.error_type && (
+                      <TableCell className='w-[320px] max-w-[420px] min-w-0 align-top whitespace-normal'>
+                        <div className='min-w-0 max-w-full space-y-2 overflow-hidden'>
+                          <div className='flex flex-wrap items-center gap-1'>
                             <Badge
                               variant='outline'
-                              className='border-red-200 text-red-700'
+                              className={[
+                                statusCodeClassName(record.status_code),
+                                'font-semibold',
+                              ].join(' ')}
                             >
-                              {record.error_type}
+                              {record.status_code || t('No status code')}
                             </Badge>
-                          )}
-                          {record.error_code && (
-                            <Badge
-                              variant='outline'
-                              className='border-amber-200 text-amber-700'
+                            {record.error_type && (
+                              <Badge
+                                variant='outline'
+                                className='max-w-full border-red-200 break-all text-red-700'
+                              >
+                                {record.error_type}
+                              </Badge>
+                            )}
+                            {record.error_code && (
+                              <Badge
+                                variant='outline'
+                                className='max-w-full border-amber-200 break-all text-amber-700'
+                              >
+                                {record.error_code}
+                              </Badge>
+                            )}
+                          </div>
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <p className='line-clamp-3 max-w-full cursor-help break-all text-sm font-medium leading-5' />
+                              }
                             >
-                              {record.error_code}
-                            </Badge>
+                              {record.error_summary || t('No error message')}
+                            </TooltipTrigger>
+                            <TooltipContent className='max-w-xl break-words whitespace-pre-wrap'>
+                              {record.sample_content || record.error_summary}
+                            </TooltipContent>
+                          </Tooltip>
+                          {(record.sample_request_id ||
+                            record.sample_upstream_request_id) && (
+                            <div className='text-muted-foreground max-w-full truncate text-xs'>
+                              <span className='font-mono'>
+                                {record.sample_request_id ||
+                                  record.sample_upstream_request_id}
+                              </span>
+                            </div>
                           )}
                         </div>
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={<p className='mt-2 line-clamp-3' />}
-                            className='cursor-help text-sm font-medium leading-5'
-                          >
-                            {record.error_summary || t('No error message')}
-                          </TooltipTrigger>
-                          <TooltipContent className='max-w-xl whitespace-pre-wrap'>
-                            {record.sample_content || record.error_summary}
-                          </TooltipContent>
-                        </Tooltip>
-                        {(record.sample_request_id ||
-                          record.sample_upstream_request_id) && (
-                          <div className='text-muted-foreground mt-1 text-xs'>
-                            <span className='font-mono'>
-                              {record.sample_request_id ||
-                                record.sample_upstream_request_id}
-                            </span>
-                          </div>
-                        )}
                       </TableCell>
                       <TableCell className='align-top'>
                         <div className='space-y-2'>

@@ -612,6 +612,7 @@ export default function ErrorWorkbench() {
     {
       title: t('错误原因'),
       dataIndex: 'error_summary',
+      width: 460,
       render: (_, record) => (
         <Space vertical align='start' spacing={6}>
           <Space spacing={4} wrap>
@@ -652,7 +653,12 @@ export default function ErrorWorkbench() {
             <Typography.Text
               strong
               ellipsis={{ showTooltip: false }}
-              style={{ maxWidth: 460, wordBreak: 'break-all' }}
+              style={{
+                display: 'inline-block',
+                maxWidth: '100%',
+                overflow: 'hidden',
+                wordBreak: 'break-all',
+              }}
             >
               {record.error_summary || t('无错误内容')}
             </Typography.Text>

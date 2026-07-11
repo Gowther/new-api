@@ -762,7 +762,9 @@ export function ErrorWorkbench() {
                     <TableHead className='w-[120px]'>{t('Count')}</TableHead>
                     <TableHead className='w-[190px]'>{t('Model')}</TableHead>
                     <TableHead className='w-[300px]'>{t('Channel')}</TableHead>
-                    <TableHead>{t('Error')}</TableHead>
+                    <TableHead className='w-[460px]'>
+                      {t('Error')}
+                    </TableHead>
                     <TableHead className='w-[210px]'>
                       {t('Auto test')}
                     </TableHead>
@@ -851,7 +853,7 @@ export function ErrorWorkbench() {
                           {formatTimestampToDate(record.channel_test_time)}
                         </div>
                       </TableCell>
-                      <TableCell className='w-[320px] max-w-[420px] min-w-0 align-top whitespace-normal'>
+                      <TableCell className='w-[460px] min-w-[460px] align-top whitespace-normal'>
                         <div className='min-w-0 max-w-full space-y-2 overflow-hidden'>
                           <div className='flex flex-wrap items-center gap-1'>
                             <Badge

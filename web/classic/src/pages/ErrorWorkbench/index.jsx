@@ -613,62 +613,80 @@ export default function ErrorWorkbench() {
       title: t('错误原因'),
       dataIndex: 'error_summary',
       width: 460,
+      ellipsis: true,
       render: (_, record) => (
-        <Space vertical align='start' spacing={6}>
-          <Space spacing={4} wrap>
-            {renderStatusCode(record.status_code)}
-            {record.error_type && (
-              <Tag
-                color='red'
+        <div
+          style={{
+            width: '100%',
+            maxWidth: 460,
+            minWidth: 0,
+            overflow: 'hidden',
+          }}
+        >
+          <Space vertical align='start' spacing={6} style={{ width: '100%' }}>
+            <Space spacing={4} wrap style={{ width: '100%', maxWidth: '100%' }}>
+              {renderStatusCode(record.status_code)}
+              {record.error_type && (
+                <Tag
+                  color='red'
+                  style={{
+                    maxWidth: '100%',
+                    whiteSpace: 'normal',
+                    wordBreak: 'break-all',
+                  }}
+                >
+                  {record.error_type}
+                </Tag>
+              )}
+              {record.error_code && (
+                <Tag
+                  color='orange'
+                  style={{
+                    maxWidth: '100%',
+                    whiteSpace: 'normal',
+                    wordBreak: 'break-all',
+                  }}
+                >
+                  {record.error_code}
+                </Tag>
+              )}
+            </Space>
+            <Tooltip
+              position='topLeft'
+              content={
+                <pre className='m-0 max-w-xl whitespace-pre-wrap text-xs'>
+                  {record.sample_content || record.error_summary}
+                </pre>
+              }
+            >
+              <Typography.Text
+                strong
+                ellipsis={{ showTooltip: false, rows: 3 }}
                 style={{
-                  maxWidth: 460,
-                  whiteSpace: 'normal',
+                  display: 'block',
+                  width: '100%',
+                  maxWidth: '100%',
+                  overflow: 'hidden',
                   wordBreak: 'break-all',
                 }}
               >
-                {record.error_type}
-              </Tag>
-            )}
-            {record.error_code && (
-              <Tag
-                color='orange'
-                style={{
-                  maxWidth: 460,
-                  whiteSpace: 'normal',
-                  wordBreak: 'break-all',
-                }}
+                {record.error_summary || t('无错误内容')}
+              </Typography.Text>
+            </Tooltip>
+            {(record.sample_request_id ||
+              record.sample_upstream_request_id) && (
+              <Typography.Text
+                type='tertiary'
+                size='small'
+                className='font-mono'
+                ellipsis={{ showTooltip: true }}
+                style={{ display: 'block', width: '100%', maxWidth: '100%' }}
               >
-                {record.error_code}
-              </Tag>
+                {record.sample_request_id || record.sample_upstream_request_id}
+              </Typography.Text>
             )}
           </Space>
-          <Tooltip
-            position='topLeft'
-            content={
-              <pre className='m-0 max-w-xl whitespace-pre-wrap text-xs'>
-                {record.sample_content || record.error_summary}
-              </pre>
-            }
-          >
-            <Typography.Text
-              strong
-              ellipsis={{ showTooltip: false }}
-              style={{
-                display: 'inline-block',
-                maxWidth: '100%',
-                overflow: 'hidden',
-                wordBreak: 'break-all',
-              }}
-            >
-              {record.error_summary || t('无错误内容')}
-            </Typography.Text>
-          </Tooltip>
-          {(record.sample_request_id || record.sample_upstream_request_id) && (
-            <Typography.Text type='tertiary' size='small' className='font-mono'>
-              {record.sample_request_id || record.sample_upstream_request_id}
-            </Typography.Text>
-          )}
-        </Space>
+        </div>
       ),
     },
     {
@@ -954,6 +972,7 @@ export default function ErrorWorkbench() {
             dataSource={summary.items || []}
             pagination={false}
             scroll={{ x: 1640 }}
+            style={{ width: '100%' }}
             empty={
               <Empty
                 title={t('暂无错误日志')}

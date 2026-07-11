@@ -756,22 +756,22 @@ export function ErrorWorkbench() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
+              <Table className='table-fixed min-w-[1820px]'>
                 <TableHeader>
                   <TableRow>
                     <TableHead className='w-[120px]'>{t('Count')}</TableHead>
                     <TableHead className='w-[190px]'>{t('Model')}</TableHead>
                     <TableHead className='w-[300px]'>{t('Channel')}</TableHead>
-                    <TableHead className='w-[460px]'>
-                      {t('Error')}
-                    </TableHead>
+                    <TableHead className='w-[460px]'>{t('Error')}</TableHead>
                     <TableHead className='w-[210px]'>
                       {t('Auto test')}
                     </TableHead>
                     <TableHead className='w-[320px]'>
                       {t('Same model channels')}
                     </TableHead>
-                    <TableHead className='text-right'>{t('Actions')}</TableHead>
+                    <TableHead className='w-[220px] text-right'>
+                      {t('Actions')}
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -853,9 +853,9 @@ export function ErrorWorkbench() {
                           {formatTimestampToDate(record.channel_test_time)}
                         </div>
                       </TableCell>
-                      <TableCell className='w-[460px] min-w-[460px] align-top whitespace-normal'>
+                      <TableCell className='max-w-[460px] w-[460px] overflow-hidden align-top whitespace-normal'>
                         <div className='min-w-0 max-w-full space-y-2 overflow-hidden'>
-                          <div className='flex flex-wrap items-center gap-1'>
+                          <div className='flex min-w-0 flex-wrap items-center gap-1 overflow-hidden'>
                             <Badge
                               variant='outline'
                               className={[
@@ -868,7 +868,7 @@ export function ErrorWorkbench() {
                             {record.error_type && (
                               <Badge
                                 variant='outline'
-                                className='max-w-full border-red-200 break-all text-red-700'
+                                className='max-w-full min-w-0 border-red-200 break-all whitespace-normal text-red-700'
                               >
                                 {record.error_type}
                               </Badge>
@@ -876,7 +876,7 @@ export function ErrorWorkbench() {
                             {record.error_code && (
                               <Badge
                                 variant='outline'
-                                className='max-w-full border-amber-200 break-all text-amber-700'
+                                className='max-w-full min-w-0 border-amber-200 break-all whitespace-normal text-amber-700'
                               >
                                 {record.error_code}
                               </Badge>
@@ -885,7 +885,7 @@ export function ErrorWorkbench() {
                           <Tooltip>
                             <TooltipTrigger
                               render={
-                                <p className='line-clamp-3 max-w-full cursor-help break-all text-sm font-medium leading-5' />
+                                <p className='line-clamp-3 block min-w-0 max-w-full cursor-help overflow-hidden break-all text-sm font-medium leading-5' />
                               }
                             >
                               {record.error_summary || t('No error message')}
@@ -896,7 +896,7 @@ export function ErrorWorkbench() {
                           </Tooltip>
                           {(record.sample_request_id ||
                             record.sample_upstream_request_id) && (
-                            <div className='text-muted-foreground max-w-full truncate text-xs'>
+                            <div className='text-muted-foreground min-w-0 max-w-full truncate text-xs'>
                               <span className='font-mono'>
                                 {record.sample_request_id ||
                                   record.sample_upstream_request_id}
@@ -905,8 +905,8 @@ export function ErrorWorkbench() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className='align-top'>
-                        <div className='space-y-2'>
+                      <TableCell className='max-w-[210px] w-[210px] overflow-hidden align-top whitespace-normal'>
+                        <div className='min-w-0 max-w-full space-y-2 overflow-hidden'>
                           <div className='flex flex-wrap gap-1'>
                             {record.automatic_channel_test_disabled ? (
                               <Badge
@@ -963,10 +963,10 @@ export function ErrorWorkbench() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className='w-[320px] align-top'>
+                      <TableCell className='max-w-[320px] w-[320px] overflow-hidden align-top whitespace-normal'>
                         {renderPeerChannels(record)}
                       </TableCell>
-                      <TableCell className='align-top'>
+                      <TableCell className='max-w-[220px] w-[220px] overflow-hidden align-top whitespace-normal'>
                         <div className='flex justify-end gap-1'>
                           <Button
                             size='sm'

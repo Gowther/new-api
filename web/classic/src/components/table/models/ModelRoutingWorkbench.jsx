@@ -272,6 +272,7 @@ const ModelRoutingWorkbench = () => {
   const [editingChannel, setEditingChannel] = useState({ id: undefined });
   const [showEditChannel, setShowEditChannel] = useState(false);
   const [deletingChannelId, setDeletingChannelId] = useState(null);
+  const [testingChannelIds, setTestingChannelIds] = useState({});
   const [defaultRoutingSelection, setDefaultRoutingSelection] = useState(() =>
     readStoredRoutingSelection(ROUTING_DEFAULT_SELECTION_KEY),
   );
@@ -587,6 +588,67 @@ const ModelRoutingWorkbench = () => {
     });
   };
 
+  const handleTestChannel = async (channel) => {
+    let shouldStart = false;
+    setTestingChannelIds((prev) => {
+      if (prev[channel.id]) return prev;
+      shouldStart = true;
+      return { ...prev, [channel.id]: true };
+    });
+    if (!shouldStart) return;
+
+    try {
+      let url = `/api/channel/test/${channel.id}`;
+      if (selectedModelName) {
+        url += `?model=${encodeURIComponent(selectedModelName)}`;
+      }
+      const res = await API.get(url);
+      const { success, message, time } = res.data || {};
+      if (success) {
+        const elapsed =
+          typeof time === 'number' ? time.toFixed(2) : String(time ?? '');
+        if (selectedModelName) {
+          showInfo(
+            t(
+              '通道 ${name} 测试成功，模型 ${model} 耗时 ${time.toFixed(2)} 秒。',
+            )
+              .replace('${name}', channel.name)
+              .replace('${model}', selectedModelName)
+              .replace('${time.toFixed(2)}', elapsed),
+          );
+        } else {
+          showInfo(
+            t('通道 ${name} 测试成功，耗时 ${time.toFixed(2)} 秒。')
+              .replace('${name}', channel.name)
+              .replace('${time.toFixed(2)}', elapsed),
+          );
+        }
+        setChannels((prev) =>
+          prev.map((item) =>
+            item.id === channel.id
+              ? {
+                  ...item,
+                  response_time:
+                    typeof time === 'number' ? time * 1000 : item.response_time,
+                  test_time: Date.now() / 1000,
+                }
+              : item,
+          ),
+        );
+      } else {
+        showError(message || t('测试失败'));
+      }
+    } catch (error) {
+      showError(error.message || t('测试失败'));
+    } finally {
+      setTestingChannelIds((prev) => {
+        const next = { ...prev };
+        delete next[channel.id];
+        return next;
+      });
+    }
+  };
+
   const handleSaveRouting = async () => {
     if (changedCount === 0) {
       showInfo(t('没有需要保存的修改'));
@@ -737,10 +799,18 @@ const ModelRoutingWorkbench = () => {
     {
       title: t('操作'),
       dataIndex: 'actions',
-      width: 90,
+      width: 150,
       render: (_, record) => {
         return (
           <div className='flex items-center gap-2'>
+            <Button
+              type='tertiary'
+              size='small'
+              loading={Boolean(testingChannelIds[record.id])}
+              onClick={() => handleTestChannel(record)}
+            >
+              {t('测试')}
+            </Button>
             <Button
               type='tertiary'
               size='small'

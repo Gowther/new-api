@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  Gauge,
   Loader2,
   Pencil,
   Plus,
@@ -75,7 +76,7 @@ import {
   ERROR_MESSAGES,
   SUCCESS_MESSAGES,
 } from '@/features/channels/constants'
-import { channelsQueryKeys } from '@/features/channels/lib'
+import { channelsQueryKeys, handleTestChannel } from '@/features/channels/lib'
 import type { Channel } from '@/features/channels/types'
 import { getPricing } from '@/features/pricing/api'
 import type { PricingModel, PricingVendor } from '@/features/pricing/types'
@@ -349,6 +350,9 @@ export function ModelRoutingWorkbench() {
   const [channelEditorOpen, setChannelEditorOpen] = useState(false)
   const [deletingChannel, setDeletingChannel] = useState<Channel | null>(null)
   const [isDeletingChannel, setIsDeletingChannel] = useState(false)
+  const [testingChannelIds, setTestingChannelIds] = useState<
+    Record<number, boolean>
+  >({})
   const [isSaving, setIsSaving] = useState(false)
   const [defaultRoutingSelection, setDefaultRoutingSelection] =
     useState<StoredRoutingSelection | null>(() =>
@@ -712,6 +716,43 @@ export function ModelRoutingWorkbench() {
     }
   }
 
+  const handleTestRoutingChannel = useCallback(
+    async (channel: Channel) => {
+      let shouldStart = false
+      setTestingChannelIds((prev) => {
+        if (prev[channel.id]) return prev
+        shouldStart = true
+        return { ...prev, [channel.id]: true }
+      })
+      if (!shouldStart) return
+
+      try {
+        await handleTestChannel(
+          channel.id,
+          {
+            channelName: channel.name,
+            testModel: selectedModelName || undefined,
+          },
+          () => {
+            void queryClient.invalidateQueries({
+              queryKey: channelsQueryKeys.lists(),
+            })
+            void queryClient.invalidateQueries({
+              queryKey: ['model-routing', 'channels'],
+            })
+          }
+        )
+      } finally {
+        setTestingChannelIds((prev) => {
+          const next = { ...prev }
+          delete next[channel.id]
+          return next
+        })
+      }
+    },
+    [queryClient, selectedModelName]
+  )
+
   const handleSaveRouting = async () => {
     if (changedCount === 0) {
       toast.info(t('No changes to save'))
@@ -1034,7 +1075,7 @@ export function ModelRoutingWorkbench() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className='w-80'>{t('Channel')}</TableHead>
-                    <TableHead className='w-16'>{t('Actions')}</TableHead>
+                    <TableHead className='w-24'>{t('Actions')}</TableHead>
                     <TableHead className='w-28'>{t('Type')}</TableHead>
                     <TableHead className='w-24'>{t('Group')}</TableHead>
                     <TableHead className='w-36'>{t('Status')}</TableHead>
@@ -1139,8 +1180,24 @@ export function ModelRoutingWorkbench() {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className='w-16'>
+                        <TableCell className='w-24'>
                           <div className='flex items-center gap-1'>
+                            <Button
+                              type='button'
+                              variant='ghost'
+                              size='icon-sm'
+                              className='shrink-0'
+                              title={t('Test Connection')}
+                              aria-label={t('Test Connection')}
+                              disabled={Boolean(testingChannelIds[channel.id])}
+                              onClick={() => handleTestRoutingChannel(channel)}
+                            >
+                              {testingChannelIds[channel.id] ? (
+                                <Loader2 className='size-4 animate-spin' />
+                              ) : (
+                                <Gauge className='size-4' />
+                              )}
+                            </Button>
                             <Button
                               type='button'
                               variant='ghost'

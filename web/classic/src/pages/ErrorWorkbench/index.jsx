@@ -971,7 +971,7 @@ export default function ErrorWorkbench() {
             columns={columns}
             dataSource={summary.items || []}
             pagination={false}
-            scroll={{ x: 1640 }}
+            scroll={{ x: 1810 }}
             style={{ width: '100%' }}
             empty={
               <Empty

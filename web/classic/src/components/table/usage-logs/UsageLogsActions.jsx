@@ -23,6 +23,11 @@ import { renderQuota } from '../../../helpers';
 import CompactModeToggle from '../../common/ui/CompactModeToggle';
 import { useMinimumLoadingTime } from '../../../hooks/common/useMinimumLoadingTime';
 
+const compactNumberFormatter = new Intl.NumberFormat('en', {
+  notation: 'compact',
+  maximumFractionDigits: 1,
+});
+
 const LogsActions = ({
   stat,
   loadingStat,
@@ -37,17 +42,18 @@ const LogsActions = ({
   const needSkeleton = !showStat || showSkeleton;
 
   const placeholder = (
-    <Space>
+    <Space wrap>
       <Skeleton.Title style={{ width: 108, height: 21, borderRadius: 6 }} />
       <Skeleton.Title style={{ width: 65, height: 21, borderRadius: 6 }} />
       <Skeleton.Title style={{ width: 64, height: 21, borderRadius: 6 }} />
+      <Skeleton.Title style={{ width: 120, height: 21, borderRadius: 6 }} />
     </Space>
   );
 
   return (
     <div className='flex flex-col md:flex-row justify-between items-start md:items-center gap-2 w-full'>
       <Skeleton loading={needSkeleton} active placeholder={placeholder}>
-        <Space>
+        <Space wrap>
           <Tag
             color='blue'
             style={{
@@ -81,6 +87,18 @@ const LogsActions = ({
             className='!rounded-lg'
           >
             TPM: {stat.tpm}
+          </Tag>
+          <Tag
+            color='green'
+            style={{
+              fontWeight: 500,
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+              padding: 13,
+            }}
+            className='!rounded-lg'
+          >
+            {t('总 Tokens')}:{' '}
+            {compactNumberFormatter.format(stat.total_tokens || 0)}
           </Tag>
         </Space>
       </Skeleton>

@@ -240,14 +240,7 @@ func CleanupStaleModelPricingSettings() (StaleModelPricingReport, error) {
 	}
 
 	for _, pricingMap := range getModelPricingMaps() {
-		changed := false
-		for modelName := range staleModels {
-			if _, ok := pricingMap.Values[modelName]; ok {
-				delete(pricingMap.Values, modelName)
-				changed = true
-			}
-		}
-		if !changed {
+		if !deleteStalePricingKeys(pricingMap.Values, staleModels) {
 			continue
 		}
 		if err := updatePricingOptionMap(pricingMap.OptionKey, pricingMap.Values); err != nil {
@@ -258,6 +251,18 @@ func CleanupStaleModelPricingSettings() (StaleModelPricingReport, error) {
 	RefreshPricing()
 	ratio_setting.InvalidateExposedDataCache()
 	return report, nil
+}
+
+func deleteStalePricingKeys(values map[string]any, staleModels map[string]struct{}) bool {
+	changed := false
+	for modelName := range values {
+		if _, ok := staleModels[strings.TrimSpace(modelName)]; !ok {
+			continue
+		}
+		delete(values, modelName)
+		changed = true
+	}
+	return changed
 }
 
 func collectPricingFieldsByModel() map[string][]string {

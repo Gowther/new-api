@@ -256,7 +256,7 @@ const fetchAllChannels = async () => {
   return sortRoutingChannels(channels);
 };
 
-const ModelRoutingWorkbench = () => {
+const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -329,6 +329,14 @@ const ModelRoutingWorkbench = () => {
     return options;
   }, [models, t, vendors]);
 
+  const targetRoutingSelection = useMemo(() => {
+    if (!targetModelName) return null;
+    const targetModel = models.find(
+      (model) => model.model_name === targetModelName,
+    );
+    return targetModel ? getRoutingSelectionFromModel(targetModel) : null;
+  }, [models, targetModelName]);
+
   const filteredProviders = useMemo(() => {
     const search = providerSearch.trim().toLowerCase();
     if (!search) return providerOptions;
@@ -375,8 +383,10 @@ const ModelRoutingWorkbench = () => {
   );
 
   const initialRoutingSelection = useMemo(
-    () => resolveInitialRoutingSelection(models, defaultRoutingSelection),
-    [defaultRoutingSelection, models],
+    () =>
+      targetRoutingSelection ||
+      resolveInitialRoutingSelection(models, defaultRoutingSelection),
+    [defaultRoutingSelection, models, targetRoutingSelection],
   );
 
   const isSelectedDefaultModel = isSameRoutingSelection(
@@ -397,6 +407,12 @@ const ModelRoutingWorkbench = () => {
   }, [channels, routingChanges, selectedModelNames]);
 
   const changedCount = getChangedCount(routingChanges);
+
+  useEffect(() => {
+    if (!targetRoutingSelection) return;
+    setSelectedProviderKey(targetRoutingSelection.providerKey);
+    setSelectedModelName(targetRoutingSelection.modelName);
+  }, [targetRoutingSelection]);
 
   useEffect(() => {
     if (selectedProviderKey) {
@@ -453,6 +469,21 @@ const ModelRoutingWorkbench = () => {
       selectedRoutingSelection,
     );
   }, [selectedRoutingSelection]);
+
+  useEffect(() => {
+    if (!targetChannelId) return;
+    if (targetModelName && selectedModelName !== targetModelName) return;
+    if (!channelsForModel.some((channel) => channel.id === targetChannelId)) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      document
+        .querySelector(`[data-routing-channel-id="${targetChannelId}"]`)
+        ?.scrollIntoView({ block: 'center' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [channelsForModel, selectedModelName, targetChannelId, targetModelName]);
 
   const handleProviderSelect = (providerKey) => {
     setSelectedProviderKey(providerKey);
@@ -1120,6 +1151,17 @@ const ModelRoutingWorkbench = () => {
                 pagination={false}
                 size='small'
                 scroll={{ x: 980 }}
+                onRow={(record) => ({
+                  'data-routing-channel-id': record.id,
+                  style:
+                    record.id === targetChannelId
+                      ? {
+                          background: 'var(--semi-color-warning-light-default)',
+                          boxShadow:
+                            'inset 0 0 0 1px var(--semi-color-warning)',
+                        }
+                      : undefined,
+                })}
               />
             )}
           </div>

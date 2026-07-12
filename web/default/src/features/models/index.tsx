@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useQueryClient } from '@tanstack/react-query'
 import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SectionPageLayout } from '@/components/layout'
@@ -62,6 +62,7 @@ function ModelsContent() {
   const navigate = useNavigate()
   const { tabCategory, setTabCategory } = useModels()
   const params = route.useParams()
+  const search = route.useSearch()
   const activeSection = (params.section ??
     MODELS_DEFAULT_SECTION) as ModelsSectionId
 
@@ -86,21 +87,23 @@ function ModelsContent() {
   )
 
   const meta = SECTION_META[activeSection] ?? SECTION_META.metadata
+  let sectionActions: ReactNode = null
+  if (activeSection === 'metadata') {
+    sectionActions = <ModelsPrimaryButtons />
+  } else if (activeSection === 'deployments') {
+    sectionActions = (
+      <Button onClick={() => setCreateDeploymentOpen(true)} size='sm'>
+        <Plus className='h-4 w-4' />
+        {t('Create deployment')}
+      </Button>
+    )
+  }
 
   return (
     <>
       <SectionPageLayout fixedContent>
         <SectionPageLayout.Title>{t(meta.titleKey)}</SectionPageLayout.Title>
-        <SectionPageLayout.Actions>
-          {activeSection === 'metadata' ? (
-            <ModelsPrimaryButtons />
-          ) : activeSection === 'deployments' ? (
-            <Button onClick={() => setCreateDeploymentOpen(true)} size='sm'>
-              <Plus className='h-4 w-4' />
-              {t('Create deployment')}
-            </Button>
-          ) : null}
-        </SectionPageLayout.Actions>
+        <SectionPageLayout.Actions>{sectionActions}</SectionPageLayout.Actions>
         <SectionPageLayout.Content>
           <div className='flex h-full min-h-0 flex-col gap-4'>
             <Tabs value={activeSection} onValueChange={handleSectionChange}>
@@ -114,7 +117,12 @@ function ModelsContent() {
             </Tabs>
             <div className='min-h-0 flex-1'>
               {activeSection === 'metadata' && <ModelsTable />}
-              {activeSection === 'routing' && <ModelRoutingWorkbench />}
+              {activeSection === 'routing' && (
+                <ModelRoutingWorkbench
+                  targetModelName={search.routingModel || undefined}
+                  targetChannelId={search.routingChannel}
+                />
+              )}
               {activeSection === 'deployments' && <DeploymentsSection />}
             </div>
           </div>

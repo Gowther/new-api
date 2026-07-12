@@ -53,41 +53,78 @@ function getInitialAutoRefreshSeconds() {
 
 function getInitialUrlFilters() {
   if (typeof window === 'undefined') {
-    return { channel: '' };
+    return {};
   }
 
   const searchParams = new URLSearchParams(window.location.search);
+  const startTimestamp = Number(
+    searchParams.get('start_timestamp') || searchParams.get('startTime'),
+  );
+  const endTimestamp = Number(
+    searchParams.get('end_timestamp') || searchParams.get('endTime'),
+  );
   return {
     channel:
       searchParams.get('channel') || searchParams.get('channel_id') || '',
+    modelName:
+      searchParams.get('model_name') || searchParams.get('model') || '',
+    group: searchParams.get('group') || '',
+    requestId:
+      searchParams.get('request_id') || searchParams.get('requestId') || '',
+    upstreamRequestId:
+      searchParams.get('upstream_request_id') ||
+      searchParams.get('upstreamRequestId') ||
+      '',
+    logType: searchParams.get('type') || '0',
+    startTimestamp: Number.isFinite(startTimestamp) ? startTimestamp : 0,
+    endTimestamp: Number.isFinite(endTimestamp) ? endTimestamp : 0,
   };
 }
 
-function getDefaultLogFormValues(channel = '') {
+function getDefaultLogFormValues(initialFilters = {}) {
   const now = new Date();
   return {
     username: '',
     token_name: '',
-    model_name: '',
-    channel,
-    group: '',
-    request_id: '',
+    model_name: initialFilters.modelName || '',
+    channel: initialFilters.channel || '',
+    group: initialFilters.group || '',
+    request_id: initialFilters.requestId || '',
+    upstream_request_id: initialFilters.upstreamRequestId || '',
     dateRange: [
-      timestamp2string(getTodayStartTimestamp()),
-      timestamp2string(now.getTime() / 1000 + 3600),
+      timestamp2string(
+        initialFilters.startTimestamp || getTodayStartTimestamp(),
+      ),
+      timestamp2string(
+        initialFilters.endTimestamp || now.getTime() / 1000 + 3600,
+      ),
     ],
-    logType: '0',
+    logType: initialFilters.logType || '0',
   };
 }
 
-function clearChannelSearchParams() {
+function clearInitialSearchParams() {
   if (typeof window === 'undefined') {
     return;
   }
 
   const url = new URL(window.location.href);
-  url.searchParams.delete('channel');
-  url.searchParams.delete('channel_id');
+  [
+    'channel',
+    'channel_id',
+    'model_name',
+    'model',
+    'group',
+    'request_id',
+    'requestId',
+    'upstream_request_id',
+    'upstreamRequestId',
+    'type',
+    'start_timestamp',
+    'startTime',
+    'end_timestamp',
+    'endTime',
+  ].forEach((key) => url.searchParams.delete(key));
   window.history.replaceState(
     {},
     '',
@@ -107,6 +144,7 @@ function buildLogQueryString(params) {
 
 export const useLogsData = () => {
   const { t } = useTranslation();
+  const initialUrlFiltersRef = useRef(getInitialUrlFilters());
 
   // Define column keys for selection
   const COLUMN_KEYS = {
@@ -135,12 +173,13 @@ export const useLogsData = () => {
   const [activePage, setActivePage] = useState(1);
   const [logCount, setLogCount] = useState(0);
   const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
-  const [logType, setLogType] = useState(0);
+  const [logType, setLogType] = useState(
+    Number(initialUrlFiltersRef.current.logType) || 0,
+  );
   const [autoRefreshSeconds, setAutoRefreshSecondsState] = useState(
     getInitialAutoRefreshSeconds,
   );
   const autoRefreshCallbackRef = useRef(null);
-  const initialUrlFiltersRef = useRef(getInitialUrlFilters());
 
   const setAutoRefreshSeconds = (seconds) => {
     const next = AUTO_REFRESH_INTERVALS.includes(Number(seconds))
@@ -171,9 +210,7 @@ export const useLogsData = () => {
 
   // Form state
   const [formApi, setFormApi] = useState(null);
-  const formInitValues = getDefaultLogFormValues(
-    initialUrlFiltersRef.current.channel,
-  );
+  const formInitValues = getDefaultLogFormValues(initialUrlFiltersRef.current);
 
   // Get default column visibility based on user role
   const getDefaultColumnVisibility = () => {
@@ -327,6 +364,7 @@ export const useLogsData = () => {
       channel: formValues.channel || '',
       group: formValues.group || '',
       request_id: formValues.request_id || '',
+      upstream_request_id: formValues.upstream_request_id || '',
       logType: formValues.logType ? parseInt(formValues.logType) : 0,
     };
   };
@@ -845,6 +883,7 @@ export const useLogsData = () => {
       channel,
       group,
       request_id,
+      upstream_request_id,
       logType: formLogType,
     } = getFormValues();
 
@@ -867,6 +906,7 @@ export const useLogsData = () => {
       end_timestamp: localEndTimestamp,
       group,
       request_id,
+      upstream_request_id,
     };
     let path = '/api/log/self/';
     if (isAdminUser) {
@@ -920,8 +960,8 @@ export const useLogsData = () => {
     }
 
     const resetValues = getDefaultLogFormValues();
-    initialUrlFiltersRef.current = { channel: '' };
-    clearChannelSearchParams();
+    initialUrlFiltersRef.current = {};
+    clearInitialSearchParams();
     formApi.setValues(resetValues);
     setLogType(0);
 

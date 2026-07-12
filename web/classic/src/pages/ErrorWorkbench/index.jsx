@@ -25,17 +25,16 @@ import {
   Empty,
   Input,
   InputNumber,
-  Modal,
+  List,
   Select,
   Space,
-  Table,
+  Spin,
   Tag,
-  Tooltip,
   Typography,
 } from '@douyinfe/semi-ui';
+import { IconExternalOpen, IconRefresh } from '@douyinfe/semi-icons';
 import {
   API,
-  copy,
   showError,
   showSuccess,
   timestamp2string,
@@ -59,16 +58,13 @@ const DEFAULT_FILTERS = {
 };
 
 const FILTER_INPUT_DEBOUNCE_MS = 500;
-const CHANNEL_STATUS_ENABLED = 1;
 
-const channelStatusMeta = {
-  1: { color: 'green', text: '已启用' },
-  2: { color: 'red', text: '手动禁用' },
-  3: { color: 'orange', text: '自动禁用' },
-};
-
-function renderChannelStatus(status) {
-  const meta = channelStatusMeta[status] || { color: 'grey', text: '未知' };
+function renderChannelStatus(status, t) {
+  const meta = {
+    1: { color: 'green', text: t('已启用') },
+    2: { color: 'red', text: t('手动禁用') },
+    3: { color: 'orange', text: t('自动禁用') },
+  }[status] || { color: 'grey', text: t('未知') };
   return (
     <Tag color={meta.color} shape='circle'>
       {meta.text}
@@ -76,35 +72,49 @@ function renderChannelStatus(status) {
   );
 }
 
-function renderStatusCode(statusCode) {
-  if (!statusCode) {
-    return <Tag color='grey'>无状态码</Tag>;
-  }
-  if (statusCode >= 500) {
-    return <Tag color='red'>{statusCode}</Tag>;
-  }
-  if (statusCode >= 400) {
-    return <Tag color='orange'>{statusCode}</Tag>;
-  }
+function renderStatusCode(statusCode, t) {
+  if (!statusCode) return <Tag color='grey'>{t('无状态码')}</Tag>;
+  if (statusCode >= 500) return <Tag color='red'>{statusCode}</Tag>;
+  if (statusCode >= 400) return <Tag color='orange'>{statusCode}</Tag>;
   return <Tag color='blue'>{statusCode}</Tag>;
 }
 
 function renderTime(timestamp) {
-  if (!timestamp) {
-    return '-';
-  }
-  return timestamp2string(timestamp);
+  return timestamp ? timestamp2string(timestamp) : '-';
 }
 
-function buildUsageLogFilter(record) {
-  return {
-    type: 5,
-    channel: record.channel || undefined,
-    model_name: record.model_name || undefined,
-    group: record.sample_group || undefined,
-    request_id: record.sample_request_id || undefined,
-    upstream_request_id: record.sample_upstream_request_id || undefined,
+function formatErrorRate(rate) {
+  if (!Number.isFinite(rate) || rate <= 0) return '0%';
+  if (rate >= 1) return '100%';
+  return `${(rate * 100).toFixed(rate < 0.01 ? 1 : 0)}%`;
+}
+
+function renderSeverity(severity, t) {
+  const meta = {
+    critical: { color: 'red', text: t('严重') },
+    high: { color: 'orange', text: t('高') },
+    medium: { color: 'yellow', text: t('中') },
+    low: { color: 'grey', text: t('低') },
+  }[severity] || { color: 'grey', text: t('低') };
+  return (
+    <Tag color={meta.color} shape='circle'>
+      {meta.text}
+    </Tag>
+  );
+}
+
+function renderTrend(trend, t) {
+  const labels = {
+    new: t('新增'),
+    rising: t('上升'),
+    falling: t('下降'),
+    stable: t('稳定'),
   };
+  return (
+    <span className='text-xs text-gray-500'>
+      {labels[trend] || labels.stable}
+    </span>
+  );
 }
 
 function buildTimeRangeParams(timeRange) {
@@ -127,135 +137,357 @@ function buildTimeRangeParams(timeRange) {
       end_time: todayStartSeconds - 1,
     };
   }
-  return { hours: Number(timeRange) || Number(DEFAULT_FILTERS.time_range) };
+  return { hours: Number(timeRange) || 24 };
 }
 
-function comparePeerChannels(a, b) {
-  if (a.channel_priority !== b.channel_priority) {
-    return b.channel_priority - a.channel_priority;
+function buildUsageLogUrl(record, summary, includeSample = false) {
+  const params = new URLSearchParams();
+  params.set('type', '5');
+  if (record.model_name) params.set('model_name', record.model_name);
+  if (record.channel) params.set('channel', String(record.channel));
+  if (record.group) params.set('group', record.group);
+  if (summary.start_time) {
+    params.set('start_timestamp', String(summary.start_time));
   }
-  if (a.channel_weight !== b.channel_weight) {
-    return b.channel_weight - a.channel_weight;
+  if (summary.end_time) params.set('end_timestamp', String(summary.end_time));
+  if (includeSample && record.sample_request_id) {
+    params.set('request_id', record.sample_request_id);
   }
-  return a.channel - b.channel;
+  if (includeSample && record.sample_upstream_request_id) {
+    params.set('upstream_request_id', record.sample_upstream_request_id);
+  }
+  return `/console/log?${params.toString()}`;
 }
 
-function isRoutablePeerChannel(peer) {
-  return peer.channel_status === CHANNEL_STATUS_ENABLED && peer.ability_enabled;
+function buildRoutingUrl(record) {
+  const params = new URLSearchParams({ tab: 'routing' });
+  if (record.model_name) params.set('routing_model', record.model_name);
+  if (record.group) params.set('routing_group', record.group);
+  if (record.channel) params.set('routing_channel', String(record.channel));
+  return `/console/models?${params.toString()}`;
 }
 
-function getRoutablePeerChannels(record) {
-  return (record.peer_channels || [])
-    .filter(isRoutablePeerChannel)
-    .sort(comparePeerChannels);
+function getUrgentClusterCount(items) {
+  return items.filter(
+    (item) => item.severity === 'critical' || item.severity === 'high',
+  ).length;
 }
 
-function getPeerChannelDisplayRows(record) {
-  const routablePeers = [];
-  const contextPeers = [];
-
-  for (const peer of record.peer_channels || []) {
-    if (isRoutablePeerChannel(peer)) {
-      routablePeers.push(peer);
-    } else {
-      contextPeers.push(peer);
-    }
-  }
-
-  routablePeers.sort(comparePeerChannels);
-  contextPeers.sort(comparePeerChannels);
-
-  return [
-    ...routablePeers.map((peer, index) => ({
-      peer,
-      routeRank: index + 1,
-      isRoutable: true,
-    })),
-    ...contextPeers.map((peer) => ({
-      peer,
-      routeRank: null,
-      isRoutable: false,
-    })),
-  ];
-}
-
-function occupiedPeerPriorities(peers, currentChannel) {
-  const priorities = new Set();
-  for (const peer of peers) {
-    if (peer.channel !== currentChannel) {
-      priorities.add(peer.channel_priority);
-    }
-  }
-  return priorities;
-}
-
-function nextAvailablePriority(priority, occupiedPriorities, step) {
-  let nextPriority = priority;
-  while (occupiedPriorities.has(nextPriority)) {
-    nextPriority += step;
-  }
-  return nextPriority;
-}
-
-function getPriorityMoveTarget(record, direction) {
-  const peers = getRoutablePeerChannels(record);
-  const currentIndex = peers.findIndex(
-    (peer) => peer.channel === record.channel,
-  );
-  if (currentIndex < 0 || peers.length < 2) {
-    return null;
-  }
-  const currentPeer = peers[currentIndex];
-  const otherPeers = peers.filter((peer) => peer.channel !== record.channel);
-  const occupiedPriorities = occupiedPeerPriorities(peers, record.channel);
-  if (direction === 'top') {
-    const highestOtherPriority = Math.max(
-      ...otherPeers.map((peer) => peer.channel_priority),
-    );
-    if (currentPeer.channel_priority > highestOtherPriority) {
-      return null;
-    }
-    return nextAvailablePriority(
-      highestOtherPriority + 1,
-      occupiedPriorities,
-      1,
-    );
-  }
-  if (direction === 'bottom') {
-    const lowestOtherPriority = Math.min(
-      ...otherPeers.map((peer) => peer.channel_priority),
-    );
-    if (currentPeer.channel_priority < lowestOtherPriority) {
-      return null;
-    }
-    return nextAvailablePriority(
-      lowestOtherPriority - 1,
-      occupiedPriorities,
-      -1,
-    );
-  }
-  if (direction === 'up') {
-    if (currentIndex === 0) {
-      return null;
-    }
-    return nextAvailablePriority(
-      peers[currentIndex - 1].channel_priority + 1,
-      occupiedPriorities,
-      1,
-    );
-  }
-  if (currentIndex === peers.length - 1) {
-    return null;
-  }
-  return nextAvailablePriority(
-    peers[currentIndex + 1].channel_priority - 1,
-    occupiedPriorities,
-    -1,
+function ErrorClusterList({ items, selectedKey, loading, onSelect, t }) {
+  return (
+    <section className='flex min-h-[520px] min-w-0 flex-col rounded border border-solid border-gray-200 bg-white'>
+      <div className='flex items-center justify-between border-b border-solid border-gray-200 px-3 py-2'>
+        <Typography.Text strong>{t('故障簇')}</Typography.Text>
+        <Typography.Text type='tertiary' size='small'>
+          {items.length}
+        </Typography.Text>
+      </div>
+      <div className='min-h-0 flex-1 overflow-y-auto'>
+        {items.length === 0 ? (
+          <div className='flex min-h-80 items-center justify-center px-6'>
+            {loading ? <Spin /> : <Empty title={t('暂无错误日志')} />}
+          </div>
+        ) : (
+          <List
+            dataSource={items}
+            renderItem={(record) => {
+              const selected = selectedKey === record.key;
+              return (
+                <List.Item
+                  onClick={() => onSelect(record.key)}
+                  style={{
+                    cursor: 'pointer',
+                    padding: '12px 14px',
+                    background: selected
+                      ? 'var(--semi-color-fill-0)'
+                      : 'transparent',
+                    borderLeft: selected
+                      ? '3px solid var(--semi-color-primary)'
+                      : '3px solid transparent',
+                  }}
+                >
+                  <div className='w-full min-w-0'>
+                    <div className='flex min-w-0 items-start justify-between gap-3'>
+                      <div className='min-w-0'>
+                        <Space spacing={4} wrap>
+                          {renderSeverity(record.severity, t)}
+                          {record.status_code > 0 && (
+                            <Tag color='grey'>{record.status_code}</Tag>
+                          )}
+                          {renderTrend(record.trend, t)}
+                        </Space>
+                        <Typography.Text
+                          strong
+                          ellipsis={{ showTooltip: true, rows: 2 }}
+                          style={{ display: 'block', marginTop: 6 }}
+                        >
+                          {record.error_summary || t('无错误内容')}
+                        </Typography.Text>
+                        <Typography.Text
+                          type='tertiary'
+                          size='small'
+                          ellipsis={{ showTooltip: true }}
+                          style={{ display: 'block', marginTop: 5 }}
+                        >
+                          {record.model_name || '-'} · {record.group || '-'} ·{' '}
+                          {record.channel_name || `#${record.channel || '-'}`}
+                        </Typography.Text>
+                      </div>
+                      <div className='shrink-0 text-right'>
+                        <div className='text-lg font-semibold tabular-nums'>
+                          {formatErrorRate(record.route_error_rate)}
+                        </div>
+                        <Typography.Text type='tertiary' size='small'>
+                          {t('错误率')}
+                        </Typography.Text>
+                      </div>
+                    </div>
+                    <div className='mt-2 flex items-center justify-between gap-2 text-xs text-gray-500'>
+                      <span>
+                        {t('受影响请求')}: {record.affected_requests}
+                      </span>
+                      <span>{renderTime(record.last_seen)}</span>
+                    </div>
+                  </div>
+                </List.Item>
+              );
+            }}
+          />
+        )}
+      </div>
+    </section>
   );
 }
 
-function canMovePriority(record, direction) {
-  return getPriorityMoveTarget(record, direction) !== null;
+function ErrorClusterDetails({
+  record,
+  summary,
+  actionLoading,
+  testChannel,
+  t,
+}) {
+  if (!record) {
+    return (
+      <section className='flex min-h-[520px] items-center justify-center rounded border border-solid border-gray-200 bg-white px-6 text-center'>
+        <Typography.Text type='tertiary'>{t('请选择故障簇')}</Typography.Text>
+      </section>
+    );
+  }
+
+  const renderPeer = (peer) => {
+    const key = `${record.key}:test:${peer.channel}`;
+    return (
+      <div
+        key={peer.channel}
+        className={`grid gap-3 border-b border-solid border-gray-100 px-3 py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center ${peer.is_current ? 'bg-yellow-50' : ''}`}
+      >
+        <div className='min-w-0'>
+          <Space spacing={4} wrap>
+            <Typography.Text strong ellipsis={{ showTooltip: true }}>
+              {peer.channel_name || t('未知渠道')}
+            </Typography.Text>
+            <Typography.Text type='tertiary' size='small'>
+              #{peer.channel}
+            </Typography.Text>
+            {peer.is_current && <Tag color='orange'>{t('当前')}</Tag>}
+            {renderChannelStatus(peer.channel_status, t)}
+          </Space>
+          <div className='mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500'>
+            <span>
+              {t('错误率')} {formatErrorRate(peer.recent_error_rate)}
+            </span>
+            <span>
+              {t('请求次数')} {peer.recent_attempt_count || 0}
+            </span>
+            <span>
+              {t('优先级')} {peer.channel_priority || 0}
+            </span>
+            <span>
+              {t('权重')} {peer.channel_weight || 0}
+            </span>
+          </div>
+        </div>
+        <Button
+          size='small'
+          theme='light'
+          icon={actionLoading[key] ? <Spin size='small' /> : undefined}
+          loading={actionLoading[key]}
+          disabled={!peer.channel}
+          onClick={() => testChannel(record, peer.channel)}
+        >
+          {t('测试')}
+        </Button>
+      </div>
+    );
+  };
+
+  const currentTestKey = `${record.key}:test:${record.channel}`;
+  return (
+    <section className='flex min-h-[520px] min-w-0 flex-col overflow-hidden rounded border border-solid border-gray-200 bg-white'>
+      <div className='flex flex-wrap items-start justify-between gap-3 border-b border-solid border-gray-200 px-4 py-3'>
+        <div className='min-w-0'>
+          <Space spacing={4} wrap>
+            {record.status_code > 0 && renderStatusCode(record.status_code, t)}
+            {record.error_type && <Tag color='red'>{record.error_type}</Tag>}
+            {record.error_code && <Tag color='orange'>{record.error_code}</Tag>}
+          </Space>
+          <Typography.Title
+            heading={5}
+            ellipsis={{ showTooltip: true }}
+            style={{ margin: '8px 0 2px' }}
+          >
+            {record.error_summary || t('无错误内容')}
+          </Typography.Title>
+          <Typography.Text type='tertiary' size='small' className='font-mono'>
+            {record.fingerprint}
+          </Typography.Text>
+        </div>
+        <Space spacing={6} wrap>
+          <Button
+            size='small'
+            icon={<IconExternalOpen />}
+            onClick={() =>
+              window.open(buildUsageLogUrl(record, summary), '_blank')
+            }
+          >
+            {t('查看日志')}
+          </Button>
+          <Button
+            size='small'
+            icon={<IconExternalOpen />}
+            onClick={() => window.open(buildRoutingUrl(record), '_blank')}
+          >
+            {t('查看路由')}
+          </Button>
+        </Space>
+      </div>
+
+      <div className='min-h-0 flex-1 overflow-y-auto'>
+        <div className='space-y-5 p-4'>
+          <div className='grid gap-2 sm:grid-cols-2 xl:grid-cols-4'>
+            {[
+              [t('错误率'), formatErrorRate(record.route_error_rate)],
+              [t('受影响请求'), record.affected_requests],
+              [t('受影响用户'), record.affected_users],
+              [t('请求次数'), record.route_attempt_count],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                className='rounded border border-solid border-gray-100 bg-gray-50 px-3 py-2'
+              >
+                <Typography.Text type='tertiary' size='small'>
+                  {label}
+                </Typography.Text>
+                <div className='mt-1 font-semibold tabular-nums'>{value}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className='grid gap-4 text-sm sm:grid-cols-2'>
+            <div>
+              <Typography.Text type='tertiary' size='small'>
+                {t('路由')}
+              </Typography.Text>
+              <div className='mt-1 break-all font-mono'>
+                {record.model_name || '-'}
+              </div>
+              <Typography.Text type='tertiary' size='small'>
+                {record.group || '-'} · {record.channel_name || t('未知渠道')} #
+                {record.channel || '-'}
+              </Typography.Text>
+            </div>
+            <div>
+              <Typography.Text type='tertiary' size='small'>
+                {t('时间线')}
+              </Typography.Text>
+              <div className='mt-1 tabular-nums'>
+                {t('首次')}: {renderTime(record.first_seen)}
+              </div>
+              <div className='tabular-nums'>
+                {t('最近')}: {renderTime(record.last_seen)}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className='mb-2 flex items-center justify-between gap-2'>
+              <Typography.Text strong>{t('错误样本')}</Typography.Text>
+              {(record.sample_request_id ||
+                record.sample_upstream_request_id) && (
+                <Button
+                  size='small'
+                  theme='borderless'
+                  icon={<IconExternalOpen />}
+                  onClick={() =>
+                    window.open(
+                      buildUsageLogUrl(record, summary, true),
+                      '_blank',
+                    )
+                  }
+                >
+                  {t('打开样本')}
+                </Button>
+              )}
+            </div>
+            <pre className='max-h-64 overflow-auto rounded border border-solid border-gray-200 bg-gray-50 p-3 text-xs leading-5 whitespace-pre-wrap break-words'>
+              {record.sample_content || record.error_summary || '-'}
+            </pre>
+          </div>
+
+          <div className='border-t border-solid border-gray-200 pt-4'>
+            <div className='flex flex-wrap items-center justify-between gap-2'>
+              <div>
+                <Typography.Text strong>{t('当前渠道')}</Typography.Text>
+                <div className='mt-1 text-xs text-gray-500'>
+                  {record.automatic_channel_test_disabled
+                    ? t('已跳过自动测活')
+                    : t('参与自动测活')}
+                </div>
+              </div>
+              <Button
+                type='primary'
+                size='small'
+                loading={actionLoading[currentTestKey]}
+                disabled={!record.channel}
+                onClick={() => testChannel(record, record.channel)}
+              >
+                {t('测试当前渠道')}
+              </Button>
+            </div>
+            <div className='mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500'>
+              <span>
+                {t('最近测试')}: {renderTime(record.channel_test_time)}
+              </span>
+              <span>
+                {t('响应时间')}: {record.channel_response_time || 0} ms
+              </span>
+              <span>
+                {t('优先级')}: {record.channel_priority || 0}
+              </span>
+            </div>
+          </div>
+
+          <div className='border-t border-solid border-gray-200 pt-4'>
+            <div className='mb-2 flex items-center justify-between gap-2'>
+              <Typography.Text strong>{t('路由对比')}</Typography.Text>
+              <Typography.Text type='tertiary' size='small'>
+                {record.peer_channels?.length || 0}
+              </Typography.Text>
+            </div>
+            <div className='overflow-hidden rounded border border-solid border-gray-200'>
+              {(record.peer_channels || []).length === 0 ? (
+                <div className='px-3 py-8 text-center text-sm text-gray-500'>
+                  {t('没有同模型渠道上下文')}
+                </div>
+              ) : (
+                record.peer_channels.map(renderPeer)
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 export default function ErrorWorkbench() {
@@ -265,53 +497,49 @@ export default function ErrorWorkbench() {
   const [actionLoading, setActionLoading] = useState({});
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [queryFilters, setQueryFilters] = useState(DEFAULT_FILTERS);
+  const [selectedKey, setSelectedKey] = useState(null);
 
   const statCards = useMemo(
     () => [
-      {
-        label: t('错误日志'),
-        value: summary.total_logs,
-        hint: t('当前筛选范围内的错误日志数量'),
-      },
-      {
-        label: t('错误分组'),
-        value: summary.items.length,
-        hint: t('按模型、渠道、错误码和错误内容聚合'),
-      },
-      {
-        label: t('扫描日志'),
-        value: summary.scanned_logs,
-        hint: summary.truncated
-          ? t('日志较多，仅扫描最近部分记录')
-          : t('已覆盖当前筛选范围'),
-      },
+      [
+        t('错误日志'),
+        summary.total_logs,
+        summary.truncated ? t('仅聚合最近扫描记录') : t('已覆盖当前筛选范围'),
+      ],
+      [t('故障簇'), summary.items.length, t('按稳定错误指纹聚合')],
+      [
+        t('受影响请求'),
+        summary.items.reduce(
+          (total, item) => total + (item.affected_requests || 0),
+          0,
+        ),
+        t('当前可见故障簇'),
+      ],
+      [
+        t('紧急故障簇'),
+        getUrgentClusterCount(summary.items),
+        t('高和严重等级'),
+      ],
     ],
     [summary, t],
   );
 
   const setFilterValue = (key, value) => {
-    setFilters((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
+    setFilters((prev) => ({ ...prev, [key]: value }));
   };
 
-  const fetchSummary = async (nextFilters = filters) => {
+  const fetchSummary = async (nextFilters = queryFilters) => {
     setLoading(true);
     try {
       const params = {
         limit: nextFilters.limit,
         ...buildTimeRangeParams(nextFilters.time_range),
       };
-      if (nextFilters.model_name?.trim()) {
+      if (nextFilters.model_name?.trim())
         params.model_name = nextFilters.model_name.trim();
-      }
-      if (nextFilters.channel !== '' && nextFilters.channel !== undefined) {
+      if (nextFilters.channel !== '' && nextFilters.channel !== undefined)
         params.channel = nextFilters.channel;
-      }
-      if (nextFilters.group?.trim()) {
-        params.group = nextFilters.group.trim();
-      }
+      if (nextFilters.group?.trim()) params.group = nextFilters.group.trim();
 
       const res = await API.get('/api/log/error_summary', {
         params,
@@ -330,41 +558,20 @@ export default function ErrorWorkbench() {
   };
 
   useEffect(() => {
-    setQueryFilters((prev) => {
-      if (prev.time_range === filters.time_range) {
-        return prev;
-      }
-      return {
-        ...prev,
-        time_range: filters.time_range,
-      };
-    });
+    setQueryFilters((prev) => ({ ...prev, time_range: filters.time_range }));
   }, [filters.time_range]);
 
   useEffect(() => {
     const handler = setTimeout(() => {
-      setQueryFilters((prev) => {
-        if (
-          prev.limit === filters.limit &&
-          prev.model_name === filters.model_name &&
-          prev.channel === filters.channel &&
-          prev.group === filters.group
-        ) {
-          return prev;
-        }
-        return {
-          ...prev,
-          limit: filters.limit,
-          model_name: filters.model_name,
-          channel: filters.channel,
-          group: filters.group,
-        };
-      });
+      setQueryFilters((prev) => ({
+        ...prev,
+        limit: filters.limit,
+        model_name: filters.model_name,
+        channel: filters.channel,
+        group: filters.group,
+      }));
     }, FILTER_INPUT_DEBOUNCE_MS);
-
-    return () => {
-      clearTimeout(handler);
-    };
+    return () => clearTimeout(handler);
   }, [filters.limit, filters.model_name, filters.channel, filters.group]);
 
   useEffect(() => {
@@ -372,470 +579,36 @@ export default function ErrorWorkbench() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queryFilters]);
 
-  const runChannelAction = async (record, action, runner) => {
-    if (!record.channel) {
+  const selectedRecord =
+    summary.items.find((item) => item.key === selectedKey) ||
+    summary.items[0] ||
+    null;
+
+  const testChannel = async (record, channelId = record.channel) => {
+    if (!channelId) {
       showError(t('该错误日志没有记录渠道 ID'));
       return;
     }
-    const key = `${record.key}:${action}`;
+    const key = `${record.key}:test:${channelId}`;
     setActionLoading((prev) => ({ ...prev, [key]: true }));
     try {
-      await runner();
-      await fetchSummary();
-    } finally {
-      setActionLoading((prev) => ({ ...prev, [key]: false }));
-    }
-  };
-
-  const testChannel = async (record) => {
-    await runChannelAction(record, 'test', async () => {
-      const params = {};
-      if (record.model_name) {
-        params.model = record.model_name;
-      }
-      const res = await API.get(`/api/channel/test/${record.channel}`, {
+      const params = record.model_name ? { model: record.model_name } : {};
+      const res = await API.get(`/api/channel/test/${channelId}`, {
         params,
         disableDuplicate: true,
       });
       if (res.data.success) {
-        const time = Number(res.data.time || 0).toFixed(2);
-        showSuccess(t('渠道测试成功，耗时 ') + time + t(' 秒'));
+        showSuccess(t('渠道测试成功'));
+        await fetchSummary();
       } else {
         showError(res.data.message || t('渠道测试失败'));
       }
-    });
-  };
-
-  const updateChannelStatus = (record, status) => {
-    const nextText = status === 1 ? t('启用') : t('禁用');
-    Modal.confirm({
-      title: t('确认') + nextText + t('渠道？'),
-      content: `${record.channel_name || record.channel} (${record.channel})`,
-      onOk: async () => {
-        await runChannelAction(record, `status-${status}`, async () => {
-          const res = await API.post(`/api/channel/${record.channel}/status`, {
-            status,
-          });
-          if (res.data.success) {
-            showSuccess(t('操作成功完成！'));
-          } else {
-            showError(res.data.message || t('操作失败'));
-          }
-        });
-      },
-    });
-  };
-
-  const updatePriority = async (record, priority, action = 'priority') => {
-    if (!record.channel || priority === null || priority === undefined) {
-      return;
-    }
-    if (Number.isNaN(priority) || priority === record.channel_priority) {
-      return;
-    }
-    await runChannelAction(record, action, async () => {
-      const res = await API.put('/api/channel/', {
-        id: record.channel,
-        priority,
-      });
-      if (res.data.success) {
-        showSuccess(t('更新成功！'));
-      } else {
-        showError(res.data.message || t('更新失败'));
-      }
-    });
-  };
-
-  const movePriority = async (record, direction) => {
-    const priority = getPriorityMoveTarget(record, direction);
-    if (priority === null) {
-      showError(t('没有同模型渠道排序上下文'));
-      return;
-    }
-    await updatePriority(record, priority, `priority-${direction}`);
-  };
-
-  const renderPeerChannels = (record) => {
-    const peerRows = getPeerChannelDisplayRows(record);
-    if (peerRows.length === 0) {
-      return (
-        <Typography.Text type='tertiary' size='small'>
-          {t('没有同模型渠道排序上下文')}
-        </Typography.Text>
-      );
-    }
-    return (
-      <div className='max-h-56 w-full overflow-y-auto rounded-lg border border-solid border-gray-100 bg-gray-50 p-2'>
-        <Typography.Text type='tertiary' size='small'>
-          {t('同模型渠道池')} · {t('按优先级、权重排序')}
-        </Typography.Text>
-        <Space
-          vertical
-          align='start'
-          spacing={6}
-          style={{ width: '100%', marginTop: 6 }}
-        >
-          {peerRows.map(({ peer, routeRank, isRoutable }) => (
-            <div
-              key={peer.channel}
-              className={
-                (peer.is_current
-                  ? 'w-full rounded-md border border-solid border-yellow-200 bg-yellow-50 p-2'
-                  : 'w-full rounded-md border border-solid border-gray-100 bg-white p-2') +
-                (isRoutable ? '' : ' opacity-60')
-              }
-            >
-              <Space spacing={4} wrap>
-                <Tag color='grey'>
-                  {routeRank === null ? '-' : `#${routeRank}`}
-                </Tag>
-                <Typography.Text strong>
-                  {peer.channel_name || t('未知渠道')} #{peer.channel}
-                </Typography.Text>
-                {peer.is_current && <Tag color='orange'>{t('当前')}</Tag>}
-              </Space>
-              <div className='mt-1'>
-                <Space spacing={4} wrap>
-                  {renderChannelStatus(peer.channel_status)}
-                  <Tag color='grey'>
-                    {t('优先级')} {peer.channel_priority || 0}
-                  </Tag>
-                  <Tag color='grey'>
-                    {t('权重')} {peer.channel_weight || 0}
-                  </Tag>
-                  <Tag color={peer.recent_error_count > 0 ? 'red' : 'grey'}>
-                    {t('近期错误')} {peer.recent_error_count || 0}
-                  </Tag>
-                  {peer.automatic_channel_test_disabled && (
-                    <Tag color='red'>{t('跳过自动测活')}</Tag>
-                  )}
-                  {peer.multi_key_total > 0 && (
-                    <Tag color='blue'>
-                      {t('多 Key')} {peer.multi_key_enabled}/
-                      {peer.multi_key_total}
-                    </Tag>
-                  )}
-                </Space>
-              </div>
-            </div>
-          ))}
-        </Space>
-      </div>
-    );
-  };
-
-  const copyUsageLogFilter = async (record) => {
-    const filter = buildUsageLogFilter(record);
-    const ok = await copy(JSON.stringify(filter, null, 2));
-    if (ok) {
-      showSuccess(t('已复制日志筛选条件'));
-    } else {
-      showError(t('复制失败'));
+    } catch (error) {
+      showError(error);
+    } finally {
+      setActionLoading((prev) => ({ ...prev, [key]: false }));
     }
   };
-
-  const columns = [
-    {
-      title: t('错误次数'),
-      dataIndex: 'count',
-      width: 120,
-      sorter: (a, b) => a.count - b.count,
-      render: (_, record) => (
-        <div>
-          <div className='text-2xl font-semibold leading-none text-red-600 tabular-nums'>
-            {record.count}
-          </div>
-          <div className='mt-2 text-xs text-gray-500'>
-            {t('最近')} {renderTime(record.last_seen)}
-          </div>
-          <div className='text-xs text-gray-500'>
-            {t('首次')} {renderTime(record.first_seen)}
-          </div>
-        </div>
-      ),
-    },
-    {
-      title: t('模型'),
-      dataIndex: 'model_name',
-      width: 180,
-      render: (_, record) =>
-        record.model_name ? (
-          <Space vertical align='start' spacing={4}>
-            <Typography.Text
-              strong
-              ellipsis={{ showTooltip: true }}
-              className='max-w-[170px] font-mono'
-            >
-              {record.model_name}
-            </Typography.Text>
-            {record.sample_group && (
-              <Tag color='violet' type='light'>
-                {record.sample_group}
-              </Tag>
-            )}
-          </Space>
-        ) : (
-          <Typography.Text type='tertiary'>{t('未记录')}</Typography.Text>
-        ),
-    },
-    {
-      title: t('渠道状态'),
-      dataIndex: 'channel',
-      width: 260,
-      render: (_, record) => (
-        <Space vertical align='start' spacing={4}>
-          <Typography.Text
-            strong
-            ellipsis={{ showTooltip: true }}
-            className='max-w-[240px]'
-          >
-            {record.channel_name || t('未知渠道')}
-          </Typography.Text>
-          <Typography.Text type='tertiary' size='small'>
-            #{record.channel || '-'}
-          </Typography.Text>
-          <Space spacing={4} wrap>
-            {renderChannelStatus(record.channel_status)}
-            <Tag color='light-blue' type='light'>
-              {t('优先级')} {record.channel_priority || 0}
-            </Tag>
-            {record.channel_response_time > 0 && (
-              <Tag color='blue'>{record.channel_response_time} ms</Tag>
-            )}
-          </Space>
-          <Typography.Text type='tertiary' size='small'>
-            {t('最近测试')} {renderTime(record.channel_test_time)}
-          </Typography.Text>
-        </Space>
-      ),
-    },
-    {
-      title: t('错误原因'),
-      dataIndex: 'error_summary',
-      width: 460,
-      ellipsis: true,
-      render: (_, record) => (
-        <div
-          style={{
-            width: '100%',
-            maxWidth: 460,
-            minWidth: 0,
-            overflow: 'hidden',
-          }}
-        >
-          <Space vertical align='start' spacing={6} style={{ width: '100%' }}>
-            <Space spacing={4} wrap style={{ width: '100%', maxWidth: '100%' }}>
-              {renderStatusCode(record.status_code)}
-              {record.error_type && (
-                <Tag
-                  color='red'
-                  style={{
-                    maxWidth: '100%',
-                    whiteSpace: 'normal',
-                    wordBreak: 'break-all',
-                  }}
-                >
-                  {record.error_type}
-                </Tag>
-              )}
-              {record.error_code && (
-                <Tag
-                  color='orange'
-                  style={{
-                    maxWidth: '100%',
-                    whiteSpace: 'normal',
-                    wordBreak: 'break-all',
-                  }}
-                >
-                  {record.error_code}
-                </Tag>
-              )}
-            </Space>
-            <Tooltip
-              position='topLeft'
-              content={
-                <pre className='m-0 max-w-xl whitespace-pre-wrap text-xs'>
-                  {record.sample_content || record.error_summary}
-                </pre>
-              }
-            >
-              <Typography.Text
-                strong
-                ellipsis={{ showTooltip: false, rows: 3 }}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  maxWidth: '100%',
-                  overflow: 'hidden',
-                  wordBreak: 'break-all',
-                }}
-              >
-                {record.error_summary || t('无错误内容')}
-              </Typography.Text>
-            </Tooltip>
-            {(record.sample_request_id ||
-              record.sample_upstream_request_id) && (
-              <Typography.Text
-                type='tertiary'
-                size='small'
-                className='font-mono'
-                ellipsis={{ showTooltip: true }}
-                style={{ display: 'block', width: '100%', maxWidth: '100%' }}
-              >
-                {record.sample_request_id || record.sample_upstream_request_id}
-              </Typography.Text>
-            )}
-          </Space>
-        </div>
-      ),
-    },
-    {
-      title: t('测活配置'),
-      dataIndex: 'automatic_channel_test_disabled',
-      width: 220,
-      render: (_, record) => (
-        <Space vertical align='start' spacing={4}>
-          <Space spacing={4} wrap>
-            {record.automatic_channel_test_disabled ? (
-              <Tag color='red' type='light'>
-                {t('跳过自动测活')}
-              </Tag>
-            ) : (
-              <Tag color='green' type='light'>
-                {t('参与自动测活')}
-              </Tag>
-            )}
-            {record.auto_test_channel_interval_minutes > 0 && (
-              <Tag color='blue'>
-                {record.auto_test_channel_interval_minutes} {t('分钟')}
-              </Tag>
-            )}
-          </Space>
-          {record.multi_key_total > 0 && (
-            <div className='rounded-md border border-solid border-gray-100 bg-gray-50 p-2'>
-              <Typography.Text strong className='tabular-nums'>
-                {record.multi_key_enabled}/{record.multi_key_total}
-              </Typography.Text>
-              <div className='text-xs text-gray-500'>{t('多 Key')}</div>
-              <Space spacing={4} wrap className='mt-1'>
-                {record.multi_key_auto_disabled > 0 && (
-                  <Tag color='orange' type='light'>
-                    {t('自动禁用')} {record.multi_key_auto_disabled}
-                  </Tag>
-                )}
-                {record.multi_key_manual_disabled > 0 && (
-                  <Tag color='red' type='light'>
-                    {t('手动禁用')} {record.multi_key_manual_disabled}
-                  </Tag>
-                )}
-              </Space>
-            </div>
-          )}
-        </Space>
-      ),
-    },
-    {
-      title: t('同模型渠道池'),
-      dataIndex: 'peer_channels',
-      width: 320,
-      render: (_, record) => renderPeerChannels(record),
-    },
-    {
-      title: t('处理'),
-      dataIndex: 'actions',
-      width: 250,
-      fixed: 'right',
-      render: (_, record) => (
-        <Space vertical align='start' spacing={6}>
-          <Space spacing={6} wrap>
-            <Button
-              size='small'
-              type='primary'
-              theme='light'
-              loading={actionLoading[`${record.key}:test`]}
-              disabled={!record.channel}
-              onClick={() => testChannel(record)}
-            >
-              {t('测试')}
-            </Button>
-            {record.channel_status === 1 ? (
-              <Button
-                size='small'
-                type='danger'
-                theme='light'
-                loading={actionLoading[`${record.key}:status-2`]}
-                disabled={!record.channel}
-                onClick={() => updateChannelStatus(record, 2)}
-              >
-                {t('禁用')}
-              </Button>
-            ) : (
-              <Button
-                size='small'
-                type='tertiary'
-                theme='light'
-                loading={actionLoading[`${record.key}:status-1`]}
-                disabled={!record.channel}
-                onClick={() => updateChannelStatus(record, 1)}
-              >
-                {t('启用')}
-              </Button>
-            )}
-            <Button
-              size='small'
-              theme='borderless'
-              onClick={() => copyUsageLogFilter(record)}
-            >
-              {t('复制筛选')}
-            </Button>
-          </Space>
-          <Space vertical align='start' spacing={4}>
-            <Typography.Text type='tertiary' size='small'>
-              {t('路由排序')}
-            </Typography.Text>
-            <Space spacing={4} wrap>
-              <Button
-                size='small'
-                theme='light'
-                loading={actionLoading[`${record.key}:priority-top`]}
-                disabled={!record.channel || !canMovePriority(record, 'top')}
-                onClick={() => movePriority(record, 'top')}
-              >
-                {t('置顶')}
-              </Button>
-              <Button
-                size='small'
-                theme='light'
-                loading={actionLoading[`${record.key}:priority-up`]}
-                disabled={!record.channel || !canMovePriority(record, 'up')}
-                onClick={() => movePriority(record, 'up')}
-              >
-                {t('上移')}
-              </Button>
-              <Button
-                size='small'
-                theme='light'
-                loading={actionLoading[`${record.key}:priority-down`]}
-                disabled={!record.channel || !canMovePriority(record, 'down')}
-                onClick={() => movePriority(record, 'down')}
-              >
-                {t('下移')}
-              </Button>
-              <Button
-                size='small'
-                theme='light'
-                loading={actionLoading[`${record.key}:priority-bottom`]}
-                disabled={!record.channel || !canMovePriority(record, 'bottom')}
-                onClick={() => movePriority(record, 'bottom')}
-              >
-                {t('降到底')}
-              </Button>
-            </Space>
-          </Space>
-        </Space>
-      ),
-    },
-  ];
 
   return (
     <div className='mt-[60px] px-2'>
@@ -847,31 +620,39 @@ export default function ErrorWorkbench() {
                 {t('错误排障工作台')}
               </Typography.Title>
               <Typography.Text type='tertiary'>
-                {t(
-                  '按模型、渠道、错误码和错误内容聚合最近错误，方便快速调整渠道。',
-                )}
+                {t('按稳定错误指纹聚合故障，并提供日志与路由证据。')}
               </Typography.Text>
             </div>
             <Space spacing={8} wrap>
-              <Button onClick={() => window.open('/console/log', '_blank')}>
+              <Button
+                icon={<IconExternalOpen />}
+                onClick={() => window.open('/console/log', '_blank')}
+              >
                 {t('打开使用日志')}
               </Button>
-              <Button onClick={() => window.open('/console/channel', '_blank')}>
-                {t('打开渠道管理')}
+              <Button
+                icon={<IconExternalOpen />}
+                onClick={() =>
+                  window.open('/console/models?tab=routing', '_blank')
+                }
+              >
+                {t('打开模型路由')}
               </Button>
             </Space>
           </div>
 
-          <div className='grid w-full grid-cols-1 gap-3 md:grid-cols-3'>
-            {statCards.map((card) => (
+          <div className='grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4'>
+            {statCards.map(([label, value, hint]) => (
               <div
-                key={card.label}
-                className='rounded-xl border border-solid border-gray-100 bg-gray-50 p-4'
+                key={label}
+                className='rounded border border-solid border-gray-200 bg-gray-50 p-4'
               >
-                <Typography.Text type='tertiary'>{card.label}</Typography.Text>
-                <div className='mt-1 text-2xl font-semibold'>{card.value}</div>
+                <Typography.Text type='tertiary'>{label}</Typography.Text>
+                <div className='mt-1 text-2xl font-semibold tabular-nums'>
+                  {value}
+                </div>
                 <Typography.Text type='tertiary' size='small'>
-                  {card.hint}
+                  {hint}
                 </Typography.Text>
               </div>
             ))}
@@ -942,6 +723,7 @@ export default function ErrorWorkbench() {
             <Space spacing={8}>
               <Button
                 type='primary'
+                icon={<IconRefresh />}
                 loading={loading}
                 onClick={() => fetchSummary()}
               >
@@ -950,6 +732,7 @@ export default function ErrorWorkbench() {
               <Button
                 onClick={() => {
                   setFilters(DEFAULT_FILTERS);
+                  setSelectedKey(null);
                 }}
               >
                 {t('重置')}
@@ -965,21 +748,22 @@ export default function ErrorWorkbench() {
             </Tag>
           )}
 
-          <Table
-            rowKey='key'
-            loading={loading}
-            columns={columns}
-            dataSource={summary.items || []}
-            pagination={false}
-            scroll={{ x: 1810 }}
-            style={{ width: '100%' }}
-            empty={
-              <Empty
-                title={t('暂无错误日志')}
-                description={t('当前筛选范围内没有错误记录')}
-              />
-            }
-          />
+          <div className='grid w-full grid-cols-1 gap-3 xl:grid-cols-[minmax(360px,0.85fr)_minmax(0,1.4fr)]'>
+            <ErrorClusterList
+              items={summary.items || []}
+              selectedKey={selectedRecord?.key || null}
+              loading={loading}
+              onSelect={setSelectedKey}
+              t={t}
+            />
+            <ErrorClusterDetails
+              record={selectedRecord}
+              summary={summary}
+              actionLoading={actionLoading}
+              testChannel={testChannel}
+              t={t}
+            />
+          </div>
         </Space>
       </Card>
     </div>

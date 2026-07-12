@@ -2,8 +2,10 @@ package model
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -288,6 +290,17 @@ func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string,
 	username := c.GetString("username")
 	requestId := c.GetString(common.RequestIdKey)
 	upstreamRequestId := c.GetString(common.UpstreamRequestIdKey)
+	if other == nil {
+		other = make(map[string]interface{})
+	}
+	if errorSummaryString(other["error_fingerprint"]) == "" {
+		other["error_fingerprint"] = buildErrorFingerprint(
+			errorSummaryString(other["error_type"]),
+			errorSummaryString(other["error_code"]),
+			errorSummaryInt(other["status_code"]),
+			content,
+		)
+	}
 	otherStr := common.MapToJsonStr(other)
 	// 判断是否需要记录 IP
 	needRecordIp := false
@@ -608,7 +621,9 @@ type ErrorLogSummaryResponse struct {
 
 type ErrorLogSummaryItem struct {
 	Key                            string                       `json:"key"`
+	Fingerprint                    string                       `json:"fingerprint"`
 	ModelName                      string                       `json:"model_name"`
+	Group                          string                       `json:"group"`
 	ChannelId                      int                          `json:"channel"`
 	ChannelName                    string                       `json:"channel_name"`
 	ChannelStatus                  int                          `json:"channel_status"`
@@ -627,6 +642,16 @@ type ErrorLogSummaryItem struct {
 	StatusCode                     int                          `json:"status_code"`
 	ErrorSummary                   string                       `json:"error_summary"`
 	Count                          int                          `json:"count"`
+	AffectedRequests               int                          `json:"affected_requests"`
+	AffectedUsers                  int                          `json:"affected_users"`
+	CurrentCount                   int                          `json:"current_count"`
+	PreviousCount                  int                          `json:"previous_count"`
+	Trend                          string                       `json:"trend"`
+	Severity                       string                       `json:"severity"`
+	RouteAttemptCount              int                          `json:"route_attempt_count"`
+	RouteSuccessCount              int                          `json:"route_success_count"`
+	RouteErrorCount                int                          `json:"route_error_count"`
+	RouteErrorRate                 float64                      `json:"route_error_rate"`
 	FirstSeen                      int64                        `json:"first_seen"`
 	LastSeen                       int64                        `json:"last_seen"`
 	SampleContent                  string                       `json:"sample_content"`
@@ -652,17 +677,29 @@ type ErrorLogSummaryPeerChannel struct {
 	MultiKeyAutoDisabled           int     `json:"multi_key_auto_disabled"`
 	MultiKeyManualDisabled         int     `json:"multi_key_manual_disabled"`
 	RecentErrorCount               int     `json:"recent_error_count"`
+	RecentAttemptCount             int     `json:"recent_attempt_count"`
+	RecentSuccessCount             int     `json:"recent_success_count"`
+	RecentErrorRate                float64 `json:"recent_error_rate"`
 	LastErrorTime                  int64   `json:"last_error_time"`
 	IsCurrent                      bool    `json:"is_current"`
 }
 
 const (
-	defaultErrorSummaryHours = 24
-	maxErrorSummaryHours     = 168
-	defaultErrorSummaryLimit = 50
-	maxErrorSummaryLimit     = 200
-	errorSummaryScanLimit    = 10000
-	errorSummaryTextLimit    = 180
+	defaultErrorSummaryHours  = 24
+	maxErrorSummaryHours      = 168
+	defaultErrorSummaryLimit  = 50
+	maxErrorSummaryLimit      = 200
+	maxErrorSummaryCandidates = 400
+	errorSummaryScanLimit     = 10000
+	errorSummaryTextLimit     = 180
+	errorFingerprintTextLimit = 512
+)
+
+var (
+	errorFingerprintURLPattern    = regexp.MustCompile(`https?://\S+`)
+	errorFingerprintUUIDPattern   = regexp.MustCompile(`(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b`)
+	errorFingerprintTokenPattern  = regexp.MustCompile(`(?i)\b[0-9a-f]{16,}\b`)
+	errorFingerprintNumberPattern = regexp.MustCompile(`\b\d+(?:\.\d+)?\b`)
 )
 
 func GetErrorLogSummary(query ErrorLogSummaryQuery) (*ErrorLogSummaryResponse, error) {
@@ -710,13 +747,36 @@ func GetErrorLogSummary(query ErrorLogSummaryQuery) (*ErrorLogSummaryResponse, e
 		return nil, err
 	}
 
+	midpoint := startTime + (endTime-startTime)/2
 	summaryMap := make(map[string]*ErrorLogSummaryItem)
+	requestIdsByKey := make(map[string]map[string]struct{})
+	userIdsByKey := make(map[string]map[int]struct{})
 	channelIds := make(map[int]struct{})
 	for _, log := range logs {
 		item := buildErrorLogSummaryItem(log)
 		key := item.Key
+		requestKey := errorSummaryRequestKey(log)
+		requestIds, ok := requestIdsByKey[key]
+		if !ok {
+			requestIds = make(map[string]struct{})
+			requestIdsByKey[key] = requestIds
+		}
+		requestIds[requestKey] = struct{}{}
+		if log.UserId > 0 {
+			userIds, ok := userIdsByKey[key]
+			if !ok {
+				userIds = make(map[int]struct{})
+				userIdsByKey[key] = userIds
+			}
+			userIds[log.UserId] = struct{}{}
+		}
 		if existing, ok := summaryMap[key]; ok {
 			existing.Count++
+			if log.CreatedAt >= midpoint {
+				existing.CurrentCount++
+			} else {
+				existing.PreviousCount++
+			}
 			if log.CreatedAt > existing.LastSeen {
 				existing.LastSeen = log.CreatedAt
 				existing.SampleContent = item.SampleContent
@@ -732,6 +792,11 @@ func GetErrorLogSummary(query ErrorLogSummaryQuery) (*ErrorLogSummaryResponse, e
 			}
 			continue
 		}
+		if log.CreatedAt >= midpoint {
+			item.CurrentCount = 1
+		} else {
+			item.PreviousCount = 1
+		}
 		summaryMap[key] = item
 		if log.ChannelId != 0 {
 			channelIds[log.ChannelId] = struct{}{}
@@ -745,6 +810,8 @@ func GetErrorLogSummary(query ErrorLogSummaryQuery) (*ErrorLogSummaryResponse, e
 
 	items := make([]*ErrorLogSummaryItem, 0, len(summaryMap))
 	for _, item := range summaryMap {
+		item.AffectedRequests = len(requestIdsByKey[item.Key])
+		item.AffectedUsers = len(userIdsByKey[item.Key])
 		if channel, ok := channelMap[item.ChannelId]; ok {
 			applyErrorSummaryChannelInfo(item, channel)
 		}
@@ -756,10 +823,37 @@ func GetErrorLogSummary(query ErrorLogSummaryQuery) (*ErrorLogSummaryResponse, e
 		}
 		return items[i].LastSeen > items[j].LastSeen
 	})
+	candidateLimit := min(query.Limit*2, maxErrorSummaryCandidates)
+	if len(items) > candidateLimit {
+		items = items[:candidateLimit]
+	}
+	routeStats, err := getErrorSummaryRouteStats(items, startTime, endTime)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range items {
+		applyErrorSummaryRouteStats(item, routeStats)
+		item.Trend = classifyErrorSummaryTrend(item.CurrentCount, item.PreviousCount)
+		item.Severity = classifyErrorSummarySeverity(item)
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		leftSeverity := errorSummarySeverityRank(items[i].Severity)
+		rightSeverity := errorSummarySeverityRank(items[j].Severity)
+		if leftSeverity != rightSeverity {
+			return leftSeverity > rightSeverity
+		}
+		if items[i].CurrentCount != items[j].CurrentCount {
+			return items[i].CurrentCount > items[j].CurrentCount
+		}
+		if items[i].Count != items[j].Count {
+			return items[i].Count > items[j].Count
+		}
+		return items[i].LastSeen > items[j].LastSeen
+	})
 	if len(items) > query.Limit {
 		items = items[:query.Limit]
 	}
-	if err = applyErrorSummaryPeerChannels(items, logs); err != nil {
+	if err = applyErrorSummaryPeerChannels(items, routeStats); err != nil {
 		return nil, err
 	}
 
@@ -802,18 +896,22 @@ func buildErrorLogSummaryItem(log *Log) *ErrorLogSummaryItem {
 	errorCode := errorSummaryString(other["error_code"])
 	statusCode := errorSummaryInt(other["status_code"])
 	contentSummary := normalizeErrorSummaryText(log.Content)
+	fingerprint := errorSummaryString(other["error_fingerprint"])
+	if fingerprint == "" {
+		fingerprint = buildErrorFingerprint(errorType, errorCode, statusCode, log.Content)
+	}
 	key := strings.Join([]string{
 		log.ModelName,
+		log.Group,
 		fmt.Sprintf("%d", log.ChannelId),
-		errorType,
-		errorCode,
-		fmt.Sprintf("%d", statusCode),
-		contentSummary,
+		fingerprint,
 	}, "\x1f")
 
 	return &ErrorLogSummaryItem{
 		Key:                     key,
+		Fingerprint:             fingerprint,
 		ModelName:               log.ModelName,
+		Group:                   log.Group,
 		ChannelId:               log.ChannelId,
 		ChannelName:             errorSummaryString(other["channel_name"]),
 		ErrorType:               errorType,
@@ -828,6 +926,163 @@ func buildErrorLogSummaryItem(log *Log) *ErrorLogSummaryItem {
 		SampleUpstreamRequestId: log.UpstreamRequestId,
 		SampleGroup:             log.Group,
 		MaxUseTime:              log.UseTime,
+	}
+}
+
+type errorSummaryRouteKey struct {
+	ChannelId int
+	Model     string
+	Group     string
+}
+
+type errorSummaryModelGroupKey struct {
+	Model string
+	Group string
+}
+
+type errorSummaryRouteStats struct {
+	Attempts  int
+	Successes int
+	Errors    int
+	LastError int64
+}
+
+type errorSummaryRouteStatsRow struct {
+	ChannelId int    `gorm:"column:channel_id"`
+	ModelName string `gorm:"column:model_name"`
+	Group     string `gorm:"column:log_group"`
+	LogType   int    `gorm:"column:log_type"`
+	Count     int64  `gorm:"column:count"`
+	LastSeen  int64  `gorm:"column:last_seen"`
+}
+
+func errorSummaryRequestKey(log *Log) string {
+	if log.RequestId != "" {
+		return "request:" + log.RequestId
+	}
+	if log.UpstreamRequestId != "" {
+		return "upstream:" + log.UpstreamRequestId
+	}
+	return fmt.Sprintf("log:%d", log.Id)
+}
+
+func getErrorSummaryRouteStats(items []*ErrorLogSummaryItem, startTime, endTime int64) (map[errorSummaryRouteKey]errorSummaryRouteStats, error) {
+	modelGroups := make(map[errorSummaryModelGroupKey]struct{})
+	for _, item := range items {
+		if item.ModelName == "" {
+			continue
+		}
+		modelGroups[errorSummaryModelGroupKey{Model: item.ModelName, Group: item.Group}] = struct{}{}
+	}
+	if len(modelGroups) == 0 {
+		return map[errorSummaryRouteKey]errorSummaryRouteStats{}, nil
+	}
+
+	conditions := make([]string, 0, len(modelGroups))
+	args := make([]any, 0, len(modelGroups)*2)
+	for key := range modelGroups {
+		conditions = append(conditions, "(logs.model_name = ? AND logs."+logGroupCol+" = ?)")
+		args = append(args, key.Model, key.Group)
+	}
+
+	selectFields := strings.Join([]string{
+		"logs.channel_id AS channel_id",
+		"logs.model_name AS model_name",
+		"logs." + logGroupCol + " AS log_group",
+		"logs.type AS log_type",
+		"COUNT(*) AS count",
+		"MAX(logs.created_at) AS last_seen",
+	}, ", ")
+	groupFields := strings.Join([]string{
+		"logs.channel_id",
+		"logs.model_name",
+		"logs." + logGroupCol,
+		"logs.type",
+	}, ", ")
+
+	var rows []errorSummaryRouteStatsRow
+	err := LOG_DB.Model(&Log{}).
+		Select(selectFields).
+		Where("logs.type IN ?", []int{LogTypeConsume, LogTypeError}).
+		Where("logs.created_at >= ?", startTime).
+		Where("logs.created_at <= ?", endTime).
+		Where("("+strings.Join(conditions, " OR ")+")", args...).
+		Group(groupFields).
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+
+	statsByRoute := make(map[errorSummaryRouteKey]errorSummaryRouteStats, len(rows))
+	for _, row := range rows {
+		key := errorSummaryRouteKey{ChannelId: row.ChannelId, Model: row.ModelName, Group: row.Group}
+		stats := statsByRoute[key]
+		count := int(row.Count)
+		stats.Attempts += count
+		if row.LogType == LogTypeError {
+			stats.Errors += count
+			if row.LastSeen > stats.LastError {
+				stats.LastError = row.LastSeen
+			}
+		} else if row.LogType == LogTypeConsume {
+			stats.Successes += count
+		}
+		statsByRoute[key] = stats
+	}
+	return statsByRoute, nil
+}
+
+func applyErrorSummaryRouteStats(item *ErrorLogSummaryItem, statsByRoute map[errorSummaryRouteKey]errorSummaryRouteStats) {
+	stats := statsByRoute[errorSummaryRouteKey{ChannelId: item.ChannelId, Model: item.ModelName, Group: item.Group}]
+	item.RouteAttemptCount = stats.Attempts
+	item.RouteSuccessCount = stats.Successes
+	item.RouteErrorCount = stats.Errors
+	if stats.Attempts > 0 {
+		item.RouteErrorRate = float64(stats.Errors) / float64(stats.Attempts)
+	}
+}
+
+func classifyErrorSummaryTrend(currentCount, previousCount int) string {
+	if currentCount > 0 && previousCount == 0 {
+		return "new"
+	}
+	if currentCount >= previousCount+max(2, previousCount/2) {
+		return "rising"
+	}
+	if previousCount >= currentCount+max(2, currentCount/2) {
+		return "falling"
+	}
+	return "stable"
+}
+
+func classifyErrorSummarySeverity(item *ErrorLogSummaryItem) string {
+	isEnabled := item.ChannelStatus == common.ChannelStatusEnabled
+	isAuthFailure := item.StatusCode == 401 || item.StatusCode == 403
+	isServerFailure := item.StatusCode >= 500
+	if isEnabled && item.RouteAttemptCount >= 5 && item.RouteErrorRate >= 0.5 {
+		return "critical"
+	}
+	if isEnabled && (isAuthFailure || isServerFailure || item.RouteErrorRate >= 0.2) {
+		return "high"
+	}
+	if item.StatusCode >= 400 || item.Count >= 3 {
+		return "medium"
+	}
+	return "low"
+}
+
+func errorSummarySeverityRank(severity string) int {
+	switch severity {
+	case "critical":
+		return 4
+	case "high":
+		return 3
+	case "medium":
+		return 2
+	case "low":
+		return 1
+	default:
+		return 0
 	}
 }
 
@@ -896,11 +1151,6 @@ type errorSummaryPeerKey struct {
 	Group string
 }
 
-type errorSummaryChannelErrorStats struct {
-	Count int
-	Last  int64
-}
-
 type errorSummaryPeerChannelRow struct {
 	ChannelId     int         `gorm:"column:channel_id"`
 	ChannelName   string      `gorm:"column:channel_name"`
@@ -914,12 +1164,12 @@ type errorSummaryPeerChannelRow struct {
 	Settings      string      `gorm:"column:settings"`
 }
 
-func applyErrorSummaryPeerChannels(items []*ErrorLogSummaryItem, logs []*Log) error {
+func applyErrorSummaryPeerChannels(items []*ErrorLogSummaryItem, routeStats map[errorSummaryRouteKey]errorSummaryRouteStats) error {
 	peerKeys := make(map[errorSummaryPeerKey]struct{})
 	for _, item := range items {
 		key := errorSummaryPeerKey{
 			Model: item.ModelName,
-			Group: item.SampleGroup,
+			Group: item.Group,
 		}
 		if key.Model == "" || key.Group == "" {
 			continue
@@ -930,34 +1180,9 @@ func applyErrorSummaryPeerChannels(items []*ErrorLogSummaryItem, logs []*Log) er
 		return nil
 	}
 
-	errorStats := make(map[errorSummaryPeerKey]map[int]errorSummaryChannelErrorStats)
-	for _, log := range logs {
-		key := errorSummaryPeerKey{
-			Model: log.ModelName,
-			Group: log.Group,
-		}
-		if key.Model == "" || key.Group == "" {
-			continue
-		}
-		if _, ok := peerKeys[key]; !ok {
-			continue
-		}
-		channelStats, ok := errorStats[key]
-		if !ok {
-			channelStats = make(map[int]errorSummaryChannelErrorStats)
-			errorStats[key] = channelStats
-		}
-		stats := channelStats[log.ChannelId]
-		stats.Count++
-		if log.CreatedAt > stats.Last {
-			stats.Last = log.CreatedAt
-		}
-		channelStats[log.ChannelId] = stats
-	}
-
 	peerChannelsByKey := make(map[errorSummaryPeerKey][]ErrorLogSummaryPeerChannel, len(peerKeys))
 	for key := range peerKeys {
-		peerChannels, err := getErrorSummaryPeerChannels(key, errorStats[key])
+		peerChannels, err := getErrorSummaryPeerChannels(key, routeStats)
 		if err != nil {
 			return err
 		}
@@ -967,7 +1192,7 @@ func applyErrorSummaryPeerChannels(items []*ErrorLogSummaryItem, logs []*Log) er
 	for _, item := range items {
 		key := errorSummaryPeerKey{
 			Model: item.ModelName,
-			Group: item.SampleGroup,
+			Group: item.Group,
 		}
 		peers := peerChannelsByKey[key]
 		if len(peers) == 0 {
@@ -982,7 +1207,7 @@ func applyErrorSummaryPeerChannels(items []*ErrorLogSummaryItem, logs []*Log) er
 	return nil
 }
 
-func getErrorSummaryPeerChannels(key errorSummaryPeerKey, errorStats map[int]errorSummaryChannelErrorStats) ([]ErrorLogSummaryPeerChannel, error) {
+func getErrorSummaryPeerChannels(key errorSummaryPeerKey, routeStats map[errorSummaryRouteKey]errorSummaryRouteStats) ([]ErrorLogSummaryPeerChannel, error) {
 	var rows []errorSummaryPeerChannelRow
 	err := DB.Table("abilities").
 		Select(strings.Join([]string{
@@ -1024,9 +1249,14 @@ func getErrorSummaryPeerChannels(key errorSummaryPeerKey, errorStats map[int]err
 			ChannelTestTime:     row.TestTime,
 		}
 		applyErrorSummaryPeerChannelSettings(&peer, row.ChannelInfo, row.Settings)
-		if stats, ok := errorStats[row.ChannelId]; ok {
-			peer.RecentErrorCount = stats.Count
-			peer.LastErrorTime = stats.Last
+		if stats, ok := routeStats[errorSummaryRouteKey{ChannelId: row.ChannelId, Model: key.Model, Group: key.Group}]; ok {
+			peer.RecentAttemptCount = stats.Attempts
+			peer.RecentSuccessCount = stats.Successes
+			peer.RecentErrorCount = stats.Errors
+			if stats.Attempts > 0 {
+				peer.RecentErrorRate = float64(stats.Errors) / float64(stats.Attempts)
+			}
+			peer.LastErrorTime = stats.LastError
 		}
 		peerChannels = append(peerChannels, peer)
 	}
@@ -1091,6 +1321,30 @@ func normalizeErrorSummaryText(content string) string {
 		return content
 	}
 	return string(runes[:errorSummaryTextLimit]) + "..."
+}
+
+func normalizeErrorFingerprintText(content string) string {
+	content = strings.ToLower(strings.Join(strings.Fields(content), " "))
+	content = errorFingerprintURLPattern.ReplaceAllString(content, "<url>")
+	content = errorFingerprintUUIDPattern.ReplaceAllString(content, "<uuid>")
+	content = errorFingerprintTokenPattern.ReplaceAllString(content, "<token>")
+	content = errorFingerprintNumberPattern.ReplaceAllString(content, "<number>")
+	runes := []rune(content)
+	if len(runes) <= errorFingerprintTextLimit {
+		return content
+	}
+	return string(runes[:errorFingerprintTextLimit])
+}
+
+func buildErrorFingerprint(errorType, errorCode string, statusCode int, content string) string {
+	source := strings.Join([]string{
+		strings.ToLower(strings.TrimSpace(errorType)),
+		strings.ToLower(strings.TrimSpace(errorCode)),
+		fmt.Sprintf("%d", statusCode),
+		normalizeErrorFingerprintText(content),
+	}, "\x1f")
+	sum := sha256.Sum256([]byte(source))
+	return fmt.Sprintf("%x", sum[:8])
 }
 
 const logSearchCountLimit = 10000

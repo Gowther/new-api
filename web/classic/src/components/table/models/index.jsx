@@ -42,6 +42,11 @@ const ModelsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const viewFromSearch =
     searchParams.get('tab') === 'routing' ? 'routing' : 'metadata';
+  const routingModel = searchParams.get('routing_model') || undefined;
+  const routingChannelValue = Number(searchParams.get('routing_channel'));
+  const routingChannel = Number.isFinite(routingChannelValue)
+    ? routingChannelValue
+    : undefined;
   const [activeView, setActiveView] = useState(viewFromSearch);
 
   const {
@@ -164,7 +169,10 @@ const ModelsPage = () => {
       </Tabs>
 
       {activeView === 'routing' ? (
-        <ModelRoutingWorkbench />
+        <ModelRoutingWorkbench
+          targetModelName={routingModel}
+          targetChannelId={routingChannel}
+        />
       ) : (
         <>
           {showMarketplaceDisplayNotice ? (

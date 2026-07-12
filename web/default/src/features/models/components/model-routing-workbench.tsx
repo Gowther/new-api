@@ -124,6 +124,11 @@ type StoredRoutingSelection = {
   modelName: string
 }
 
+type ModelRoutingWorkbenchProps = {
+  targetModelName?: string
+  targetChannelId?: number
+}
+
 async function fetchPricingRoutingData(): Promise<PricingRoutingData> {
   const response = await getPricing()
   if (!response.success) {
@@ -324,7 +329,7 @@ function getChangedCount(changes: RoutingChanges): number {
   ).length
 }
 
-export function ModelRoutingWorkbench() {
+export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((state) => state.auth.user)
@@ -373,6 +378,14 @@ export function ModelRoutingWorkbench() {
 
   const vendors = pricingQuery.data?.vendors ?? EMPTY_PRICING_VENDORS
   const models = pricingQuery.data?.models ?? EMPTY_PRICING_MODELS
+
+  const targetRoutingSelection = useMemo(() => {
+    if (!props.targetModelName) return null
+    const targetModel = models.find(
+      (model) => model.model_name === props.targetModelName
+    )
+    return targetModel ? getRoutingSelectionFromModel(targetModel) : null
+  }, [models, props.targetModelName])
 
   useEffect(() => {
     if (channelsQuery.data) {
@@ -457,8 +470,10 @@ export function ModelRoutingWorkbench() {
   )
 
   const initialRoutingSelection = useMemo(
-    () => resolveInitialRoutingSelection(models, defaultRoutingSelection),
-    [defaultRoutingSelection, models]
+    () =>
+      targetRoutingSelection ??
+      resolveInitialRoutingSelection(models, defaultRoutingSelection),
+    [defaultRoutingSelection, models, targetRoutingSelection]
   )
 
   const isSelectedDefaultModel = isSameRoutingSelection(
@@ -487,6 +502,12 @@ export function ModelRoutingWorkbench() {
   } else if (!selectedModel) {
     createChannelButtonTitle = t('Select a model')
   }
+
+  useEffect(() => {
+    if (!targetRoutingSelection) return
+    setSelectedProviderKey(targetRoutingSelection.providerKey)
+    setSelectedModelName(targetRoutingSelection.modelName)
+  }, [targetRoutingSelection])
 
   useEffect(() => {
     if (selectedProviderKey && providerOptions.length > 0) {
@@ -543,6 +564,30 @@ export function ModelRoutingWorkbench() {
       selectedRoutingSelection
     )
   }, [selectedRoutingSelection])
+
+  useEffect(() => {
+    if (!props.targetChannelId) return
+    if (props.targetModelName && selectedModelName !== props.targetModelName) {
+      return
+    }
+    if (
+      !channelsForModel.some((channel) => channel.id === props.targetChannelId)
+    ) {
+      return
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      document
+        .querySelector(`#routing-channel-${props.targetChannelId}`)
+        ?.scrollIntoView({ block: 'center' })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [
+    channelsForModel,
+    props.targetChannelId,
+    props.targetModelName,
+    selectedModelName,
+  ])
 
   const refreshRoutingData = useCallback(async () => {
     await Promise.all([pricingQuery.refetch(), channelsQuery.refetch()])
@@ -606,7 +651,7 @@ export function ModelRoutingWorkbench() {
     const originalValue = channel[field] ?? 0
     setRoutingChanges((prev) => {
       const next = { ...prev }
-      const channelChanges = { ...(next[channel.id] ?? {}) }
+      const channelChanges = { ...next[channel.id] }
 
       if (numericValue === originalValue) {
         delete channelChanges[field]
@@ -1110,7 +1155,12 @@ export function ModelRoutingWorkbench() {
                     return (
                       <TableRow
                         key={channel.id}
-                        className={!isEnabled ? 'bg-muted/30 opacity-75' : ''}
+                        id={`routing-channel-${channel.id}`}
+                        className={cn(
+                          !isEnabled && 'bg-muted/30 opacity-75',
+                          props.targetChannelId === channel.id &&
+                            'bg-amber-50 ring-1 ring-inset ring-amber-300 dark:bg-amber-950/20'
+                        )}
                       >
                         <TableCell className='w-80 max-w-80'>
                           <div className='grid min-w-0 grid-cols-[9.5rem_minmax(0,1fr)] items-center gap-2'>

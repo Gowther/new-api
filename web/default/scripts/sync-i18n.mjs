@@ -61,6 +61,8 @@ const BRAND_AND_LITERAL_KEYS = new Set([
   'MjProxy',
   'MjProxyPlus',
   'MiniMax',
+  'Midjourney',
+  'MidjourneyPlus',
   'Mistral',
   'MokaAI',
   'Moonshot',
@@ -229,8 +231,9 @@ function isLikelyUntranslated({ locale, baseValue, value }) {
   if (locale === 'ru') return true
 
   // For fr/vi: still useful but noisier; keep it conservative.
-  if (locale === 'fr' || locale === 'vi')
+  if (locale === 'fr' || locale === 'vi') {
     return /\b(the|and|or|to|with|please)\b/i.test(s)
+  }
 
   return false
 }

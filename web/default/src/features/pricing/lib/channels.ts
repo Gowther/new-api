@@ -2,7 +2,7 @@ import { CHANNEL_TYPES } from '@/features/channels/constants'
 
 import type { PricingBoundChannel } from '../types'
 
-type Translate = (key: string, ...args: unknown[]) => string
+type Translate = (key: string) => string
 
 export function getPricingChannelTypeKey(type: number): string {
   return CHANNEL_TYPES[type as keyof typeof CHANNEL_TYPES] || 'Unknown'

@@ -23,10 +23,9 @@ import (
 )
 
 const (
-	officialPriceMappingsOptionKey = "OfficialPriceModelMappings"
-	officialPriceSourceModelsDev   = "models.dev"
-	officialPriceSourceBaseLLM     = "basellm"
-	officialRatioPresetEndpoint    = "/llm-metadata/api/newapi/ratio_config-v1-base.json"
+	officialPriceSourceModelsDev = "models.dev"
+	officialPriceSourceBaseLLM   = "basellm"
+	officialRatioPresetEndpoint  = "/llm-metadata/api/newapi/ratio_config-v1-base.json"
 )
 
 var modelsDevOfficialProviders = map[string]struct{}{
@@ -290,7 +289,7 @@ func ApplyOfficialPriceSync(c *gin.Context) {
 
 func loadOfficialPriceMappings() map[string]dto.OfficialPriceMapping {
 	common.OptionMapRWMutex.RLock()
-	raw := common.OptionMap[officialPriceMappingsOptionKey]
+	raw := common.OptionMap[model.OfficialPriceModelMappingsOptionKey]
 	common.OptionMapRWMutex.RUnlock()
 
 	if strings.TrimSpace(raw) == "" {
@@ -593,11 +592,12 @@ func collectOfficialPriceLocalModels(localData map[string]any, pricingByModel ma
 	for _, meta := range metas {
 		syncOfficialModels = append(syncOfficialModels, meta.ModelName)
 	}
+	enabledChannelModels, _ := model.GetEnabledChannelModelNames()
 
 	return mergeOfficialPriceLocalModelNames(
 		localData,
 		pricingByModel,
-		model.GetEnabledModels(),
+		enabledChannelModels,
 		syncOfficialModels,
 	)
 }
@@ -866,7 +866,7 @@ func buildOfficialPriceOptionUpdates(pricingMaps map[string]map[string]any, mapp
 	if err != nil {
 		return nil, err
 	}
-	updates[officialPriceMappingsOptionKey] = string(data)
+	updates[model.OfficialPriceModelMappingsOptionKey] = string(data)
 	return updates, nil
 }
 

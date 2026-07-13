@@ -63,6 +63,9 @@ const ROUTING_ROLE_LABELS = ['主', '备', '兜底'];
 const ROUTING_ROLE_COLORS = ['green', 'blue', 'orange'];
 const ROUTING_DEFAULT_SELECTION_KEY = 'model-routing-default-selection';
 const ROUTING_LAST_SELECTION_KEY = 'model-routing-last-selection';
+const ROUTING_PROVIDER_DEFAULT_SELECTIONS_KEY =
+  'model-routing-provider-default-selections:v1';
+const ROUTING_LAST_PROVIDER_KEY = 'model-routing-last-provider:v1';
 const PREFERRED_DEFAULT_VENDOR_NAME = 'OpenAI';
 const PREFERRED_DEFAULT_MODEL_NAME = 'gpt-5.5';
 
@@ -117,7 +120,61 @@ const readStoredRoutingSelection = (key) => {
 };
 
 const writeStoredRoutingSelection = (key, selection) => {
-  window.localStorage.setItem(key, JSON.stringify(selection));
+  try {
+    window.localStorage.setItem(key, JSON.stringify(selection));
+  } catch {}
+};
+
+const readStoredProviderDefaultSelections = () => {
+  const selections = {};
+
+  try {
+    const rawValue = window.localStorage.getItem(
+      ROUTING_PROVIDER_DEFAULT_SELECTIONS_KEY,
+    );
+    if (rawValue) {
+      const parsed = JSON.parse(rawValue);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        Object.entries(parsed).forEach(([providerKey, modelName]) => {
+          if (typeof modelName !== 'string' || modelName.trim() === '') return;
+          selections[String(providerKey)] = modelName;
+        });
+      }
+    }
+  } catch {}
+
+  const legacyDefault = readStoredRoutingSelection(
+    ROUTING_DEFAULT_SELECTION_KEY,
+  );
+  if (legacyDefault && selections[legacyDefault.providerKey] === undefined) {
+    selections[legacyDefault.providerKey] = legacyDefault.modelName;
+  }
+
+  return selections;
+};
+
+const writeStoredProviderDefaultSelections = (selections) => {
+  try {
+    window.localStorage.setItem(
+      ROUTING_PROVIDER_DEFAULT_SELECTIONS_KEY,
+      JSON.stringify(selections),
+    );
+  } catch {}
+};
+
+const readStoredProviderKey = (key) => {
+  try {
+    const providerKey = window.localStorage.getItem(key);
+    return providerKey ? String(providerKey) : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeStoredProviderKey = (key, providerKey) => {
+  try {
+    window.localStorage.setItem(key, providerKey);
+  } catch {}
 };
 
 const findModelForSelection = (models, selection) => {
@@ -131,6 +188,22 @@ const findModelForSelection = (models, selection) => {
   );
 };
 
+const findProviderDefaultModel = (models, providerDefaults, providerKey) => {
+  if (!providerKey) return null;
+  const modelName = providerDefaults[providerKey];
+  if (!modelName) return null;
+  return findModelForSelection(models, { providerKey, modelName });
+};
+
+const findFirstModelForProvider = (models, providerKey) => {
+  if (!providerKey) return null;
+  return (
+    models
+      .filter((model) => getProviderKey(model) === providerKey)
+      .sort((a, b) => a.model_name.localeCompare(b.model_name))[0] || null
+  );
+};
+
 const findPreferredDefaultModel = (models) =>
   models.find(
     (model) =>
@@ -138,9 +211,32 @@ const findPreferredDefaultModel = (models) =>
       model.model_name === PREFERRED_DEFAULT_MODEL_NAME,
   ) || null;
 
-const resolveInitialRoutingSelection = (models, defaultSelection) => {
-  const validDefault = findModelForSelection(models, defaultSelection);
-  if (validDefault) return getRoutingSelectionFromModel(validDefault);
+const resolveInitialRoutingSelection = (models, providerDefaults) => {
+  const lastProviderKey = readStoredProviderKey(ROUTING_LAST_PROVIDER_KEY);
+  const lastProviderDefault = findProviderDefaultModel(
+    models,
+    providerDefaults,
+    lastProviderKey,
+  );
+  if (lastProviderDefault) {
+    return getRoutingSelectionFromModel(lastProviderDefault);
+  }
+
+  const firstLastProviderModel = findFirstModelForProvider(
+    models,
+    lastProviderKey,
+  );
+  if (firstLastProviderModel) {
+    return getRoutingSelectionFromModel(firstLastProviderModel);
+  }
+
+  const legacyDefault = readStoredRoutingSelection(
+    ROUTING_DEFAULT_SELECTION_KEY,
+  );
+  const validLegacyDefault = findModelForSelection(models, legacyDefault);
+  if (validLegacyDefault) {
+    return getRoutingSelectionFromModel(validLegacyDefault);
+  }
 
   const lastSelection = readStoredRoutingSelection(ROUTING_LAST_SELECTION_KEY);
   const validLast = findModelForSelection(models, lastSelection);
@@ -152,9 +248,10 @@ const resolveInitialRoutingSelection = (models, defaultSelection) => {
     : null;
 };
 
-const isSameRoutingSelection = (first, second) =>
-  first?.providerKey === second?.providerKey &&
-  first?.modelName === second?.modelName;
+const isSameProviderDefaultSelection = (selection, providerDefaults) => {
+  if (!selection) return false;
+  return providerDefaults[selection.providerKey] === selection.modelName;
+};
 
 const getRoutingModelNames = (model) => {
   return model ? [model.model_name] : [];
@@ -273,8 +370,8 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   const [showEditChannel, setShowEditChannel] = useState(false);
   const [deletingChannelId, setDeletingChannelId] = useState(null);
   const [testingChannelIds, setTestingChannelIds] = useState({});
-  const [defaultRoutingSelection, setDefaultRoutingSelection] = useState(() =>
-    readStoredRoutingSelection(ROUTING_DEFAULT_SELECTION_KEY),
+  const [providerDefaultSelections, setProviderDefaultSelections] = useState(
+    () => readStoredProviderDefaultSelections(),
   );
 
   const loadRoutingData = useCallback(async () => {
@@ -385,13 +482,13 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   const initialRoutingSelection = useMemo(
     () =>
       targetRoutingSelection ||
-      resolveInitialRoutingSelection(models, defaultRoutingSelection),
-    [defaultRoutingSelection, models, targetRoutingSelection],
+      resolveInitialRoutingSelection(models, providerDefaultSelections),
+    [models, providerDefaultSelections, targetRoutingSelection],
   );
 
-  const isSelectedDefaultModel = isSameRoutingSelection(
+  const isSelectedDefaultModel = isSameProviderDefaultSelection(
     selectedRoutingSelection,
-    defaultRoutingSelection,
+    providerDefaultSelections,
   );
 
   const selectedModelNames = useMemo(
@@ -452,11 +549,20 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
             (model) => model.model_name === initialRoutingSelection.modelName,
           )
         : null;
+    const providerDefaultModel = findProviderDefaultModel(
+      providerModels,
+      providerDefaultSelections,
+      selectedProviderKey,
+    );
     setSelectedModelName(
-      initialModel?.model_name || providerModels[0]?.model_name || null,
+      initialModel?.model_name ||
+        providerDefaultModel?.model_name ||
+        providerModels[0]?.model_name ||
+        null,
     );
   }, [
     initialRoutingSelection,
+    providerDefaultSelections,
     providerModels,
     selectedModelName,
     selectedProviderKey,
@@ -464,6 +570,10 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
 
   useEffect(() => {
     if (!selectedRoutingSelection) return;
+    writeStoredProviderKey(
+      ROUTING_LAST_PROVIDER_KEY,
+      selectedRoutingSelection.providerKey,
+    );
     writeStoredRoutingSelection(
       ROUTING_LAST_SELECTION_KEY,
       selectedRoutingSelection,
@@ -493,11 +603,21 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
 
   const handleSetDefaultModel = () => {
     if (!selectedRoutingSelection) return;
+    const nextProviderDefaults = {
+      ...providerDefaultSelections,
+      [selectedRoutingSelection.providerKey]:
+        selectedRoutingSelection.modelName,
+    };
+    writeStoredProviderDefaultSelections(nextProviderDefaults);
+    writeStoredProviderKey(
+      ROUTING_LAST_PROVIDER_KEY,
+      selectedRoutingSelection.providerKey,
+    );
     writeStoredRoutingSelection(
       ROUTING_DEFAULT_SELECTION_KEY,
       selectedRoutingSelection,
     );
-    setDefaultRoutingSelection(selectedRoutingSelection);
+    setProviderDefaultSelections(nextProviderDefaults);
     showSuccess(t('保存成功'));
   };
 

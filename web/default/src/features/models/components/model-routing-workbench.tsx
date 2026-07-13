@@ -97,6 +97,9 @@ const ROUTING_ROLE_LABEL_KEYS = ['Primary', 'Backup', 'Fallback'] as const
 const ROUTING_ROLE_VARIANTS = ['green', 'blue', 'amber'] as const
 const ROUTING_DEFAULT_SELECTION_KEY = 'model-routing-default-selection'
 const ROUTING_LAST_SELECTION_KEY = 'model-routing-last-selection'
+const ROUTING_PROVIDER_DEFAULT_SELECTIONS_KEY =
+  'model-routing-provider-default-selections:v1'
+const ROUTING_LAST_PROVIDER_KEY = 'model-routing-last-provider:v1'
 const PREFERRED_DEFAULT_VENDOR_NAME = 'OpenAI'
 const PREFERRED_DEFAULT_MODEL_NAME = 'gpt-5.5'
 
@@ -123,6 +126,8 @@ type StoredRoutingSelection = {
   providerKey: string
   modelName: string
 }
+
+type StoredProviderDefaultSelections = Record<string, string>
 
 type ModelRoutingWorkbenchProps = {
   targetModelName?: string
@@ -220,7 +225,68 @@ function writeStoredRoutingSelection(
   selection: StoredRoutingSelection
 ) {
   if (typeof window === 'undefined') return
-  window.localStorage.setItem(key, JSON.stringify(selection))
+  try {
+    window.localStorage.setItem(key, JSON.stringify(selection))
+  } catch {}
+}
+
+function readStoredProviderDefaultSelections(): StoredProviderDefaultSelections {
+  const selections: StoredProviderDefaultSelections = {}
+  if (typeof window === 'undefined') return selections
+
+  try {
+    const rawValue = window.localStorage.getItem(
+      ROUTING_PROVIDER_DEFAULT_SELECTIONS_KEY
+    )
+    if (rawValue) {
+      const parsed = JSON.parse(rawValue) as unknown
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        Object.entries(parsed).forEach(([providerKey, modelName]) => {
+          if (typeof modelName !== 'string' || modelName.trim() === '') return
+          selections[String(providerKey)] = modelName
+        })
+      }
+    }
+  } catch {}
+
+  const legacyDefault = readStoredRoutingSelection(
+    ROUTING_DEFAULT_SELECTION_KEY
+  )
+  if (legacyDefault && selections[legacyDefault.providerKey] === undefined) {
+    selections[legacyDefault.providerKey] = legacyDefault.modelName
+  }
+
+  return selections
+}
+
+function writeStoredProviderDefaultSelections(
+  selections: StoredProviderDefaultSelections
+) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(
+      ROUTING_PROVIDER_DEFAULT_SELECTIONS_KEY,
+      JSON.stringify(selections)
+    )
+  } catch {}
+}
+
+function readStoredProviderKey(key: string): string | null {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const providerKey = window.localStorage.getItem(key)
+    return providerKey ? String(providerKey) : null
+  } catch {
+    return null
+  }
+}
+
+function writeStoredProviderKey(key: string, providerKey: string) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(key, providerKey)
+  } catch {}
 }
 
 function findModelForSelection(
@@ -234,6 +300,29 @@ function findModelForSelection(
         getProviderKey(model) === selection.providerKey &&
         model.model_name === selection.modelName
     ) ?? null
+  )
+}
+
+function findProviderDefaultModel(
+  models: PricingModel[],
+  providerDefaults: StoredProviderDefaultSelections,
+  providerKey: string | null
+): PricingModel | null {
+  if (!providerKey) return null
+  const modelName = providerDefaults[providerKey]
+  if (!modelName) return null
+  return findModelForSelection(models, { providerKey, modelName })
+}
+
+function findFirstModelForProvider(
+  models: PricingModel[],
+  providerKey: string | null
+): PricingModel | null {
+  if (!providerKey) return null
+  return (
+    models
+      .filter((model) => getProviderKey(model) === providerKey)
+      .sort((a, b) => a.model_name.localeCompare(b.model_name))[0] ?? null
   )
 }
 
@@ -251,10 +340,33 @@ function findPreferredDefaultModel(
 
 function resolveInitialRoutingSelection(
   models: PricingModel[],
-  defaultSelection: StoredRoutingSelection | null
+  providerDefaults: StoredProviderDefaultSelections
 ): StoredRoutingSelection | null {
-  const validDefault = findModelForSelection(models, defaultSelection)
-  if (validDefault) return getRoutingSelectionFromModel(validDefault)
+  const lastProviderKey = readStoredProviderKey(ROUTING_LAST_PROVIDER_KEY)
+  const lastProviderDefault = findProviderDefaultModel(
+    models,
+    providerDefaults,
+    lastProviderKey
+  )
+  if (lastProviderDefault) {
+    return getRoutingSelectionFromModel(lastProviderDefault)
+  }
+
+  const firstLastProviderModel = findFirstModelForProvider(
+    models,
+    lastProviderKey
+  )
+  if (firstLastProviderModel) {
+    return getRoutingSelectionFromModel(firstLastProviderModel)
+  }
+
+  const legacyDefault = readStoredRoutingSelection(
+    ROUTING_DEFAULT_SELECTION_KEY
+  )
+  const validLegacyDefault = findModelForSelection(models, legacyDefault)
+  if (validLegacyDefault) {
+    return getRoutingSelectionFromModel(validLegacyDefault)
+  }
 
   const lastSelection = readStoredRoutingSelection(ROUTING_LAST_SELECTION_KEY)
   const validLast = findModelForSelection(models, lastSelection)
@@ -266,14 +378,12 @@ function resolveInitialRoutingSelection(
     : null
 }
 
-function isSameRoutingSelection(
-  first: StoredRoutingSelection | null,
-  second: StoredRoutingSelection | null
+function isSameProviderDefaultSelection(
+  selection: StoredRoutingSelection | null,
+  providerDefaults: StoredProviderDefaultSelections
 ): boolean {
-  return (
-    first?.providerKey === second?.providerKey &&
-    first?.modelName === second?.modelName
-  )
+  if (!selection) return false
+  return providerDefaults[selection.providerKey] === selection.modelName
 }
 
 function getRoutingModelNames(model: PricingModel | null): string[] {
@@ -359,9 +469,9 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     Record<number, boolean>
   >({})
   const [isSaving, setIsSaving] = useState(false)
-  const [defaultRoutingSelection, setDefaultRoutingSelection] =
-    useState<StoredRoutingSelection | null>(() =>
-      readStoredRoutingSelection(ROUTING_DEFAULT_SELECTION_KEY)
+  const [providerDefaultSelections, setProviderDefaultSelections] =
+    useState<StoredProviderDefaultSelections>(() =>
+      readStoredProviderDefaultSelections()
     )
 
   const pricingQuery = useQuery({
@@ -472,13 +582,13 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
   const initialRoutingSelection = useMemo(
     () =>
       targetRoutingSelection ??
-      resolveInitialRoutingSelection(models, defaultRoutingSelection),
-    [defaultRoutingSelection, models, targetRoutingSelection]
+      resolveInitialRoutingSelection(models, providerDefaultSelections),
+    [models, providerDefaultSelections, targetRoutingSelection]
   )
 
-  const isSelectedDefaultModel = isSameRoutingSelection(
+  const isSelectedDefaultModel = isSameProviderDefaultSelection(
     selectedRoutingSelection,
-    defaultRoutingSelection
+    providerDefaultSelections
   )
 
   const selectedModelNames = useMemo(
@@ -547,11 +657,20 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
             (model) => model.model_name === initialRoutingSelection.modelName
           )
         : null
+    const providerDefaultModel = findProviderDefaultModel(
+      providerModels,
+      providerDefaultSelections,
+      selectedProviderKey
+    )
     setSelectedModelName(
-      initialModel?.model_name ?? providerModels[0]?.model_name ?? null
+      initialModel?.model_name ??
+        providerDefaultModel?.model_name ??
+        providerModels[0]?.model_name ??
+        null
     )
   }, [
     initialRoutingSelection,
+    providerDefaultSelections,
     providerModels,
     selectedModelName,
     selectedProviderKey,
@@ -559,6 +678,10 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
 
   useEffect(() => {
     if (!selectedRoutingSelection) return
+    writeStoredProviderKey(
+      ROUTING_LAST_PROVIDER_KEY,
+      selectedRoutingSelection.providerKey
+    )
     writeStoredRoutingSelection(
       ROUTING_LAST_SELECTION_KEY,
       selectedRoutingSelection
@@ -601,11 +724,21 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
 
   const handleSetDefaultModel = () => {
     if (!selectedRoutingSelection) return
+    const nextProviderDefaults = {
+      ...providerDefaultSelections,
+      [selectedRoutingSelection.providerKey]:
+        selectedRoutingSelection.modelName,
+    }
+    writeStoredProviderDefaultSelections(nextProviderDefaults)
+    writeStoredProviderKey(
+      ROUTING_LAST_PROVIDER_KEY,
+      selectedRoutingSelection.providerKey
+    )
     writeStoredRoutingSelection(
       ROUTING_DEFAULT_SELECTION_KEY,
       selectedRoutingSelection
     )
-    setDefaultRoutingSelection(selectedRoutingSelection)
+    setProviderDefaultSelections(nextProviderDefaults)
     toast.success(t('Saved successfully'))
   }
 

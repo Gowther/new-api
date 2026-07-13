@@ -9,6 +9,9 @@ import (
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 )
 
+// OfficialPriceModelMappingsOptionKey stores saved local-to-official model mappings.
+const OfficialPriceModelMappingsOptionKey = "OfficialPriceModelMappings"
+
 type ModelRuleCoverage struct {
 	Total     int      `json:"total"`
 	Covered   []string `json:"covered"`
@@ -100,8 +103,21 @@ func CheckModelRuleCoverage(modelNames []string) (ModelRuleCoverage, error) {
 }
 
 func GetChannelModelNames() ([]string, error) {
+	return getChannelModelNames(false)
+}
+
+// GetEnabledChannelModelNames returns models declared by currently enabled channels.
+func GetEnabledChannelModelNames() ([]string, error) {
+	return getChannelModelNames(true)
+}
+
+func getChannelModelNames(enabledOnly bool) ([]string, error) {
 	var rawModels []string
-	if err := DB.Model(&Channel{}).Pluck("models", &rawModels).Error; err != nil {
+	query := DB.Model(&Channel{})
+	if enabledOnly {
+		query = query.Where("status = ?", common.ChannelStatusEnabled)
+	}
+	if err := query.Pluck("models", &rawModels).Error; err != nil {
 		return nil, err
 	}
 
@@ -159,8 +175,10 @@ func GetModelPricingHealth() (ModelPricingHealth, error) {
 }
 
 func GetEnabledModelsWithoutPricingConfig() ([]string, error) {
-	modelNames := normalizeLookupValues(GetEnabledModels())
-	sort.Strings(modelNames)
+	modelNames, err := GetEnabledChannelModelNames()
+	if err != nil {
+		return nil, err
+	}
 	if len(modelNames) == 0 {
 		return []string{}, nil
 	}
@@ -280,6 +298,17 @@ func collectPricingFieldsByModel() map[string][]string {
 }
 
 func getModelPricingMaps() []modelPricingMap {
+	officialPriceMappings := make(map[string]any)
+	common.OptionMapRWMutex.RLock()
+	rawOfficialPriceMappings := common.OptionMap[OfficialPriceModelMappingsOptionKey]
+	common.OptionMapRWMutex.RUnlock()
+	if strings.TrimSpace(rawOfficialPriceMappings) != "" {
+		if err := common.UnmarshalJsonStr(rawOfficialPriceMappings, &officialPriceMappings); err != nil {
+			common.SysError("failed to parse official price model mappings: " + err.Error())
+			officialPriceMappings = make(map[string]any)
+		}
+	}
+
 	return []modelPricingMap{
 		{
 			OptionKey: "ModelPrice",
@@ -330,6 +359,11 @@ func getModelPricingMaps() []modelPricingMap {
 			OptionKey: "billing_setting." + billing_setting.BillingExprField,
 			Fields:    []string{billing_setting.BillingExprField},
 			Values:    stringMapToAny(billing_setting.GetBillingExprCopy()),
+		},
+		{
+			OptionKey: OfficialPriceModelMappingsOptionKey,
+			Fields:    []string{OfficialPriceModelMappingsOptionKey},
+			Values:    officialPriceMappings,
 		},
 	}
 }

@@ -86,7 +86,7 @@ const LogsActions = ({
             }}
             className='!rounded-lg'
           >
-            TPM: {stat.tpm}
+            TPM: {compactNumberFormatter.format(stat.tpm || 0)}
           </Tag>
           <Tag
             color='green'

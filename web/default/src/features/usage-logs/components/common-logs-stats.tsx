@@ -102,7 +102,7 @@ export function CommonLogsStats() {
       />
       <StatBadge
         label={t('TPM')}
-        value={stats?.tpm || 0}
+        value={formatCompactNumber(stats?.tpm || 0, 'en')}
         accent='bg-slate-400/70'
       />
       <StatBadge

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 
 	"github.com/gin-gonic/gin"
@@ -57,6 +58,12 @@ func buildModelVendorSplitChannels(channel model.Channel, selectedVendorIDs []in
 			continue
 		}
 		localChannel := channel
+		switch strings.ToLower(strings.TrimSpace(group.VendorName)) {
+		case "anthropic":
+			localChannel.Type = constant.ChannelTypeAnthropic
+		case "openai":
+			localChannel.Type = constant.ChannelTypeOpenAI
+		}
 		localChannel.Models = strings.Join(group.Models, ",")
 		localChannel.Name = formatModelVendorSplitChannelName(channel.Name, group.VendorName)
 		localChannel.ModelMapping, err = filterModelMappingByModels(channel.ModelMapping, group.Models)

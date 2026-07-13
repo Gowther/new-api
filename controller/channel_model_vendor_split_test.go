@@ -89,6 +89,7 @@ func TestBuildModelVendorSplitChannelsFiltersMappingAndKeepsMultiKey(t *testing.
 	require.NoError(t, err)
 	require.Len(t, channels, 2)
 	assert.Equal(t, "primary - OpenAI", channels[0].Name)
+	assert.Equal(t, constant.ChannelTypeOpenAI, channels[0].Type)
 	assert.Equal(t, "gpt-4o", channels[0].Models)
 	assert.Equal(t, "key-a\nkey-b", channels[0].Key)
 	assert.True(t, channels[0].ChannelInfo.IsMultiKey)
@@ -103,6 +104,7 @@ func TestBuildModelVendorSplitChannelsFiltersMappingAndKeepsMultiKey(t *testing.
 	}, openaiMapping)
 
 	assert.Equal(t, "primary - Anthropic", channels[1].Name)
+	assert.Equal(t, constant.ChannelTypeAnthropic, channels[1].Type)
 	assert.Equal(t, "claude-3-opus", channels[1].Models)
 	assert.Equal(t, "key-a\nkey-b", channels[1].Key)
 	assert.True(t, channels[1].ChannelInfo.IsMultiKey)
@@ -171,6 +173,7 @@ func TestBuildModelVendorSplitChannelsFiltersSelectedVendors(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, channels, 1)
 	assert.Equal(t, "primary - Anthropic", channels[0].Name)
+	assert.Equal(t, constant.ChannelTypeAnthropic, channels[0].Type)
 	assert.Equal(t, "claude-3-opus", channels[0].Models)
 }
 

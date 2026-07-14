@@ -27,6 +27,10 @@ func TestChannelDeleteRoutesUseSensitiveWritePermission(t *testing.T) {
 	assertChannelRoutePermission(t, http.MethodPost, "/batch/tag", authz.ChannelWrite, controller.BatchSetChannelTag)
 }
 
+func TestChannelModelMappingPreviewRouteUsesChannelWritePermission(t *testing.T) {
+	assertChannelRoutePermission(t, http.MethodPost, "/model_mapping/preview", authz.ChannelWrite, controller.PreviewChannelModelMappings)
+}
+
 func TestChannelStatusRoutesRegisterWithoutConflict(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()

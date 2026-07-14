@@ -25,6 +25,8 @@ import type {
   BatchSetTagParams,
   Channel,
   ChannelBalanceResponse,
+  ChannelModelMappingPreviewRequest,
+  ChannelModelMappingPreviewResponse,
   ChannelModelOverlapRequest,
   ChannelModelOverlapResponse,
   ChannelOpsResponse,
@@ -136,6 +138,17 @@ export async function checkModelRuleCoverage(
   const res = await api.post(
     '/api/models/rule_coverage/check',
     { models },
+    channelActionConfig()
+  )
+  return res.data
+}
+
+export async function previewChannelModelMappings(
+  data: ChannelModelMappingPreviewRequest
+): Promise<ChannelModelMappingPreviewResponse> {
+  const res = await api.post(
+    '/api/channel/model_mapping/preview',
+    data,
     channelActionConfig()
   )
   return res.data

@@ -129,6 +129,7 @@ import {
   getChannelKey,
   getGroups,
   getPrefillGroups,
+  previewChannelModelMappings,
   refreshCodexCredential,
 } from '../../api'
 import {
@@ -170,11 +171,13 @@ import {
 } from '../../lib/status-code-risk-guard'
 import type {
   Channel,
+  ChannelModelMappingPreview,
   ChannelModelOverlapItem,
   ChannelModelOverlapRequest,
 } from '../../types'
 import { useChannels } from '../channels-provider'
 import { AdvancedCustomEditorDialog } from '../dialogs/advanced-custom-editor-dialog'
+import { ChannelModelMappingPreviewDialog } from '../dialogs/channel-model-mapping-preview-dialog'
 import { FetchModelsDialog } from '../dialogs/fetch-models-dialog'
 import {
   MissingModelsConfirmationDialog,
@@ -615,6 +618,12 @@ export function ChannelMutateDrawer({
   )
   const canRevealChannelKey = currentUser?.role === ROLE.SUPER_ADMIN
   const [fetchModelsDialogOpen, setFetchModelsDialogOpen] = useState(false)
+  const [modelMappingPreviewOpen, setModelMappingPreviewOpen] =
+    useState(false)
+  const [modelMappingPreview, setModelMappingPreview] =
+    useState<ChannelModelMappingPreview | null>(null)
+  const [isModelMappingPreviewing, setIsModelMappingPreviewing] =
+    useState(false)
   const [channelKey, setChannelKey] = useState<string | null>(null)
   const [isChannelKeyLoading, setIsChannelKeyLoading] = useState(false)
   const [isCodexCredentialRefreshing, setIsCodexCredentialRefreshing] =
@@ -1508,6 +1517,33 @@ export function ChannelMutateDrawer({
     },
     [form]
   )
+
+  const handlePreviewModelMapping = useCallback(async () => {
+    if (currentModelsArray.length === 0) {
+      toast.info(t('Add models before previewing mappings'))
+      return
+    }
+    setIsModelMappingPreviewing(true)
+    try {
+      const response = await previewChannelModelMappings({
+        models: currentModelsArray,
+        model_mapping: currentModelMapping || '',
+      })
+      if (!response.success || !response.data) {
+        throw new Error(response.message || t('Failed to preview model mapping'))
+      }
+      setModelMappingPreview(response.data)
+      setModelMappingPreviewOpen(true)
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t('Failed to preview model mapping')
+      )
+    } finally {
+      setIsModelMappingPreviewing(false)
+    }
+  }, [currentModelMapping, currentModelsArray, t])
 
   // Handle successful submission
   const handleSuccess = useCallback(() => {
@@ -3596,6 +3632,25 @@ export function ChannelMutateDrawer({
                                         {t(FIELD_DESCRIPTIONS.MODEL_MAPPING)}
                                       </FormDescription>
                                     </div>
+                                    <Button
+                                      type='button'
+                                      variant='outline'
+                                      size='sm'
+                                      onClick={handlePreviewModelMapping}
+                                      disabled={
+                                        isSubmitting ||
+                                        isModelMappingPreviewing ||
+                                        currentModelsArray.length === 0
+                                      }
+                                    >
+                                      <Wand2
+                                        className='mr-2 h-4 w-4'
+                                        aria-hidden='true'
+                                      />
+                                      {isModelMappingPreviewing
+                                        ? t('Previewing...')
+                                        : t('Smart Mapping')}
+                                    </Button>
                                   </div>
                                   <FormControl>
                                     <ModelMappingEditor
@@ -4871,6 +4926,35 @@ export function ChannelMutateDrawer({
             ? parseModelsString(form.getValues('models') || '')
             : undefined
         }
+      />
+
+      <ChannelModelMappingPreviewDialog
+        open={modelMappingPreviewOpen}
+        preview={modelMappingPreview}
+        isApplying={isSubmitting}
+        onOpenChange={(open) => {
+          setModelMappingPreviewOpen(open)
+          if (!open) setModelMappingPreview(null)
+        }}
+        onApply={(preview) => {
+          form.setValue('models', formatModelsArray(preview.models), {
+            shouldDirty: true,
+            shouldValidate: true,
+          })
+          form.setValue(
+            'model_mapping',
+            Object.keys(preview.model_mapping).length > 0
+              ? JSON.stringify(preview.model_mapping, null, 2)
+              : '',
+            {
+              shouldDirty: true,
+              shouldValidate: true,
+            }
+          )
+          setModelMappingPreviewOpen(false)
+          setModelMappingPreview(null)
+          toast.success(t('Model mapping changes applied to the form'))
+        }}
       />
 
       <SecureVerificationDialog

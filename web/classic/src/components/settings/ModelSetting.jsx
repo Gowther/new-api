@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useEffect, useState } from 'react';
-import { Card, Spin, Tabs } from '@douyinfe/semi-ui';
+import { Card, Spin, TabPane, Tabs } from '@douyinfe/semi-ui';
 
 import { API, showError, showSuccess, toBoolean } from '../../helpers';
 import { useTranslation } from 'react-i18next';
@@ -27,6 +27,7 @@ import SettingClaudeModel from '../../pages/Setting/Model/SettingClaudeModel';
 import SettingGlobalModel from '../../pages/Setting/Model/SettingGlobalModel';
 import SettingGrokModel from '../../pages/Setting/Model/SettingGrokModel';
 import SettingsChannelAffinity from '../../pages/Setting/Operation/SettingsChannelAffinity';
+import SettingChannelModelMapping from '../../pages/Setting/Model/SettingChannelModelMapping';
 
 const ModelSetting = () => {
   const { t } = useTranslation();
@@ -48,6 +49,7 @@ const ModelSetting = () => {
     'gemini.thinking_adapter_budget_tokens_percentage': 0.6,
     'grok.violation_deduction_enabled': true,
     'grok.violation_deduction_amount': 0.05,
+    'channel_model_mapping_setting.rules': '[]',
   });
 
   let [loading, setLoading] = useState(false);
@@ -109,26 +111,33 @@ const ModelSetting = () => {
   return (
     <>
       <Spin spinning={loading} size='large'>
-        {/* OpenAI */}
-        <Card style={{ marginTop: '10px' }}>
-          <SettingGlobalModel options={inputs} refresh={onRefresh} />
-        </Card>
-        {/* Channel affinity */}
-        <Card style={{ marginTop: '10px' }}>
-          <SettingsChannelAffinity options={inputs} refresh={onRefresh} />
-        </Card>
-        {/* Gemini */}
-        <Card style={{ marginTop: '10px' }}>
-          <SettingGeminiModel options={inputs} refresh={onRefresh} />
-        </Card>
-        {/* Claude */}
-        <Card style={{ marginTop: '10px' }}>
-          <SettingClaudeModel options={inputs} refresh={onRefresh} />
-        </Card>
-        {/* Grok */}
-        <Card style={{ marginTop: '10px' }}>
-          <SettingGrokModel options={inputs} refresh={onRefresh} />
-        </Card>
+        <Tabs type='card' collapsible>
+          <TabPane tab={t('模型设置')} itemKey='model-settings'>
+            <Card style={{ marginTop: '10px' }}>
+              <SettingGlobalModel options={inputs} refresh={onRefresh} />
+            </Card>
+            <Card style={{ marginTop: '10px' }}>
+              <SettingsChannelAffinity options={inputs} refresh={onRefresh} />
+            </Card>
+            <Card style={{ marginTop: '10px' }}>
+              <SettingGeminiModel options={inputs} refresh={onRefresh} />
+            </Card>
+            <Card style={{ marginTop: '10px' }}>
+              <SettingClaudeModel options={inputs} refresh={onRefresh} />
+            </Card>
+            <Card style={{ marginTop: '10px' }}>
+              <SettingGrokModel options={inputs} refresh={onRefresh} />
+            </Card>
+          </TabPane>
+          <TabPane tab={t('渠道模型映射规则')} itemKey='channel-model-mapping'>
+            <Card style={{ marginTop: '10px' }}>
+              <SettingChannelModelMapping
+                options={inputs}
+                refresh={onRefresh}
+              />
+            </Card>
+          </TabPane>
+        </Tabs>
       </Spin>
     </>
   );

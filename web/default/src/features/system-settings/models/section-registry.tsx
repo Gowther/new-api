@@ -21,6 +21,7 @@ import { IoNetDeploymentSettingsSection } from '../integrations/ionet-deployment
 import type { ModelSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 import { ClaudeSettingsCard } from './claude-settings-card'
+import { ChannelModelMappingRulesSection } from './channel-model-mapping-rules-section'
 import { GeminiSettingsCard } from './gemini-settings-card'
 import { GlobalSettingsCard } from './global-settings-card'
 import { GrokSettingsCard } from './grok-settings-card'
@@ -164,6 +165,15 @@ const MODELS_SECTIONS = [
           'channel_affinity_setting.rules':
             settings['channel_affinity_setting.rules'],
         }}
+      />
+    ),
+  },
+  {
+    id: 'channel-model-mapping',
+    titleKey: 'Channel Model Mapping Rules',
+    build: (settings: ModelSettings) => (
+      <ChannelModelMappingRulesSection
+        defaultValue={settings['channel_model_mapping_setting.rules']}
       />
     ),
   },

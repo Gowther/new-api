@@ -203,6 +203,50 @@ export interface FetchModelsResponse {
   data?: string[]
 }
 
+export type ChannelModelMatchMode = 'exact' | 'contains'
+
+export interface ChannelModelMappingRule {
+  match_mode: ChannelModelMatchMode
+  match_value: string
+  case_sensitive: boolean
+  exposed_model: string
+  priority: number
+  enabled: boolean
+}
+
+export interface ChannelModelMappingPreviewChange {
+  upstream_model: string
+  exposed_model: string
+  match_mode: ChannelModelMatchMode
+  match_value: string
+  status: 'applied' | 'conflict'
+  conflict_type?: 'existing_mapping' | 'multiple_targets'
+  existing_target?: string
+  candidate_targets?: string[]
+}
+
+export interface ChannelModelMappingPreviewRequest {
+  models: string[]
+  model_mapping?: string
+  rules?: ChannelModelMappingRule[]
+}
+
+export interface ChannelModelMappingPreview {
+  models: string[]
+  model_mapping: Record<string, string>
+  removed_models: string[]
+  added_models: string[]
+  changes: ChannelModelMappingPreviewChange[]
+  has_changes: boolean
+  has_conflicts: boolean
+}
+
+export interface ChannelModelMappingPreviewResponse {
+  success: boolean
+  message?: string
+  data?: ChannelModelMappingPreview
+}
+
 export interface ChannelModelOverlapUpstream {
   type: number
   base_url: string

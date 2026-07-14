@@ -70,6 +70,7 @@ import ModelSelectModal from './ModelSelectModal';
 import SingleModelSelectModal from './SingleModelSelectModal';
 import OllamaModelModal from './OllamaModelModal';
 import ParamOverrideEditorModal from './ParamOverrideEditorModal';
+import ModelMappingPreviewModal from './ModelMappingPreviewModal';
 import JSONEditor from '../../../common/ui/JSONEditor';
 import SecureVerificationModal from '../../../common/modals/SecureVerificationModal';
 import StatusCodeRiskGuardModal from './StatusCodeRiskGuardModal';
@@ -404,6 +405,11 @@ const EditChannelModal = (props) => {
   const [modelMappingValueKey, setModelMappingValueKey] = useState('');
   const [modelMappingValueSelected, setModelMappingValueSelected] =
     useState('');
+  const [modelMappingPreviewVisible, setModelMappingPreviewVisible] =
+    useState(false);
+  const [modelMappingPreview, setModelMappingPreview] = useState(null);
+  const [modelMappingPreviewLoading, setModelMappingPreviewLoading] =
+    useState(false);
   const [ollamaModalVisible, setOllamaModalVisible] = useState(false);
   const formApiRef = useRef(null);
   const modelDragMovedRef = useRef(false);
@@ -931,6 +937,29 @@ const EditChannelModal = (props) => {
       }
     }
     //setAutoBan
+  };
+
+  const previewModelMappings = async () => {
+    if (selectedModels.length === 0) {
+      showInfo(t('请先添加模型'));
+      return;
+    }
+    setModelMappingPreviewLoading(true);
+    try {
+      const response = await API.post('/api/channel/model_mapping/preview', {
+        models: selectedModels,
+        model_mapping: inputs.model_mapping || '',
+      });
+      if (!response?.data?.success || !response.data.data) {
+        throw new Error(response?.data?.message || t('预览失败'));
+      }
+      setModelMappingPreview(response.data.data);
+      setModelMappingPreviewVisible(true);
+    } catch (error) {
+      showError(error?.message || t('预览失败'));
+    } finally {
+      setModelMappingPreviewLoading(false);
+    }
   };
 
   const moveModelBefore = (sourceModel, targetModel) => {
@@ -4380,6 +4409,15 @@ const EditChannelModal = (props) => {
                                 {t('获取模型列表')}
                               </Button>
                             )}
+                            <Button
+                              size='small'
+                              type='tertiary'
+                              loading={modelMappingPreviewLoading}
+                              disabled={selectedModels.length === 0}
+                              onClick={previewModelMappings}
+                            >
+                              {t('智能映射')}
+                            </Button>
                             <Dropdown
                               trigger='click'
                               position='bottomRight'
@@ -4927,6 +4965,28 @@ const EditChannelModal = (props) => {
         onSave={(nextValue) => {
           handleInputChange('param_override', nextValue);
           setParamOverrideEditorVisible(false);
+        }}
+      />
+
+      <ModelMappingPreviewModal
+        visible={modelMappingPreviewVisible}
+        preview={modelMappingPreview}
+        onCancel={() => {
+          setModelMappingPreviewVisible(false);
+          setModelMappingPreview(null);
+        }}
+        onApply={(preview) => {
+          if (!preview) return;
+          handleInputChange('models', preview.models || []);
+          const nextMapping =
+            preview.model_mapping &&
+            Object.keys(preview.model_mapping).length > 0
+              ? JSON.stringify(preview.model_mapping, null, 2)
+              : '';
+          handleInputChange('model_mapping', nextMapping);
+          setModelMappingPreviewVisible(false);
+          setModelMappingPreview(null);
+          showSuccess(t('模型映射变更已应用到表单'));
         }}
       />
 

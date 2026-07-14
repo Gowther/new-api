@@ -130,6 +130,7 @@ import {
   getGroups,
   getPrefillGroups,
   previewChannelModelMappings,
+  previewChannelQuickMappings,
   refreshCodexCredential,
 } from '../../api'
 import {
@@ -174,10 +175,12 @@ import type {
   ChannelModelMappingPreview,
   ChannelModelOverlapItem,
   ChannelModelOverlapRequest,
+  ChannelQuickMappingPreview,
 } from '../../types'
 import { useChannels } from '../channels-provider'
 import { AdvancedCustomEditorDialog } from '../dialogs/advanced-custom-editor-dialog'
 import { ChannelModelMappingPreviewDialog } from '../dialogs/channel-model-mapping-preview-dialog'
+import { ChannelQuickMappingSuggestionDialog } from '../dialogs/channel-quick-mapping-suggestion-dialog'
 import { FetchModelsDialog } from '../dialogs/fetch-models-dialog'
 import {
   MissingModelsConfirmationDialog,
@@ -624,6 +627,10 @@ export function ChannelMutateDrawer({
     useState<ChannelModelMappingPreview | null>(null)
   const [isModelMappingPreviewing, setIsModelMappingPreviewing] =
     useState(false)
+  const [quickMappingSuggestionOpen, setQuickMappingSuggestionOpen] =
+    useState(false)
+  const [quickMappingPreview, setQuickMappingPreview] =
+    useState<ChannelQuickMappingPreview | null>(null)
   const [channelKey, setChannelKey] = useState<string | null>(null)
   const [isChannelKeyLoading, setIsChannelKeyLoading] = useState(false)
   const [isCodexCredentialRefreshing, setIsCodexCredentialRefreshing] =
@@ -1544,6 +1551,102 @@ export function ChannelMutateDrawer({
       setIsModelMappingPreviewing(false)
     }
   }, [currentModelMapping, currentModelsArray, t])
+
+  const handleModelsSelected = useCallback(
+    async (models: string[]) => {
+      form.setValue('models', formatModelsArray(models), {
+        shouldDirty: true,
+        shouldValidate: true,
+      })
+      setQuickMappingSuggestionOpen(false)
+      setQuickMappingPreview(null)
+
+      try {
+        const response = await previewChannelQuickMappings({
+          models,
+          model_mapping: currentModelMapping || '',
+        })
+        if (response.success && response.data?.suggestions.length) {
+          setQuickMappingPreview(response.data)
+          setQuickMappingSuggestionOpen(true)
+        }
+      } catch {
+        // Quick mappings are optional and must not interrupt model selection.
+      }
+    },
+    [currentModelMapping, form]
+  )
+
+  const handleApplyQuickMappings = useCallback(
+    (assignments: Record<string, string>) => {
+      const selectedModels = parseModelsString(form.getValues('models') || '')
+      const selectedModelKeys = new Set(
+        selectedModels.map((model) => model.toLowerCase())
+      )
+      const rawMapping = form.getValues('model_mapping') || ''
+      let nextMapping: Record<string, string> = {}
+
+      if (rawMapping.trim()) {
+        try {
+          const parsed = JSON.parse(rawMapping) as unknown
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            throw new Error('invalid model mapping')
+          }
+          for (const [source, target] of Object.entries(parsed)) {
+            if (typeof target !== 'string') {
+              throw new Error('invalid model mapping')
+            }
+            nextMapping[source] = target
+          }
+        } catch {
+          toast.error(t('Model mapping must be a valid JSON object'))
+          return
+        }
+      }
+
+      const existingMappingKeys = new Set(
+        Object.keys(nextMapping).map((model) => model.trim().toLowerCase())
+      )
+      const nextModels = [...selectedModels]
+      let appliedCount = 0
+      for (const [rawAlias, rawTarget] of Object.entries(assignments)) {
+        const alias = rawAlias.trim()
+        const target = rawTarget.trim()
+        const aliasKey = alias.toLowerCase()
+        if (
+          !alias ||
+          !target ||
+          !selectedModelKeys.has(target.toLowerCase()) ||
+          selectedModelKeys.has(aliasKey) ||
+          existingMappingKeys.has(aliasKey)
+        ) {
+          continue
+        }
+        nextModels.push(alias)
+        nextMapping[alias] = target
+        selectedModelKeys.add(aliasKey)
+        existingMappingKeys.add(aliasKey)
+        appliedCount += 1
+      }
+
+      setQuickMappingSuggestionOpen(false)
+      setQuickMappingPreview(null)
+      if (appliedCount === 0) {
+        return
+      }
+
+      form.setValue('models', formatModelsArray(nextModels), {
+        shouldDirty: true,
+        shouldValidate: true,
+      })
+      form.setValue('model_mapping', JSON.stringify(nextMapping, null, 2), {
+        shouldDirty: true,
+        shouldValidate: true,
+      })
+      toast.success(t('Selected quick mappings applied to the form'))
+    },
+    [form, t]
+  )
 
   // Handle successful submission
   const handleSuccess = useCallback(() => {
@@ -4914,9 +5017,7 @@ export function ChannelMutateDrawer({
       <FetchModelsDialog
         open={fetchModelsDialogOpen}
         onOpenChange={setFetchModelsDialogOpen}
-        onModelsSelected={(models) => {
-          form.setValue('models', formatModelsArray(models))
-        }}
+        onModelsSelected={handleModelsSelected}
         redirectModels={redirectModelList}
         redirectSourceModels={redirectModelKeyList}
         customFetcher={!isEditing ? createModeFetcher : undefined}
@@ -4926,6 +5027,16 @@ export function ChannelMutateDrawer({
             ? parseModelsString(form.getValues('models') || '')
             : undefined
         }
+      />
+
+      <ChannelQuickMappingSuggestionDialog
+        open={quickMappingSuggestionOpen}
+        suggestions={quickMappingPreview?.suggestions || []}
+        onOpenChange={(open) => {
+          setQuickMappingSuggestionOpen(open)
+          if (!open) setQuickMappingPreview(null)
+        }}
+        onApply={handleApplyQuickMappings}
       />
 
       <ChannelModelMappingPreviewDialog

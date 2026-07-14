@@ -22,6 +22,7 @@ import type { ModelSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 import { ClaudeSettingsCard } from './claude-settings-card'
 import { ChannelModelMappingRulesSection } from './channel-model-mapping-rules-section'
+import { ChannelQuickMappingRulesSection } from './channel-quick-mapping-rules-section'
 import { GeminiSettingsCard } from './gemini-settings-card'
 import { GlobalSettingsCard } from './global-settings-card'
 import { GrokSettingsCard } from './grok-settings-card'
@@ -174,6 +175,15 @@ const MODELS_SECTIONS = [
     build: (settings: ModelSettings) => (
       <ChannelModelMappingRulesSection
         defaultValue={settings['channel_model_mapping_setting.rules']}
+      />
+    ),
+  },
+  {
+    id: 'channel-quick-mapping',
+    titleKey: 'Channel Quick Mapping Rules',
+    build: (settings: ModelSettings) => (
+      <ChannelQuickMappingRulesSection
+        defaultValue={settings['channel_quick_mapping_setting.rules']}
       />
     ),
   },

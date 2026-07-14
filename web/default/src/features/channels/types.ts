@@ -247,6 +247,36 @@ export interface ChannelModelMappingPreviewResponse {
   data?: ChannelModelMappingPreview
 }
 
+export interface ChannelQuickMappingRule {
+  match_mode: ChannelModelMatchMode
+  match_value: string
+  case_sensitive: boolean
+  alias_model: string
+  enabled: boolean
+}
+
+export interface ChannelQuickMappingPreviewRequest {
+  models: string[]
+  model_mapping?: string
+}
+
+export interface ChannelQuickMappingSuggestion {
+  alias_model: string
+  match_mode: ChannelModelMatchMode
+  match_value: string
+  candidate_models: string[]
+}
+
+export interface ChannelQuickMappingPreview {
+  suggestions: ChannelQuickMappingSuggestion[]
+}
+
+export interface ChannelQuickMappingPreviewResponse {
+  success: boolean
+  message?: string
+  data?: ChannelQuickMappingPreview
+}
+
 export interface ChannelModelOverlapUpstream {
   type: number
   base_url: string

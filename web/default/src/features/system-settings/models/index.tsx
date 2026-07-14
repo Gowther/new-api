@@ -80,6 +80,7 @@ const defaultModelSettings: ModelSettings = {
   'channel_affinity_setting.default_ttl_seconds': 3600,
   'channel_affinity_setting.rules': '[]',
   'channel_model_mapping_setting.rules': '[]',
+  'channel_quick_mapping_setting.rules': '[]',
   'model_deployment.ionet.api_key': '',
   'model_deployment.ionet.enabled': false,
 }

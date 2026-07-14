@@ -28,6 +28,7 @@ import SettingGlobalModel from '../../pages/Setting/Model/SettingGlobalModel';
 import SettingGrokModel from '../../pages/Setting/Model/SettingGrokModel';
 import SettingsChannelAffinity from '../../pages/Setting/Operation/SettingsChannelAffinity';
 import SettingChannelModelMapping from '../../pages/Setting/Model/SettingChannelModelMapping';
+import SettingChannelQuickMapping from '../../pages/Setting/Model/SettingChannelQuickMapping';
 
 const ModelSetting = () => {
   const { t } = useTranslation();
@@ -50,6 +51,7 @@ const ModelSetting = () => {
     'grok.violation_deduction_enabled': true,
     'grok.violation_deduction_amount': 0.05,
     'channel_model_mapping_setting.rules': '[]',
+    'channel_quick_mapping_setting.rules': '[]',
   });
 
   let [loading, setLoading] = useState(false);
@@ -132,6 +134,14 @@ const ModelSetting = () => {
           <TabPane tab={t('渠道模型映射规则')} itemKey='channel-model-mapping'>
             <Card style={{ marginTop: '10px' }}>
               <SettingChannelModelMapping
+                options={inputs}
+                refresh={onRefresh}
+              />
+            </Card>
+          </TabPane>
+          <TabPane tab={t('渠道快捷映射规则')} itemKey='channel-quick-mapping'>
+            <Card style={{ marginTop: '10px' }}>
+              <SettingChannelQuickMapping
                 options={inputs}
                 refresh={onRefresh}
               />

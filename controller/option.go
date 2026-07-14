@@ -287,6 +287,15 @@ func UpdateOption(c *gin.Context) {
 			})
 			return
 		}
+	case model_setting.ChannelQuickMappingRulesOptionKey:
+		err = model_setting.CheckChannelQuickMappingRules(option.Value.(string))
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			return
+		}
 	case "AutomaticDisableStatusCodes":
 		_, err = operation_setting.ParseHTTPStatusCodeRanges(option.Value.(string))
 		if err != nil {

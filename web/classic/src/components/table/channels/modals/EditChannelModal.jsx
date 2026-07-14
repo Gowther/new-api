@@ -71,6 +71,7 @@ import SingleModelSelectModal from './SingleModelSelectModal';
 import OllamaModelModal from './OllamaModelModal';
 import ParamOverrideEditorModal from './ParamOverrideEditorModal';
 import ModelMappingPreviewModal from './ModelMappingPreviewModal';
+import QuickMappingSuggestionModal from './QuickMappingSuggestionModal';
 import JSONEditor from '../../../common/ui/JSONEditor';
 import SecureVerificationModal from '../../../common/modals/SecureVerificationModal';
 import StatusCodeRiskGuardModal from './StatusCodeRiskGuardModal';
@@ -410,6 +411,9 @@ const EditChannelModal = (props) => {
   const [modelMappingPreview, setModelMappingPreview] = useState(null);
   const [modelMappingPreviewLoading, setModelMappingPreviewLoading] =
     useState(false);
+  const [quickMappingSuggestionVisible, setQuickMappingSuggestionVisible] =
+    useState(false);
+  const [quickMappingSuggestions, setQuickMappingSuggestions] = useState([]);
   const [ollamaModalVisible, setOllamaModalVisible] = useState(false);
   const formApiRef = useRef(null);
   const modelDragMovedRef = useRef(false);
@@ -960,6 +964,95 @@ const EditChannelModal = (props) => {
     } finally {
       setModelMappingPreviewLoading(false);
     }
+  };
+
+  const previewQuickMappings = async (models) => {
+    setQuickMappingSuggestionVisible(false);
+    setQuickMappingSuggestions([]);
+    try {
+      const response = await API.post('/api/channel/quick_mapping/preview', {
+        models,
+        model_mapping: inputs.model_mapping || '',
+      });
+      const suggestions = response?.data?.data?.suggestions;
+      if (
+        response?.data?.success &&
+        Array.isArray(suggestions) &&
+        suggestions.length
+      ) {
+        setQuickMappingSuggestions(suggestions);
+        setQuickMappingSuggestionVisible(true);
+      }
+    } catch {
+      // Quick mappings are optional and must not interrupt model selection.
+    }
+  };
+
+  const applyQuickMappings = (assignments) => {
+    const channelModels = normalizeChannelModels(
+      inputs.models || selectedModels,
+    );
+    const channelModelKeys = new Set(
+      channelModels.map((model) => model.toLowerCase()),
+    );
+    let nextMapping = {};
+    const currentMapping = inputs.model_mapping;
+    if (typeof currentMapping === 'string' && currentMapping.trim()) {
+      try {
+        const parsed = JSON.parse(currentMapping);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          throw new Error('invalid model mapping');
+        }
+        for (const [source, target] of Object.entries(parsed)) {
+          if (typeof target !== 'string') {
+            throw new Error('invalid model mapping');
+          }
+          nextMapping[source] = target;
+        }
+      } catch {
+        showError(t('模型重定向必须是有效的 JSON 对象'));
+        return;
+      }
+    } else if (
+      currentMapping &&
+      typeof currentMapping === 'object' &&
+      !Array.isArray(currentMapping)
+    ) {
+      nextMapping = { ...currentMapping };
+    }
+
+    const existingMappingKeys = new Set(
+      Object.keys(nextMapping).map((model) => model.trim().toLowerCase()),
+    );
+    const nextModels = [...channelModels];
+    let appliedCount = 0;
+    Object.entries(assignments).forEach(([rawAlias, rawTarget]) => {
+      const alias = String(rawAlias || '').trim();
+      const target = String(rawTarget || '').trim();
+      const aliasKey = alias.toLowerCase();
+      if (
+        !alias ||
+        !target ||
+        !channelModelKeys.has(target.toLowerCase()) ||
+        channelModelKeys.has(aliasKey) ||
+        existingMappingKeys.has(aliasKey)
+      ) {
+        return;
+      }
+      nextModels.push(alias);
+      nextMapping[alias] = target;
+      channelModelKeys.add(aliasKey);
+      existingMappingKeys.add(aliasKey);
+      appliedCount += 1;
+    });
+
+    setQuickMappingSuggestionVisible(false);
+    setQuickMappingSuggestions([]);
+    if (appliedCount === 0) return;
+
+    handleInputChange('models', nextModels);
+    handleInputChange('model_mapping', JSON.stringify(nextMapping, null, 2));
+    showSuccess(t('已将所选快捷映射应用到表单'));
   };
 
   const moveModelBefore = (sourceModel, targetModel) => {
@@ -4990,16 +5083,27 @@ const EditChannelModal = (props) => {
         }}
       />
 
+      <QuickMappingSuggestionModal
+        visible={quickMappingSuggestionVisible}
+        suggestions={quickMappingSuggestions}
+        onCancel={() => {
+          setQuickMappingSuggestionVisible(false);
+          setQuickMappingSuggestions([]);
+        }}
+        onApply={applyQuickMappings}
+      />
+
       <ModelSelectModal
         visible={modelModalVisible}
         models={fetchedModels}
         selected={selectedModels}
         redirectModels={redirectModelList}
         redirectSourceModels={redirectModelKeyList}
-        onConfirm={(nextSelectedModels) => {
+        onConfirm={async (nextSelectedModels) => {
           handleInputChange('models', nextSelectedModels);
           showSuccess(t('模型列表已更新'));
           setModelModalVisible(false);
+          await previewQuickMappings(nextSelectedModels);
         }}
         onCancel={() => setModelModalVisible(false)}
       />

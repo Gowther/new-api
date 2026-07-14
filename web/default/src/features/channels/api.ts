@@ -30,6 +30,8 @@ import type {
   ChannelModelOverlapRequest,
   ChannelModelOverlapResponse,
   ChannelOpsResponse,
+  ChannelQuickMappingPreviewRequest,
+  ChannelQuickMappingPreviewResponse,
   ChannelTestResponse,
   CopyChannelParams,
   CopyChannelResponse,
@@ -148,6 +150,17 @@ export async function previewChannelModelMappings(
 ): Promise<ChannelModelMappingPreviewResponse> {
   const res = await api.post(
     '/api/channel/model_mapping/preview',
+    data,
+    channelActionConfig()
+  )
+  return res.data
+}
+
+export async function previewChannelQuickMappings(
+  data: ChannelQuickMappingPreviewRequest
+): Promise<ChannelQuickMappingPreviewResponse> {
+  const res = await api.post(
+    '/api/channel/quick_mapping/preview',
     data,
     channelActionConfig()
   )

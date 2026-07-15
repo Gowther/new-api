@@ -83,6 +83,16 @@ const CHANNEL_STATUS_META = {
   [CHANNEL_STATUS.AUTO_DISABLED]: { label: '自动禁用', color: 'orange' },
 };
 
+const ROUTING_CHANNEL_GROUP = {
+  ENABLED: 'enabled',
+  DISABLED: 'disabled',
+};
+
+const getRoutingChannelGroup = (channel) =>
+  channel.status === CHANNEL_STATUS.ENABLED
+    ? ROUTING_CHANNEL_GROUP.ENABLED
+    : ROUTING_CHANNEL_GROUP.DISABLED;
+
 const CHANNEL_TYPE_LABELS = CHANNEL_OPTIONS.reduce((acc, option) => {
   acc[option.value] = option.label;
   return acc;
@@ -503,6 +513,15 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     return sortRoutingChannels(matchedChannels, routingChanges);
   }, [channels, routingChanges, selectedModelNames]);
 
+  const routingRanks = useMemo(() => {
+    const ranks = new Map();
+    channelsForModel.forEach((channel) => {
+      if (channel.status !== CHANNEL_STATUS.ENABLED) return;
+      ranks.set(channel.id, ranks.size + 1);
+    });
+    return ranks;
+  }, [channelsForModel]);
+
   const changedCount = getChangedCount(routingChanges);
 
   useEffect(() => {
@@ -875,21 +894,26 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
       title: t('渠道'),
       dataIndex: 'name',
       width: 320,
-      render: (_, record, index) => {
+      render: (_, record) => {
         const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
         const remark = record.remark?.trim();
+        const routingRank = routingRanks.get(record.id);
+        const routeRoleIndex = routingRank === undefined ? -1 : routingRank - 1;
         const routeRoleLabel =
-          isEnabled && index < ROUTING_ROLE_LABELS.length
-            ? ROUTING_ROLE_LABELS[index]
+          routeRoleIndex >= 0 && routeRoleIndex < ROUTING_ROLE_LABELS.length
+            ? ROUTING_ROLE_LABELS[routeRoleIndex]
             : null;
+        const statusMeta =
+          CHANNEL_STATUS_META[record.status] ||
+          CHANNEL_STATUS_META[CHANNEL_STATUS.UNKNOWN];
         const nameNode = (
           <Text
             strong
             ellipsis
+            type={isEnabled ? undefined : 'tertiary'}
             style={{
               display: 'block',
               width: '100%',
-              textDecoration: isEnabled ? 'none' : 'line-through',
             }}
           >
             {record.name}
@@ -900,7 +924,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
             <div className='flex min-w-0 items-center gap-1'>
               <span className='inline-flex w-9 shrink-0'>
                 <Tag color='grey' shape='circle' size='small'>
-                  #{index + 1}
+                  {routingRank === undefined ? '—' : `#${routingRank}`}
                 </Tag>
               </span>
               <button
@@ -915,7 +939,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
               {routeRoleLabel ? (
                 <span className='inline-flex w-11 shrink-0'>
                   <Tag
-                    color={ROUTING_ROLE_COLORS[index]}
+                    color={ROUTING_ROLE_COLORS[routeRoleIndex]}
                     shape='circle'
                     size='small'
                   >
@@ -926,22 +950,29 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                 <span className='w-11 shrink-0' aria-hidden='true' />
               )}
             </div>
-            <div className='min-w-0'>
-              {remark ? (
-                <Tooltip
-                  content={
-                    <div className='max-w-xs break-words text-sm'>
-                      <LinkifiedText text={remark} />
-                    </div>
-                  }
-                  trigger='hover'
-                  position='topLeft'
-                >
-                  {nameNode}
-                </Tooltip>
-              ) : (
-                nameNode
-              )}
+            <div className='flex min-w-0 items-center gap-2'>
+              <div className='min-w-0 flex-1'>
+                {remark ? (
+                  <Tooltip
+                    content={
+                      <div className='max-w-xs break-words text-sm'>
+                        <LinkifiedText text={remark} />
+                      </div>
+                    }
+                    trigger='hover'
+                    position='topLeft'
+                  >
+                    {nameNode}
+                  </Tooltip>
+                ) : (
+                  nameNode
+                )}
+              </div>
+              {!isEnabled ? (
+                <Tag color={statusMeta.color} shape='circle' size='small'>
+                  {t(statusMeta.label)}
+                </Tag>
+              ) : null}
             </div>
           </div>
         );
@@ -1268,20 +1299,64 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                 columns={columns}
                 dataSource={channelsForModel}
                 rowKey='id'
+                groupBy={getRoutingChannelGroup}
+                expandAllGroupRows
+                clickGroupedRowToExpand={false}
+                expandIcon={() => null}
+                renderGroupSection={(groupKey, group) => {
+                  const isEnabledGroup =
+                    groupKey === ROUTING_CHANNEL_GROUP.ENABLED;
+                  return (
+                    <div className='flex items-center gap-2 py-1'>
+                      <Tag
+                        color={isEnabledGroup ? 'green' : 'orange'}
+                        shape='circle'
+                        size='small'
+                      >
+                        {t(isEnabledGroup ? '参与路由' : '不参与路由')}
+                      </Tag>
+                      <Text type='tertiary' size='small'>
+                        {group?.length || 0}
+                      </Text>
+                    </div>
+                  );
+                }}
                 pagination={false}
                 size='small'
                 scroll={{ x: 980 }}
-                onRow={(record) => ({
-                  'data-routing-channel-id': record.id,
-                  style:
-                    record.id === targetChannelId
-                      ? {
-                          background: 'var(--semi-color-warning-light-default)',
-                          boxShadow:
-                            'inset 0 0 0 1px var(--semi-color-warning)',
-                        }
-                      : undefined,
-                })}
+                onRow={(record) => {
+                  const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
+                  const isTarget = record.id === targetChannelId;
+                  let background;
+                  let accent;
+
+                  if (record.status === CHANNEL_STATUS.MANUAL_DISABLED) {
+                    background = 'var(--semi-color-danger-light-default)';
+                    accent = 'var(--semi-color-danger)';
+                  } else if (record.status === CHANNEL_STATUS.AUTO_DISABLED) {
+                    background = 'var(--semi-color-warning-light-default)';
+                    accent = 'var(--semi-color-warning)';
+                  } else if (!isEnabled) {
+                    background = 'var(--semi-color-fill-0)';
+                    accent = 'var(--semi-color-border)';
+                  }
+
+                  const boxShadow = [];
+                  if (accent) boxShadow.push(`inset 4px 0 0 ${accent}`);
+                  if (isTarget) {
+                    boxShadow.push('inset 0 0 0 1px var(--semi-color-warning)');
+                  }
+
+                  return {
+                    'data-routing-channel-id': record.id,
+                    style: {
+                      background: isTarget
+                        ? 'var(--semi-color-warning-light-default)'
+                        : background,
+                      boxShadow: boxShadow.join(', ') || undefined,
+                    },
+                  };
+                }}
               />
             )}
           </div>

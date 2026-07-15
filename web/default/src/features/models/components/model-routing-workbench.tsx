@@ -603,6 +603,17 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     return sortRoutingChannels(matchingChannels, routingChanges)
   }, [channels, routingChanges, selectedModelNames])
 
+  const routingRanks = useMemo(() => {
+    const ranks = new Map<number, number>()
+    for (const channel of channelsForModel) {
+      if (channel.status !== CHANNEL_STATUS.ENABLED) continue
+      ranks.set(channel.id, ranks.size + 1)
+    }
+    return ranks
+  }, [channelsForModel])
+  const enabledChannelCount = routingRanks.size
+  const disabledChannelCount = channelsForModel.length - enabledChannelCount
+
   const isLoading = pricingQuery.isLoading || channelsQuery.isLoading
   const isFetching = pricingQuery.isFetching || channelsQuery.isFetching
   const changedCount = getChangedCount(routingChanges)
@@ -1266,14 +1277,35 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {channelsForModel.map((channel, index) => {
+                  {enabledChannelCount > 0 ? (
+                    <TableRow className='bg-muted/20 hover:bg-muted/20'>
+                      <TableCell colSpan={6} className='py-2'>
+                        <div className='flex items-center gap-2'>
+                          <StatusBadge
+                            label={t('Participating in routing')}
+                            variant='success'
+                            size='sm'
+                            copyable={false}
+                          />
+                          <span className='text-muted-foreground text-xs tabular-nums'>
+                            {enabledChannelCount}
+                          </span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                  {channelsForModel.flatMap((channel, index) => {
                     const isEnabled = channel.status === CHANNEL_STATUS.ENABLED
                     const isStatusUpdating = Boolean(
                       statusUpdatingIds[channel.id]
                     )
+                    const routingRank = routingRanks.get(channel.id)
+                    const routeRoleIndex =
+                      routingRank === undefined ? -1 : routingRank - 1
                     const routeRoleLabelKey =
-                      isEnabled && index < ROUTING_ROLE_LABEL_KEYS.length
-                        ? ROUTING_ROLE_LABEL_KEYS[index]
+                      routeRoleIndex >= 0 &&
+                      routeRoleIndex < ROUTING_ROLE_LABEL_KEYS.length
+                        ? ROUTING_ROLE_LABEL_KEYS[routeRoleIndex]
                         : null
                     const statusConfig =
                       CHANNEL_STATUS_CONFIG[
@@ -1284,22 +1316,70 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                         channel.type as keyof typeof CHANNEL_TYPES
                       ] ?? CHANNEL_TYPES[0]
                     const channelRemark = channel.remark?.trim()
+                    const isFirstDisabled =
+                      !isEnabled && index === enabledChannelCount
 
-                    return (
+                    return [
+                      ...(isFirstDisabled
+                        ? [
+                            <TableRow
+                              key='disabled-routing-channels'
+                              className='bg-muted/40 hover:bg-muted/40'
+                            >
+                              <TableCell colSpan={6} className='py-2'>
+                                <div className='flex items-center gap-2'>
+                                  <StatusBadge
+                                    label={t('Not participating in routing')}
+                                    variant='warning'
+                                    size='sm'
+                                    copyable={false}
+                                  />
+                                  <span className='text-muted-foreground text-xs tabular-nums'>
+                                    {disabledChannelCount}
+                                  </span>
+                                </div>
+                              </TableCell>
+                            </TableRow>,
+                          ]
+                        : []),
                       <TableRow
                         key={channel.id}
                         id={`routing-channel-${channel.id}`}
                         className={cn(
-                          !isEnabled && 'bg-muted/30 opacity-75',
+                          channel.status === CHANNEL_STATUS.MANUAL_DISABLED &&
+                            'bg-destructive/5 hover:bg-destructive/10',
+                          channel.status === CHANNEL_STATUS.AUTO_DISABLED &&
+                            'bg-warning/5 hover:bg-warning/10',
+                          !isEnabled &&
+                            channel.status !== CHANNEL_STATUS.MANUAL_DISABLED &&
+                            channel.status !== CHANNEL_STATUS.AUTO_DISABLED &&
+                            'bg-muted/40 hover:bg-muted/50',
                           props.targetChannelId === channel.id &&
-                            'bg-amber-50 ring-1 ring-inset ring-amber-300 dark:bg-amber-950/20'
+                            'bg-warning/10 ring-warning/40 ring-1 ring-inset'
                         )}
                       >
-                        <TableCell className='w-80 max-w-80'>
+                        <TableCell
+                          className={cn(
+                            'w-80 max-w-80 border-l-4 border-l-transparent',
+                            channel.status === CHANNEL_STATUS.MANUAL_DISABLED &&
+                              'border-l-destructive',
+                            channel.status === CHANNEL_STATUS.AUTO_DISABLED &&
+                              'border-l-warning',
+                            !isEnabled &&
+                              channel.status !==
+                                CHANNEL_STATUS.MANUAL_DISABLED &&
+                              channel.status !== CHANNEL_STATUS.AUTO_DISABLED &&
+                              'border-l-border'
+                          )}
+                        >
                           <div className='grid min-w-0 grid-cols-[9.5rem_minmax(0,1fr)] items-center gap-2'>
                             <div className='flex min-w-0 items-center gap-1'>
                               <StatusBadge
-                                label={`#${index + 1}`}
+                                label={
+                                  routingRank === undefined
+                                    ? '—'
+                                    : `#${routingRank}`
+                                }
                                 variant='neutral'
                                 size='sm'
                                 copyable={false}
@@ -1317,7 +1397,9 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                               {routeRoleLabelKey ? (
                                 <StatusBadge
                                   label={t(routeRoleLabelKey)}
-                                  variant={ROUTING_ROLE_VARIANTS[index]}
+                                  variant={
+                                    ROUTING_ROLE_VARIANTS[routeRoleIndex]
+                                  }
                                   size='sm'
                                   copyable={false}
                                   className='w-12 justify-center'
@@ -1326,40 +1408,52 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                                 <span className='w-12' aria-hidden='true' />
                               )}
                             </div>
-                            <div className='min-w-0'>
-                              {channelRemark ? (
-                                <TooltipProvider delay={200}>
-                                  <Tooltip>
-                                    <TooltipTrigger
-                                      render={
-                                        <div
-                                          className={cn(
-                                            'block min-w-0 truncate font-medium cursor-help',
-                                            !isEnabled && 'line-through'
-                                          )}
-                                        />
-                                      }
-                                    >
-                                      {channel.name}
-                                    </TooltipTrigger>
-                                    <TooltipContent
-                                      side='top'
-                                      className='max-w-xs items-start text-left break-words'
-                                    >
-                                      <LinkifiedText text={channelRemark} />
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              ) : (
-                                <div
-                                  className={cn(
-                                    'min-w-0 truncate font-medium',
-                                    !isEnabled && 'line-through'
-                                  )}
-                                >
-                                  {channel.name}
-                                </div>
-                              )}
+                            <div className='flex min-w-0 items-center gap-2'>
+                              <div className='min-w-0 flex-1'>
+                                {channelRemark ? (
+                                  <TooltipProvider delay={200}>
+                                    <Tooltip>
+                                      <TooltipTrigger
+                                        render={
+                                          <div
+                                            className={cn(
+                                              'block min-w-0 truncate font-medium cursor-help',
+                                              !isEnabled &&
+                                                'text-muted-foreground'
+                                            )}
+                                          />
+                                        }
+                                      >
+                                        {channel.name}
+                                      </TooltipTrigger>
+                                      <TooltipContent
+                                        side='top'
+                                        className='max-w-xs items-start text-left break-words'
+                                      >
+                                        <LinkifiedText text={channelRemark} />
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                ) : (
+                                  <div
+                                    className={cn(
+                                      'min-w-0 truncate font-medium',
+                                      !isEnabled && 'text-muted-foreground'
+                                    )}
+                                  >
+                                    {channel.name}
+                                  </div>
+                                )}
+                              </div>
+                              {!isEnabled ? (
+                                <StatusBadge
+                                  label={t(statusConfig.label)}
+                                  variant={statusConfig.variant}
+                                  size='sm'
+                                  copyable={false}
+                                  className='shrink-0'
+                                />
+                              ) : null}
                             </div>
                           </div>
                         </TableCell>
@@ -1477,8 +1571,8 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                             />
                           </div>
                         </TableCell>
-                      </TableRow>
-                    )
+                      </TableRow>,
+                    ]
                   })}
                 </TableBody>
               </Table>

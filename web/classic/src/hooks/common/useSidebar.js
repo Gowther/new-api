@@ -80,7 +80,7 @@ export const mergeAdminConfig = (savedConfig) => {
   return merged;
 };
 
-export const useSidebar = () => {
+export const useSidebar = ({ enabled = true } = {}) => {
   const [statusState] = useContext(StatusContext);
   const [userConfig, setUserConfig] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -171,6 +171,8 @@ export const useSidebar = () => {
 
   // 刷新用户配置的方法（供外部调用）
   const refreshUserConfig = async () => {
+    if (!enabled) return;
+
     if (Object.keys(adminConfig).length > 0) {
       await loadUserConfig({ withLoading: false });
     }
@@ -185,14 +187,22 @@ export const useSidebar = () => {
 
   // 加载用户配置
   useEffect(() => {
+    if (!enabled) {
+      setUserConfig(null);
+      setLoading(false);
+      return;
+    }
+
     // 只有当管理员配置加载完成后才加载用户配置
     if (Object.keys(adminConfig).length > 0) {
       loadUserConfig();
     }
-  }, [adminConfig]);
+  }, [adminConfig, enabled]);
 
   // 监听全局刷新事件
   useEffect(() => {
+    if (!enabled) return;
+
     const handleRefresh = (event) => {
       if (event?.detail?.sourceId === instanceIdRef.current) {
         return;
@@ -213,7 +223,7 @@ export const useSidebar = () => {
         handleRefresh,
       );
     };
-  }, [adminConfig]);
+  }, [adminConfig, enabled]);
 
   // 计算最终的显示配置
   const finalConfig = useMemo(() => {

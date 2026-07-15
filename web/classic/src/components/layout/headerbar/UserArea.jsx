@@ -28,6 +28,7 @@ import {
   IconKey,
 } from '@douyinfe/semi-icons';
 import { stringToColor } from '../../../helpers';
+import { useSidebar } from '../../../hooks/common/useSidebar';
 import SkeletonWrapper from '../components/SkeletonWrapper';
 
 const UserArea = ({
@@ -40,6 +41,9 @@ const UserArea = ({
   t,
 }) => {
   const dropdownRef = useRef(null);
+  const { isModuleVisible } = useSidebar({ enabled: Boolean(userState.user) });
+  const isWalletVisible = isModuleVisible('personal', 'topup');
+
   if (isLoading) {
     return (
       <SkeletonWrapper
@@ -87,20 +91,22 @@ const UserArea = ({
                   <span>{t('令牌管理')}</span>
                 </div>
               </Dropdown.Item>
-              <Dropdown.Item
-                onClick={() => {
-                  navigate('/console/topup');
-                }}
-                className='!px-3 !py-1.5 !text-sm !text-semi-color-text-0 hover:!bg-semi-color-fill-1 dark:!text-gray-200 dark:hover:!bg-blue-500 dark:hover:!text-white'
-              >
-                <div className='flex items-center gap-2'>
-                  <IconCreditCard
-                    size='small'
-                    className='text-gray-500 dark:text-gray-400'
-                  />
-                  <span>{t('钱包管理')}</span>
-                </div>
-              </Dropdown.Item>
+              {isWalletVisible ? (
+                <Dropdown.Item
+                  onClick={() => {
+                    navigate('/console/topup');
+                  }}
+                  className='!px-3 !py-1.5 !text-sm !text-semi-color-text-0 hover:!bg-semi-color-fill-1 dark:!text-gray-200 dark:hover:!bg-blue-500 dark:hover:!text-white'
+                >
+                  <div className='flex items-center gap-2'>
+                    <IconCreditCard
+                      size='small'
+                      className='text-gray-500 dark:text-gray-400'
+                    />
+                    <span>{t('钱包管理')}</span>
+                  </div>
+                </Dropdown.Item>
+              ) : null}
               <Dropdown.Item
                 onClick={logout}
                 className='!px-3 !py-1.5 !text-sm !text-semi-color-text-0 hover:!bg-semi-color-fill-1 dark:!text-gray-200 dark:hover:!bg-red-500 dark:hover:!text-white'

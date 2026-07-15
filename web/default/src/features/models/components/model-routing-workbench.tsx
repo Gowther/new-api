@@ -63,6 +63,7 @@ import {
 } from '@/components/ui/tooltip'
 import {
   deleteChannel,
+  getChannelModelVendorGroups,
   getChannels,
   updateChannel,
   updateChannelStatus,
@@ -77,7 +78,10 @@ import {
   SUCCESS_MESSAGES,
 } from '@/features/channels/constants'
 import { channelsQueryKeys, handleTestChannel } from '@/features/channels/lib'
-import type { Channel } from '@/features/channels/types'
+import type {
+  Channel,
+  ChannelModelVendorGroup,
+} from '@/features/channels/types'
 import { getPricing } from '@/features/pricing/api'
 import type { PricingModel, PricingVendor } from '@/features/pricing/types'
 import {
@@ -93,6 +97,7 @@ const ROUTING_PAGE_SIZE = 100
 const UNASSIGNED_PROVIDER_KEY = '__unassigned__'
 const EMPTY_PRICING_MODELS: PricingModel[] = []
 const EMPTY_PRICING_VENDORS: PricingVendor[] = []
+const EMPTY_MODEL_VENDOR_GROUPS: ChannelModelVendorGroup[] = []
 const ROUTING_ROLE_LABEL_KEYS = ['Primary', 'Backup', 'Fallback'] as const
 const ROUTING_ROLE_VARIANTS = ['green', 'blue', 'amber'] as const
 const ROUTING_DEFAULT_SELECTION_KEY = 'model-routing-default-selection'
@@ -119,6 +124,26 @@ type RoutingChanges = Record<number, RoutingChange>
 
 type PricingRoutingData = {
   models: PricingModel[]
+  vendors: PricingVendor[]
+}
+
+type RoutingModel = {
+  model_name: string
+  icon?: string
+  vendor_id?: number
+  vendor_name?: string
+  vendor_icon?: string
+  vendor_description?: string
+  channelCount: number
+}
+
+type RoutingChannelsData = {
+  channels: Channel[]
+  modelVendorGroups: ChannelModelVendorGroup[]
+}
+
+type RoutingCatalog = {
+  models: RoutingModel[]
   vendors: PricingVendor[]
 }
 
@@ -154,7 +179,7 @@ async function fetchPricingRoutingData(): Promise<PricingRoutingData> {
   }
 }
 
-async function fetchAllChannels(): Promise<Channel[]> {
+async function fetchAllChannels(): Promise<RoutingChannelsData> {
   const channels: Channel[] = []
   let page = 1
   let hasMore = true
@@ -177,7 +202,21 @@ async function fetchAllChannels(): Promise<Channel[]> {
     page += 1
   }
 
-  return sortRoutingChannels(channels, {})
+  const modelNames = getChannelModelNames(channels)
+  let modelVendorGroups: ChannelModelVendorGroup[] = []
+  if (modelNames.length > 0) {
+    try {
+      const response = await getChannelModelVendorGroups(modelNames)
+      if (response.success) {
+        modelVendorGroups = response.data ?? []
+      }
+    } catch {}
+  }
+
+  return {
+    channels: sortRoutingChannels(channels, {}),
+    modelVendorGroups,
+  }
 }
 
 function splitCsv(value?: string | null): string[] {
@@ -188,12 +227,12 @@ function splitCsv(value?: string | null): string[] {
     .filter(Boolean)
 }
 
-function getProviderKey(model: Pick<PricingModel, 'vendor_id'>): string {
+function getProviderKey(model: Pick<RoutingModel, 'vendor_id'>): string {
   return model.vendor_id ? String(model.vendor_id) : UNASSIGNED_PROVIDER_KEY
 }
 
 function getRoutingSelectionFromModel(
-  model: PricingModel
+  model: RoutingModel
 ): StoredRoutingSelection {
   return {
     providerKey: getProviderKey(model),
@@ -290,9 +329,9 @@ function writeStoredProviderKey(key: string, providerKey: string) {
 }
 
 function findModelForSelection(
-  models: PricingModel[],
+  models: RoutingModel[],
   selection: StoredRoutingSelection | null
-): PricingModel | null {
+): RoutingModel | null {
   if (!selection) return null
   return (
     models.find(
@@ -304,10 +343,10 @@ function findModelForSelection(
 }
 
 function findProviderDefaultModel(
-  models: PricingModel[],
+  models: RoutingModel[],
   providerDefaults: StoredProviderDefaultSelections,
   providerKey: string | null
-): PricingModel | null {
+): RoutingModel | null {
   if (!providerKey) return null
   const modelName = providerDefaults[providerKey]
   if (!modelName) return null
@@ -315,9 +354,9 @@ function findProviderDefaultModel(
 }
 
 function findFirstModelForProvider(
-  models: PricingModel[],
+  models: RoutingModel[],
   providerKey: string | null
-): PricingModel | null {
+): RoutingModel | null {
   if (!providerKey) return null
   return (
     models
@@ -327,8 +366,8 @@ function findFirstModelForProvider(
 }
 
 function findPreferredDefaultModel(
-  models: PricingModel[]
-): PricingModel | null {
+  models: RoutingModel[]
+): RoutingModel | null {
   return (
     models.find(
       (model) =>
@@ -339,7 +378,7 @@ function findPreferredDefaultModel(
 }
 
 function resolveInitialRoutingSelection(
-  models: PricingModel[],
+  models: RoutingModel[],
   providerDefaults: StoredProviderDefaultSelections
 ): StoredRoutingSelection | null {
   const lastProviderKey = readStoredProviderKey(ROUTING_LAST_PROVIDER_KEY)
@@ -386,7 +425,7 @@ function isSameProviderDefaultSelection(
   return providerDefaults[selection.providerKey] === selection.modelName
 }
 
-function getRoutingModelNames(model: PricingModel | null): string[] {
+function getRoutingModelNames(model: RoutingModel | null): string[] {
   return model ? [model.model_name] : []
 }
 
@@ -398,6 +437,86 @@ function channelSupportsModel(channel: Channel, modelNames: string[]): boolean {
   if (modelNames.length === 0) return false
   const channelModels = new Set(splitCsv(channel.models))
   return modelNames.some((modelName) => channelModels.has(modelName))
+}
+
+function getChannelModelNames(channels: Channel[]): string[] {
+  const modelNames = new Set<string>()
+  for (const channel of channels) {
+    for (const modelName of splitCsv(channel.models)) {
+      modelNames.add(modelName)
+    }
+  }
+  return [...modelNames]
+}
+
+function buildRoutingCatalog(
+  pricingModels: PricingModel[],
+  pricingVendors: PricingVendor[],
+  channels: Channel[],
+  modelVendorGroups: ChannelModelVendorGroup[]
+): RoutingCatalog {
+  const vendorsById = new Map<number, PricingVendor>()
+  for (const vendor of pricingVendors) {
+    vendorsById.set(vendor.id, vendor)
+  }
+  for (const group of modelVendorGroups) {
+    if (group.vendor_id <= 0 || vendorsById.has(group.vendor_id)) continue
+    vendorsById.set(group.vendor_id, {
+      id: group.vendor_id,
+      name: group.vendor_name,
+    })
+  }
+
+  const vendorIdByModel = new Map<string, number>()
+  for (const group of modelVendorGroups) {
+    if (group.vendor_id <= 0) continue
+    for (const modelName of group.models) {
+      vendorIdByModel.set(modelName, group.vendor_id)
+    }
+  }
+
+  const channelCountByModel = new Map<string, number>()
+  for (const channel of channels) {
+    const channelModels = new Set(splitCsv(channel.models))
+    for (const modelName of channelModels) {
+      channelCountByModel.set(
+        modelName,
+        (channelCountByModel.get(modelName) ?? 0) + 1
+      )
+    }
+  }
+
+  const modelsByName = new Map<string, RoutingModel>()
+  for (const model of pricingModels) {
+    modelsByName.set(model.model_name, {
+      model_name: model.model_name,
+      icon: model.icon,
+      vendor_id: model.vendor_id,
+      vendor_name: model.vendor_name,
+      vendor_icon: model.vendor_icon,
+      vendor_description: model.vendor_description,
+      channelCount: channelCountByModel.get(model.model_name) ?? 0,
+    })
+  }
+
+  for (const [modelName, channelCount] of channelCountByModel) {
+    if (modelsByName.has(modelName)) continue
+    const vendorId = vendorIdByModel.get(modelName)
+    const vendor = vendorId ? vendorsById.get(vendorId) : undefined
+    modelsByName.set(modelName, {
+      model_name: modelName,
+      vendor_id: vendorId,
+      vendor_name: vendor?.name,
+      vendor_icon: vendor?.icon,
+      vendor_description: vendor?.description,
+      channelCount,
+    })
+  }
+
+  return {
+    models: [...modelsByName.values()],
+    vendors: [...vendorsById.values()],
+  }
 }
 
 function getFieldValue(
@@ -486,8 +605,23 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     staleTime: 30 * 1000,
   })
 
-  const vendors = pricingQuery.data?.vendors ?? EMPTY_PRICING_VENDORS
-  const models = pricingQuery.data?.models ?? EMPTY_PRICING_MODELS
+  const pricingModels = pricingQuery.data?.models ?? EMPTY_PRICING_MODELS
+  const pricingVendors = pricingQuery.data?.vendors ?? EMPTY_PRICING_VENDORS
+  const modelVendorGroups =
+    channelsQuery.data?.modelVendorGroups ?? EMPTY_MODEL_VENDOR_GROUPS
+
+  const routingCatalog = useMemo(
+    () =>
+      buildRoutingCatalog(
+        pricingModels,
+        pricingVendors,
+        channels,
+        modelVendorGroups
+      ),
+    [channels, modelVendorGroups, pricingModels, pricingVendors]
+  )
+  const models = routingCatalog.models
+  const vendors = routingCatalog.vendors
 
   const targetRoutingSelection = useMemo(() => {
     if (!props.targetModelName) return null
@@ -499,7 +633,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
 
   useEffect(() => {
     if (channelsQuery.data) {
-      setChannels(channelsQuery.data)
+      setChannels(channelsQuery.data.channels)
       setRoutingChanges({})
     }
   }, [channelsQuery.data])
@@ -1214,7 +1348,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                       </span>
                     </span>
                     <span className='text-muted-foreground shrink-0 text-xs tabular-nums'>
-                      {model.bound_channels?.length ?? 0}
+                      {model.channelCount}
                     </span>
                   </button>
                 ))}

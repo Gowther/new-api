@@ -61,7 +61,6 @@ const ChannelsActions = ({
   activePage,
   pageSize,
   setActivePage,
-  setShowModelPriority,
   t,
 }) => {
   const dropdownRef = useRef(null);
@@ -109,15 +108,6 @@ const ChannelsActions = ({
             className='w-full md:w-auto'
           >
             {t('批量设置标签')}
-          </Button>
-
-          <Button
-            size='small'
-            type='tertiary'
-            onClick={() => setShowModelPriority(true)}
-            className='w-full md:w-auto'
-          >
-            {t('模型优先级管理')}
           </Button>
 
           <Button

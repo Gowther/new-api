@@ -29,7 +29,6 @@ import {
   SortAsc,
   RefreshCw,
   ArrowUpFromLine,
-  ListTree,
   SearchCheck,
 } from 'lucide-react'
 import { useState } from 'react'
@@ -61,13 +60,13 @@ import {
 } from '@/lib/admin-permissions'
 import { useAuthStore } from '@/stores/auth-store'
 
+import { checkChannelModelOverlap } from '../api'
 import {
   handleDeleteAllDisabled,
   handleFixAbilities,
   handleTestAllChannels,
   handleUpdateAllBalances,
 } from '../lib'
-import { checkChannelModelOverlap } from '../api'
 import type { ChannelModelOverlapItem } from '../types'
 import { useChannels } from './channels-provider'
 import { ModelOverlapDialog } from './dialogs/model-overlap-dialog'
@@ -198,17 +197,6 @@ export function ChannelsPrimaryButtons() {
             </TooltipContent>
           )}
         </Tooltip>
-
-        {/* Model Priority Management */}
-        <Button
-          variant='outline'
-          size='sm'
-          onClick={() => setOpen('model-priority')}
-        >
-          <ListTree className='h-4 w-4' />
-          <span className='max-sm:hidden'>{t('Model Priority Management')}</span>
-          <span className='sm:hidden'>{t('Priority')}</span>
-        </Button>
 
         {/* More Actions */}
         <DropdownMenu>

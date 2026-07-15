@@ -111,6 +111,12 @@ export interface ChannelOtherSettings {
   advanced_custom?: AdvancedCustomConfig
 }
 
+export interface ChannelModelVendorGroup {
+  vendor_id: number
+  vendor_name: string
+  models: string[]
+}
+
 export interface AdvancedCustomConfig {
   advanced_routes?: AdvancedCustomRoute[]
 }
@@ -177,6 +183,12 @@ export interface ChannelOpsResponse {
   data?: {
     retry_times: number
   }
+}
+
+export interface ChannelModelVendorGroupsResponse {
+  success: boolean
+  message?: string
+  data?: ChannelModelVendorGroup[]
 }
 
 export interface ChannelTestResponse {

@@ -29,6 +29,7 @@ import type {
   ChannelModelMappingPreviewResponse,
   ChannelModelOverlapRequest,
   ChannelModelOverlapResponse,
+  ChannelModelVendorGroupsResponse,
   ChannelOpsResponse,
   ChannelQuickMappingPreviewRequest,
   ChannelQuickMappingPreviewResponse,
@@ -129,6 +130,17 @@ export async function checkChannelModelOverlap(
   const res = await api.post(
     '/api/channel/model_overlap',
     data,
+    channelActionConfig()
+  )
+  return res.data
+}
+
+export async function getChannelModelVendorGroups(
+  models: string[]
+): Promise<ChannelModelVendorGroupsResponse> {
+  const res = await api.post(
+    '/api/channel/model_vendor_groups',
+    { models },
     channelActionConfig()
   )
   return res.data

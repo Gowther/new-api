@@ -284,6 +284,82 @@ const channelSupportsModel = (channel, modelNames) => {
   return modelNames.some((modelName) => channelModels.has(modelName));
 };
 
+const getChannelModelNames = (channels) => {
+  const modelNames = new Set();
+  channels.forEach((channel) => {
+    splitCsv(channel.models).forEach((modelName) => modelNames.add(modelName));
+  });
+  return Array.from(modelNames);
+};
+
+const buildRoutingCatalog = (
+  pricingModels,
+  pricingVendors,
+  channels,
+  modelVendorGroups,
+) => {
+  const vendorsById = new Map();
+  pricingVendors.forEach((vendor) => vendorsById.set(vendor.id, vendor));
+  modelVendorGroups.forEach((group) => {
+    if (group.vendor_id <= 0 || vendorsById.has(group.vendor_id)) return;
+    vendorsById.set(group.vendor_id, {
+      id: group.vendor_id,
+      name: group.vendor_name,
+    });
+  });
+
+  const vendorIdByModel = new Map();
+  modelVendorGroups.forEach((group) => {
+    if (group.vendor_id <= 0) return;
+    group.models.forEach((modelName) => {
+      vendorIdByModel.set(modelName, group.vendor_id);
+    });
+  });
+
+  const channelCountByModel = new Map();
+  channels.forEach((channel) => {
+    const channelModels = new Set(splitCsv(channel.models));
+    channelModels.forEach((modelName) => {
+      channelCountByModel.set(
+        modelName,
+        (channelCountByModel.get(modelName) || 0) + 1,
+      );
+    });
+  });
+
+  const modelsByName = new Map();
+  pricingModels.forEach((model) => {
+    modelsByName.set(model.model_name, {
+      model_name: model.model_name,
+      icon: model.icon,
+      vendor_id: model.vendor_id,
+      vendor_name: model.vendor_name,
+      vendor_icon: model.vendor_icon,
+      vendor_description: model.vendor_description,
+      channelCount: channelCountByModel.get(model.model_name) || 0,
+    });
+  });
+
+  channelCountByModel.forEach((channelCount, modelName) => {
+    if (modelsByName.has(modelName)) return;
+    const vendorId = vendorIdByModel.get(modelName);
+    const vendor = vendorId ? vendorsById.get(vendorId) : null;
+    modelsByName.set(modelName, {
+      model_name: modelName,
+      vendor_id: vendorId,
+      vendor_name: vendor?.name,
+      vendor_icon: vendor?.icon,
+      vendor_description: vendor?.description,
+      channelCount,
+    });
+  });
+
+  return {
+    models: Array.from(modelsByName.values()),
+    vendors: Array.from(vendorsById.values()),
+  };
+};
+
 const getFieldValue = (channel, changes, field) => {
   const changedValue = changes[channel.id]?.[field];
   if (changedValue !== undefined) return changedValue;
@@ -360,7 +436,23 @@ const fetchAllChannels = async () => {
     page += 1;
   }
 
-  return sortRoutingChannels(channels);
+  const modelNames = getChannelModelNames(channels);
+  let modelVendorGroups = [];
+  if (modelNames.length > 0) {
+    try {
+      const res = await API.post('/api/channel/model_vendor_groups', {
+        models: modelNames,
+      });
+      if (res?.data?.success) {
+        modelVendorGroups = res.data.data || [];
+      }
+    } catch {}
+  }
+
+  return {
+    channels: sortRoutingChannels(channels),
+    modelVendorGroups,
+  };
 };
 
 const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
@@ -387,13 +479,19 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   const loadRoutingData = useCallback(async () => {
     setLoading(true);
     try {
-      const [pricingData, channelItems] = await Promise.all([
+      const [pricingData, channelData] = await Promise.all([
         fetchPricingRoutingData(),
         fetchAllChannels(),
       ]);
-      setVendors(pricingData.vendors);
-      setModels(pricingData.models);
-      setChannels(channelItems);
+      const routingCatalog = buildRoutingCatalog(
+        pricingData.models,
+        pricingData.vendors,
+        channelData.channels,
+        channelData.modelVendorGroups,
+      );
+      setVendors(routingCatalog.vendors);
+      setModels(routingCatalog.models);
+      setChannels(channelData.channels);
       setRoutingChanges({});
     } catch (error) {
       showError(error.message || t('加载模型路由失败'));
@@ -1246,7 +1344,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                         <Text ellipsis>{model.model_name}</Text>
                       </div>
                       <Tag color='grey' shape='circle' size='small'>
-                        {model.bound_channels?.length || 0}
+                        {model.channelCount}
                       </Tag>
                     </div>
                   </List.Item>
@@ -1302,7 +1400,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                 groupBy={getRoutingChannelGroup}
                 expandAllGroupRows
                 clickGroupedRowToExpand={false}
-                expandIcon={() => null}
+                expandIcon={() => <span aria-hidden='true' />}
                 renderGroupSection={(groupKey, group) => {
                   const isEnabledGroup =
                     groupKey === ROUTING_CHANNEL_GROUP.ENABLED;

@@ -19,11 +19,14 @@ For commercial licensing, please contact support@quantumnous.com
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
+import { Comment01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { CircleAlert, GitBranch, Sparkles, KeyRound } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { CopyButton } from '@/components/copy-button'
+import { LinkifiedText } from '@/components/linkified-text'
 import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
@@ -388,6 +391,8 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             : `#${log.channel}`
           const channelIdDisplay = `#${log.channel}`
           const channelName = sensitiveVisible ? log.channel_name : '••••'
+          const showChannelRemark =
+            sensitiveVisible && Boolean(log.channel_remark?.trim())
           const multiKeyIndex = other?.admin_info?.multi_key_index
           const showMultiKeyIndex =
             other?.admin_info?.is_multi_key === true &&
@@ -421,6 +426,19 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                         iconClassName='size-3'
                       />
                     </span>
+                    {showChannelRemark && (
+                      <span
+                        className='text-muted-foreground inline-flex size-5 shrink-0 cursor-help items-center justify-center'
+                        aria-label={t('Remark')}
+                      >
+                        <HugeiconsIcon
+                          icon={Comment01Icon}
+                          strokeWidth={2}
+                          className='size-3.5'
+                          aria-hidden='true'
+                        />
+                      </span>
+                    )}
                     {showMultiKeyIndex && (
                       <StatusBadge
                         label={String(multiKeyIndex)}
@@ -491,7 +509,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                     </span>
                   )}
                 </TooltipTrigger>
-                <TooltipContent>
+                <TooltipContent className='max-w-xs'>
                   <div className='space-y-1'>
                     <p>
                       {sensitiveVisible ? channelDisplay : channelIdDisplay}
@@ -505,6 +523,15 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                       <p className='text-muted-foreground text-xs'>
                         {t('Key')}: {multiKeyIndex}
                       </p>
+                    )}
+                    {showChannelRemark && (
+                      <div className='border-t pt-1 text-xs'>
+                        <p className='font-medium'>{t('Remark')}</p>
+                        <LinkifiedText
+                          text={log.channel_remark}
+                          className='text-muted-foreground'
+                        />
+                      </div>
                     )}
                     {affinity && (
                       <div className='border-t pt-1 text-xs'>

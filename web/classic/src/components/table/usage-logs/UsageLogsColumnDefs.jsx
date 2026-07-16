@@ -36,8 +36,13 @@ import {
   renderModelPriceSimple,
   renderTieredModelPriceSimple,
 } from '../../../helpers';
-import { IconCopy, IconHelpCircle } from '@douyinfe/semi-icons';
+import {
+  IconCommentStroked,
+  IconCopy,
+  IconHelpCircle,
+} from '@douyinfe/semi-icons';
 import { CircleAlert, Route, Sparkles } from 'lucide-react';
+import { LinkifiedText } from '../../common/LinkifiedText';
 
 const colors = [
   'amber',
@@ -559,7 +564,7 @@ export const getLogsColumns = ({
           <Space>
             <span style={{ position: 'relative', display: 'inline-block' }}>
               <Tooltip content={record.channel_name || t('未知渠道')}>
-                <span>
+                <span style={{ display: 'inline-flex', alignItems: 'center' }}>
                   <Tag
                     color={colors[parseInt(text) % colors.length]}
                     shape='circle'
@@ -577,6 +582,40 @@ export const getLogsColumns = ({
                   />
                 </span>
               </Tooltip>
+              {record.channel_remark && (
+                <Tooltip
+                  content={
+                    <div
+                      style={{
+                        maxWidth: 320,
+                        lineHeight: 1.6,
+                        wordBreak: 'break-word',
+                      }}
+                    >
+                      <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                        {record.channel_name || t('未知渠道')}
+                      </div>
+                      <LinkifiedText text={record.channel_remark} />
+                    </div>
+                  }
+                  trigger='hover'
+                  position='topLeft'
+                >
+                  <span
+                    aria-label={t('备注')}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      marginLeft: 2,
+                      color: 'var(--semi-color-text-2)',
+                      cursor: 'help',
+                    }}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <IconCommentStroked size='small' />
+                  </span>
+                </Tooltip>
+              )}
               {showMarker && (
                 <Tooltip
                   content={

@@ -77,6 +77,7 @@ type Log struct {
 	IsStream          bool   `json:"is_stream"`
 	ChannelId         int    `json:"channel" gorm:"index"`
 	ChannelName       string `json:"channel_name" gorm:"->"`
+	ChannelRemark     string `json:"channel_remark" gorm:"->"`
 	TokenId           int    `json:"token_id" gorm:"default:0;index"`
 	Group             string `json:"group" gorm:"index"`
 	Ip                string `json:"ip" gorm:"index;default:''"`
@@ -565,35 +566,39 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 	}
 
 	if channelIds.Len() > 0 {
-		var channels []struct {
-			Id   int    `gorm:"column:id"`
-			Name string `gorm:"column:name"`
+		type channelLogDisplay struct {
+			Id     int     `gorm:"column:id"`
+			Name   string  `gorm:"column:name"`
+			Remark *string `gorm:"column:remark"`
 		}
+		var channels []channelLogDisplay
 		if common.MemoryCacheEnabled {
 			// Cache get channel
 			for _, channelId := range channelIds.Items() {
 				if cacheChannel, err := CacheGetChannel(channelId); err == nil {
-					channels = append(channels, struct {
-						Id   int    `gorm:"column:id"`
-						Name string `gorm:"column:name"`
-					}{
-						Id:   channelId,
-						Name: cacheChannel.Name,
+					channels = append(channels, channelLogDisplay{
+						Id:     channelId,
+						Name:   cacheChannel.Name,
+						Remark: cacheChannel.Remark,
 					})
 				}
 			}
 		} else {
 			// Bulk query channels from DB
-			if err = DB.Table("channels").Select("id, name").Where("id IN ?", channelIds.Items()).Find(&channels).Error; err != nil {
+			if err = DB.Table("channels").Select("id, name, remark").Where("id IN ?", channelIds.Items()).Find(&channels).Error; err != nil {
 				return logs, total, err
 			}
 		}
-		channelMap := make(map[int]string, len(channels))
+		channelMap := make(map[int]channelLogDisplay, len(channels))
 		for _, channel := range channels {
-			channelMap[channel.Id] = channel.Name
+			channelMap[channel.Id] = channel
 		}
 		for i := range logs {
-			logs[i].ChannelName = channelMap[logs[i].ChannelId]
+			channel := channelMap[logs[i].ChannelId]
+			logs[i].ChannelName = channel.Name
+			if channel.Remark != nil {
+				logs[i].ChannelRemark = *channel.Remark
+			}
 		}
 	}
 

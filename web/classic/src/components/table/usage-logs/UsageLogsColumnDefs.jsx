@@ -770,6 +770,7 @@ export const getLogsColumns = ({
       key: COLUMN_KEYS.MODEL,
       title: t('模型'),
       dataIndex: 'model_name',
+      width: 250,
       render: (text, record, index) => {
         return record.type === 0 ||
           record.type === 2 ||

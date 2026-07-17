@@ -874,6 +874,73 @@ html.dark .with-pastel-balls::before {
   overflow-y: auto;
 }
 
+/* Usage logs: keep the sticky header flush with the filters and cells bounded. */
+.usage-logs-card > .semi-card-header {
+  padding-bottom: 0 !important;
+}
+
+.usage-logs-card > .semi-card-body {
+  padding-top: 0 !important;
+}
+
+.usage-logs-table .semi-table-header-sticky {
+  background-color: var(--semi-color-bg-1);
+  box-shadow: 0 1px 0 var(--semi-color-border);
+}
+
+.usage-logs-table .semi-table-row-cell {
+  overflow: hidden;
+}
+
+.usage-logs-table-compact .semi-table-header > .semi-table,
+.usage-logs-table-compact .semi-table-body > .semi-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.usage-log-inline-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.usage-log-tag-wrapper {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.usage-log-cell-action {
+  flex: 0 0 auto;
+}
+
+.usage-logs-table-compact .usage-log-inline-cell {
+  display: flex;
+  width: 100%;
+  overflow: hidden;
+}
+
+.usage-logs-table-compact .usage-log-tag-wrapper {
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.usage-logs-table-compact .usage-log-tag-wrapper .semi-tag {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.usage-log-timing-cell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .table-scroll-card .semi-card-body::-webkit-scrollbar {
   width: 6px;
 }

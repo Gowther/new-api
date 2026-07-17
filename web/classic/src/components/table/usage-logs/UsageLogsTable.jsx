@@ -105,7 +105,7 @@ const LogsTable = (logsData) => {
       loading={loading}
       sticky
       scroll={compactMode ? undefined : { x: 'max-content' }}
-      className='rounded-xl overflow-hidden'
+      className='rounded-xl overflow-clip'
       size='small'
       empty={
         <Empty

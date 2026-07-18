@@ -279,8 +279,7 @@ function CopyTextButton({ text, copyText, t }) {
       theme='borderless'
       type='tertiary'
       aria-label={t('复制')}
-      className='usage-log-cell-action'
-      style={{ height: 22, minWidth: 22, padding: 2, flexShrink: 0 }}
+      style={{ height: 22, minWidth: 22, padding: 2 }}
       onClick={(event) => {
         copyText(event, text);
       }}
@@ -296,57 +295,53 @@ function renderModelName(record, copyText, applyColumnFilter, t) {
     other?.upstream_model_name !== '';
   if (!modelMapped) {
     return (
-      <div className='usage-log-inline-cell'>
-        <Tooltip content={record.model_name}>
-          <span className='usage-log-tag-wrapper'>
-            {renderModelTag(record.model_name, {
-              onClick: (event) => {
-                event.stopPropagation();
-                applyColumnFilter?.('model_name', record.model_name);
-              },
-            })}
-          </span>
-        </Tooltip>
+      <Space spacing={4}>
+        {renderModelTag(record.model_name, {
+          onClick: (event) => {
+            event.stopPropagation();
+            applyColumnFilter?.('model_name', record.model_name);
+          },
+        })}
         <CopyTextButton text={record.model_name} copyText={copyText} t={t} />
-      </div>
+      </Space>
     );
   } else {
     return (
-      <div className='usage-log-inline-cell'>
-        <Popover
-          content={
-            <div style={{ padding: 10 }}>
-              <Space vertical align={'start'}>
-                <div className='flex items-center'>
-                  <Typography.Text strong style={{ marginRight: 8 }}>
-                    {t('请求并计费模型')}:
-                  </Typography.Text>
-                  {renderModelTag(record.model_name, {
-                    onClick: (event) => {
-                      event.stopPropagation();
-                      applyColumnFilter?.('model_name', record.model_name);
-                    },
-                  })}
-                </div>
-                <div className='flex items-center'>
-                  <Typography.Text strong style={{ marginRight: 8 }}>
-                    {t('实际模型')}:
-                  </Typography.Text>
-                  {renderModelTag(other.upstream_model_name, {
-                    onClick: (event) => {
-                      event.stopPropagation();
-                      applyColumnFilter?.(
-                        'model_name',
-                        other.upstream_model_name,
-                      );
-                    },
-                  })}
-                </div>
-              </Space>
-            </div>
-          }
-        >
-          <span className='usage-log-tag-wrapper'>
+      <>
+        <Space vertical align={'start'}>
+          <Popover
+            content={
+              <div style={{ padding: 10 }}>
+                <Space vertical align={'start'}>
+                  <div className='flex items-center'>
+                    <Typography.Text strong style={{ marginRight: 8 }}>
+                      {t('请求并计费模型')}:
+                    </Typography.Text>
+                    {renderModelTag(record.model_name, {
+                      onClick: (event) => {
+                        event.stopPropagation();
+                        applyColumnFilter?.('model_name', record.model_name);
+                      },
+                    })}
+                  </div>
+                  <div className='flex items-center'>
+                    <Typography.Text strong style={{ marginRight: 8 }}>
+                      {t('实际模型')}:
+                    </Typography.Text>
+                    {renderModelTag(other.upstream_model_name, {
+                      onClick: (event) => {
+                        event.stopPropagation();
+                        applyColumnFilter?.(
+                          'model_name',
+                          other.upstream_model_name,
+                        );
+                      },
+                    })}
+                  </div>
+                </Space>
+              </div>
+            }
+          >
             {renderModelTag(record.model_name, {
               onClick: (event) => {
                 event.stopPropagation();
@@ -358,10 +353,14 @@ function renderModelName(record, copyText, applyColumnFilter, t) {
                 />
               ),
             })}
-          </span>
-        </Popover>
-        <CopyTextButton text={record.model_name} copyText={copyText} t={t} />
-      </div>
+            <CopyTextButton
+              text={record.model_name}
+              copyText={copyText}
+              t={t}
+            />
+          </Popover>
+        </Space>
+      </>
     );
   }
 }
@@ -699,21 +698,18 @@ export const getLogsColumns = ({
           record.type === 2 ||
           record.type === 5 ||
           record.type === 6 ? (
-          <div className='usage-log-inline-cell'>
-            <Tooltip content={text}>
-              <span className='usage-log-tag-wrapper'>
-                <Tag
-                  color='grey'
-                  shape='circle'
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    applyColumnFilter?.('token_name', text);
-                  }}
-                >
-                  {t(text)}
-                </Tag>
-              </span>
-            </Tooltip>
+          <div>
+            <Tag
+              color='grey'
+              shape='circle'
+              onClick={(event) => {
+                event.stopPropagation();
+                applyColumnFilter?.('token_name', text);
+              }}
+            >
+              {' '}
+              {t(text)}{' '}
+            </Tag>
             <CopyTextButton text={text} copyText={copyText} t={t} />
           </div>
         ) : (
@@ -770,7 +766,6 @@ export const getLogsColumns = ({
       key: COLUMN_KEYS.MODEL,
       title: t('模型'),
       dataIndex: 'model_name',
-      width: 250,
       render: (text, record, index) => {
         return record.type === 0 ||
           record.type === 2 ||
@@ -793,18 +788,22 @@ export const getLogsColumns = ({
         if (record.is_stream) {
           let other = getLogOther(record.other);
           return (
-            <div className='usage-log-timing-cell'>
-              {renderUseTime(text, t)}
-              {renderFirstUseTime(other?.frt, t)}
-              {renderIsStream(record.is_stream, t, other?.stream_status)}
-            </div>
+            <>
+              <Space>
+                {renderUseTime(text, t)}
+                {renderFirstUseTime(other?.frt, t)}
+                {renderIsStream(record.is_stream, t, other?.stream_status)}
+              </Space>
+            </>
           );
         } else {
           return (
-            <div className='usage-log-timing-cell'>
-              {renderUseTime(text, t)}
-              {renderIsStream(record.is_stream, t)}
-            </div>
+            <>
+              <Space>
+                {renderUseTime(text, t)}
+                {renderIsStream(record.is_stream, t)}
+              </Space>
+            </>
           );
         }
       },

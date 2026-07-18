@@ -18,16 +18,9 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import {
-  Tag,
-  Space,
-  Skeleton,
-  Select,
-  Typography,
-  Radio,
-  RadioGroup,
-} from '@douyinfe/semi-ui';
+import { Tag, Space, Skeleton, Select, Typography } from '@douyinfe/semi-ui';
 import { renderQuota } from '../../../helpers';
+import CompactModeToggle from '../../common/ui/CompactModeToggle';
 import { useMinimumLoadingTime } from '../../../hooks/common/useMinimumLoadingTime';
 
 const compactNumberFormatter = new Intl.NumberFormat('en', {
@@ -110,8 +103,8 @@ const LogsActions = ({
         </Space>
       </Skeleton>
 
-      <div className='flex flex-wrap items-center gap-2'>
-        <div className='flex items-center gap-1'>
+      <Space>
+        <Space spacing={4}>
           <Typography.Text size='small' type='secondary'>
             {t('自动刷新')}
           </Typography.Text>
@@ -127,20 +120,13 @@ const LogsActions = ({
             <Select.Option value='30'>30s</Select.Option>
             <Select.Option value='60'>60s</Select.Option>
           </Select>
-        </div>
-        <RadioGroup
-          type='button'
-          size='small'
-          value={compactMode ? 'compact' : 'adaptive'}
-          aria-label={`${t('紧凑列表')} / ${t('自适应列表')}`}
-          onChange={(event) => {
-            setCompactMode(event.target.value === 'compact');
-          }}
-        >
-          <Radio value='compact'>{t('紧凑列表')}</Radio>
-          <Radio value='adaptive'>{t('自适应列表')}</Radio>
-        </RadioGroup>
-      </div>
+        </Space>
+        <CompactModeToggle
+          compactMode={compactMode}
+          setCompactMode={setCompactMode}
+          t={t}
+        />
+      </Space>
     </div>
   );
 };

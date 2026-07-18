@@ -893,9 +893,11 @@ html.dark .with-pastel-balls::before {
 
 /* ==================== 使用日志表格：固定表头 ==================== */
 /* 表格横向溢出改为由卡片 body 统一滚动（.semi-table-body 自身不再滚动），
-   表头相对卡片 body 吸附；表头与表体仍是同一个 table，列宽天然对齐 */
+   表头相对卡片 body 吸附；表头与表体仍是同一个 table，列宽天然对齐。
+   !important 用于覆盖固定列模式下 Semi 内联设置的 overflow: auto 和 transform */
 .usage-logs-sticky-table .semi-table-body {
-  overflow: visible;
+  overflow: visible !important;
+  transform: none !important;
 }
 
 .usage-logs-sticky-table
@@ -905,6 +907,7 @@ html.dark .with-pastel-balls::before {
   position: sticky;
   top: -20px; /* 抵消 .semi-card-body 的 20px 上内边距，吸附时与卡片顶部齐平 */
   z-index: 102;
+  padding-top: 12px; /* 吸附时给表头文字与上方分界线留出间距 */
 }
 
 .usage-logs-sticky-table

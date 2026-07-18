@@ -104,7 +104,7 @@ const LogsTable = (logsData) => {
       rowKey='key'
       loading={loading}
       scroll={compactMode ? undefined : { x: 'max-content' }}
-      className='rounded-xl overflow-hidden'
+      className='usage-logs-sticky-table rounded-xl'
       size='small'
       empty={
         <Empty

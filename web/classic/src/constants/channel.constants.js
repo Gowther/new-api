@@ -194,6 +194,11 @@ export const CHANNEL_OPTIONS = [
     color: 'purple',
     label: 'Advanced Custom',
   },
+  {
+    value: 59,
+    color: 'blue',
+    label: 'Sub2API',
+  },
 ];
 
 // Channel types that support upstream model list fetching in UI.

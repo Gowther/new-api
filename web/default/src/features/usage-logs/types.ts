@@ -92,6 +92,12 @@ export interface ChannelAffinityInfo {
   using_group?: string
 }
 
+export interface ToolSurchargeItem {
+  name: string
+  count: number
+  price: number
+}
+
 export interface LogOtherData {
   admin_info?: {
     is_multi_key?: boolean
@@ -183,6 +189,7 @@ export interface LogOtherData {
   file_search?: boolean
   file_search_call_count?: number
   file_search_price?: number
+  tool_surcharges?: ToolSurchargeItem[]
   audio_input_seperate_price?: boolean
   audio_input_token_count?: number
   audio_input_price?: number

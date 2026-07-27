@@ -785,6 +785,16 @@ export const getLogsColumns = ({
         if (!(record.type === 2 || record.type === 5)) {
           return <></>;
         }
+        const tokensPerSecond =
+          text > 0 && record.completion_tokens > 0
+            ? Math.round(record.completion_tokens / text)
+            : null;
+        const throughputTag =
+          tokensPerSecond !== null ? (
+            <Tag color='white' shape='circle'>
+              {tokensPerSecond} t/s
+            </Tag>
+          ) : null;
         if (record.is_stream) {
           let other = getLogOther(record.other);
           return (
@@ -792,6 +802,7 @@ export const getLogsColumns = ({
               <Space>
                 {renderUseTime(text, t)}
                 {renderFirstUseTime(other?.frt, t)}
+                {throughputTag}
                 {renderIsStream(record.is_stream, t, other?.stream_status)}
               </Space>
             </>
@@ -801,6 +812,7 @@ export const getLogsColumns = ({
             <>
               <Space>
                 {renderUseTime(text, t)}
+                {throughputTag}
                 {renderIsStream(record.is_stream, t)}
               </Space>
             </>

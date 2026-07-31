@@ -30,15 +30,15 @@ import {
   Space,
   Spin,
   Tag,
+  Tooltip,
   Typography,
 } from '@douyinfe/semi-ui';
-import { IconExternalOpen, IconRefresh } from '@douyinfe/semi-icons';
 import {
-  API,
-  showError,
-  showSuccess,
-  timestamp2string,
-} from '../../helpers';
+  IconExternalOpen,
+  IconHelpCircle,
+  IconRefresh,
+} from '@douyinfe/semi-icons';
+import { API, showError, showSuccess, timestamp2string } from '../../helpers';
 
 const DEFAULT_SUMMARY = {
   items: [],
@@ -89,6 +89,94 @@ function formatErrorRate(rate) {
   return `${(rate * 100).toFixed(rate < 0.01 ? 1 : 0)}%`;
 }
 
+function ErrorMetricHelp({ children, description, className = '', showIcon }) {
+  return (
+    <Tooltip
+      content={
+        <div style={{ maxWidth: 360, lineHeight: 1.6 }}>{description}</div>
+      }
+      position='top'
+      showArrow
+    >
+      <span
+        className={`inline-flex min-w-0 cursor-help items-center gap-1 ${className}`}
+      >
+        {children}
+        {showIcon === false ? null : (
+          <IconHelpCircle className='shrink-0 text-gray-400' />
+        )}
+        <span className='sr-only'>: {description}</span>
+      </span>
+    </Tooltip>
+  );
+}
+
+function RouteErrorRateHelp({ children, errors, attempts, rate, className }) {
+  const { t } = useTranslation();
+  const description = t(
+    'Route error rate = error attempts / total route attempts for the same channel, model, and group in the selected time range. This route has {{errors}} error attempts out of {{attempts}} total attempts ({{rate}}). It includes all error fingerprints on the route.',
+    { errors, attempts, rate },
+  );
+  return (
+    <ErrorMetricHelp description={description} className={className}>
+      {children}
+    </ErrorMetricHelp>
+  );
+}
+
+function ErrorIdentityValue({ value, compact, mono, className = '' }) {
+  const valueClassName = `${mono ? 'font-mono ' : ''}${className}`;
+  if (!compact) {
+    return (
+      <span className={`min-w-0 break-all ${valueClassName}`}>{value}</span>
+    );
+  }
+  return (
+    <Tooltip content={value} position='topLeft' showArrow>
+      <span className={`min-w-0 truncate ${valueClassName}`}>{value}</span>
+    </Tooltip>
+  );
+}
+
+function ErrorRouteIdentity({ record, compact, t }) {
+  return (
+    <dl className={`grid min-w-0 gap-1.5 ${compact ? 'text-xs' : 'text-sm'}`}>
+      <div className='grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] items-baseline gap-2'>
+        <dt className='text-gray-500'>{t('模型')}</dt>
+        <dd className='min-w-0 font-medium'>
+          <ErrorIdentityValue
+            value={record.model_name || '-'}
+            compact={compact}
+            mono
+          />
+        </dd>
+      </div>
+      <div className='grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] items-baseline gap-2'>
+        <dt className='text-gray-500'>{t('渠道')}</dt>
+        <dd className='flex min-w-0 items-baseline gap-1.5 font-medium'>
+          <ErrorIdentityValue
+            value={record.channel_name || t('未知渠道')}
+            compact={compact}
+          />
+          <span className='shrink-0 font-mono text-xs text-gray-500'>
+            #{record.channel || '-'}
+          </span>
+        </dd>
+      </div>
+      <div className='grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] items-baseline gap-2'>
+        <dt className='text-gray-500'>{t('分组')}</dt>
+        <dd className='min-w-0 font-medium'>
+          <ErrorIdentityValue
+            value={record.group || '-'}
+            compact={compact}
+            mono
+          />
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
 function renderSeverity(severity, t) {
   const meta = {
     critical: { color: 'red', text: t('严重') },
@@ -97,9 +185,16 @@ function renderSeverity(severity, t) {
     low: { color: 'grey', text: t('低') },
   }[severity] || { color: 'grey', text: t('低') };
   return (
-    <Tag color={meta.color} shape='circle'>
-      {meta.text}
-    </Tag>
+    <ErrorMetricHelp
+      description={t(
+        'Severity uses channel status, HTTP status, route error rate, route attempts, and cluster error-log count. Critical requires an enabled channel with at least 5 attempts and at least 50% errors; high covers enabled-channel authentication, server, or at least 20% route errors; medium covers HTTP errors or at least 3 logs; otherwise severity is low.',
+      )}
+      showIcon={false}
+    >
+      <Tag color={meta.color} shape='circle'>
+        {meta.text}
+      </Tag>
+    </ErrorMetricHelp>
   );
 }
 
@@ -111,9 +206,15 @@ function renderTrend(trend, t) {
     stable: t('稳定'),
   };
   return (
-    <span className='text-xs text-gray-500'>
+    <ErrorMetricHelp
+      description={t(
+        "Trend compares this cluster's error-log count in the newer half of the selected time range with the older half. New means only the newer half has errors; rising or falling requires a meaningful change; otherwise it is stable.",
+      )}
+      showIcon={false}
+      className='text-xs text-gray-500'
+    >
       {labels[trend] || labels.stable}
-    </span>
+    </ErrorMetricHelp>
   );
 }
 
@@ -177,7 +278,15 @@ function ErrorClusterList({ items, selectedKey, loading, onSelect, t }) {
   return (
     <section className='flex min-h-[520px] min-w-0 flex-col rounded border border-solid border-gray-200 bg-white'>
       <div className='flex items-center justify-between border-b border-solid border-gray-200 px-3 py-2'>
-        <Typography.Text strong>{t('故障簇')}</Typography.Text>
+        <Typography.Text strong>
+          <ErrorMetricHelp
+            description={t(
+              'A fault cluster groups error logs by model, group, channel, and a normalized error fingerprint. The visible list is ranked by severity and capped by the fault cluster limit.',
+            )}
+          >
+            {t('故障簇')}
+          </ErrorMetricHelp>
+        </Typography.Text>
         <Typography.Text type='tertiary' size='small'>
           {items.length}
         </Typography.Text>
@@ -223,29 +332,47 @@ function ErrorClusterList({ items, selectedKey, loading, onSelect, t }) {
                         >
                           {record.error_summary || t('无错误内容')}
                         </Typography.Text>
-                        <Typography.Text
-                          type='tertiary'
-                          size='small'
-                          ellipsis={{ showTooltip: true }}
-                          style={{ display: 'block', marginTop: 5 }}
-                        >
-                          {record.model_name || '-'} · {record.group || '-'} ·{' '}
-                          {record.channel_name || `#${record.channel || '-'}`}
-                        </Typography.Text>
+                        <div className='mt-2'>
+                          <ErrorRouteIdentity record={record} compact t={t} />
+                        </div>
                       </div>
                       <div className='shrink-0 text-right'>
-                        <div className='text-lg font-semibold tabular-nums'>
-                          {formatErrorRate(record.route_error_rate)}
-                        </div>
-                        <Typography.Text type='tertiary' size='small'>
-                          {t('错误率')}
-                        </Typography.Text>
+                        <RouteErrorRateHelp
+                          errors={record.route_error_count}
+                          attempts={record.route_attempt_count}
+                          rate={formatErrorRate(record.route_error_rate)}
+                          className='flex-col items-end gap-0'
+                        >
+                          <span className='text-lg font-semibold tabular-nums'>
+                            {formatErrorRate(record.route_error_rate)}
+                          </span>
+                          <Typography.Text type='tertiary' size='small'>
+                            {t('Route error rate')}
+                          </Typography.Text>
+                        </RouteErrorRateHelp>
                       </div>
                     </div>
-                    <div className='mt-2 flex items-center justify-between gap-2 text-xs text-gray-500'>
-                      <span>
-                        {t('受影响请求')}: {record.affected_requests}
-                      </span>
+                    <div className='mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500'>
+                      <div className='flex flex-wrap items-center gap-x-3 gap-y-1'>
+                        <ErrorMetricHelp
+                          description={t(
+                            'Cluster error logs counts error-log rows with this exact fingerprint in the selected time range. Retries can produce more than one row for a request.',
+                          )}
+                        >
+                          <span>
+                            {t('Cluster error logs')}: {record.count}
+                          </span>
+                        </ErrorMetricHelp>
+                        <ErrorMetricHelp
+                          description={t(
+                            'Affected requests counts distinct failed requests in this fault cluster. It deduplicates by request ID, then upstream request ID, and falls back to log ID. It is not used to calculate route error rate.',
+                          )}
+                        >
+                          <span>
+                            {t('受影响请求')}: {record.affected_requests}
+                          </span>
+                        </ErrorMetricHelp>
+                      </div>
                       <span>{renderTime(record.last_seen)}</span>
                     </div>
                   </div>
@@ -283,9 +410,11 @@ function ErrorClusterDetails({
       >
         <div className='min-w-0'>
           <Space spacing={4} wrap>
-            <Typography.Text strong ellipsis={{ showTooltip: true }}>
-              {peer.channel_name || t('未知渠道')}
-            </Typography.Text>
+            <ErrorIdentityValue
+              value={peer.channel_name || t('未知渠道')}
+              compact
+              className='max-w-64 text-sm font-medium'
+            />
             <Typography.Text type='tertiary' size='small'>
               #{peer.channel}
             </Typography.Text>
@@ -293,12 +422,25 @@ function ErrorClusterDetails({
             {renderChannelStatus(peer.channel_status, t)}
           </Space>
           <div className='mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500'>
-            <span>
-              {t('错误率')} {formatErrorRate(peer.recent_error_rate)}
-            </span>
-            <span>
-              {t('请求次数')} {peer.recent_attempt_count || 0}
-            </span>
+            <RouteErrorRateHelp
+              errors={peer.recent_error_count}
+              attempts={peer.recent_attempt_count}
+              rate={formatErrorRate(peer.recent_error_rate)}
+            >
+              <span>
+                {t('Route error rate')}{' '}
+                {formatErrorRate(peer.recent_error_rate)}
+              </span>
+            </RouteErrorRateHelp>
+            <ErrorMetricHelp
+              description={t(
+                'Route attempts count successful consume logs plus error logs for the same channel, model, and group in the selected time range. They are log attempts, not distinct requests.',
+              )}
+            >
+              <span>
+                {t('Route attempts')} {peer.recent_attempt_count || 0}
+              </span>
+            </ErrorMetricHelp>
             <span>
               {t('优先级')} {peer.channel_priority || 0}
             </span>
@@ -338,9 +480,16 @@ function ErrorClusterDetails({
           >
             {record.error_summary || t('无错误内容')}
           </Typography.Title>
-          <Typography.Text type='tertiary' size='small' className='font-mono'>
-            {record.fingerprint}
-          </Typography.Text>
+          <div className='flex min-w-0 items-center gap-2 text-xs text-gray-500'>
+            <ErrorMetricHelp
+              description={t(
+                'The fingerprint is derived from error type, error code, HTTP status, and normalized error text. Changing request IDs, URLs, UUIDs, and long tokens are removed before grouping.',
+              )}
+            >
+              {t('Fingerprint')}
+            </ErrorMetricHelp>
+            <ErrorIdentityValue value={record.fingerprint} compact mono />
+          </div>
         </div>
         <Space spacing={6} wrap>
           <Button
@@ -364,21 +513,61 @@ function ErrorClusterDetails({
 
       <div className='min-h-0 flex-1 overflow-y-auto'>
         <div className='space-y-5 p-4'>
-          <div className='grid gap-2 sm:grid-cols-2 xl:grid-cols-4'>
+          <div className='grid gap-2 sm:grid-cols-2 xl:grid-cols-5'>
             {[
-              [t('错误率'), formatErrorRate(record.route_error_rate)],
-              [t('受影响请求'), record.affected_requests],
-              [t('受影响用户'), record.affected_users],
-              [t('请求次数'), record.route_attempt_count],
-            ].map(([label, value]) => (
+              {
+                label: t('Route error rate'),
+                value: formatErrorRate(record.route_error_rate),
+                description: t(
+                  'Route error rate = error attempts / total route attempts for the same channel, model, and group in the selected time range. This route has {{errors}} error attempts out of {{attempts}} total attempts ({{rate}}). It includes all error fingerprints on the route.',
+                  {
+                    errors: record.route_error_count,
+                    attempts: record.route_attempt_count,
+                    rate: formatErrorRate(record.route_error_rate),
+                  },
+                ),
+              },
+              {
+                label: t('Cluster error logs'),
+                value: record.count,
+                description: t(
+                  'Cluster error logs counts error-log rows with this exact fingerprint in the selected time range. Retries can produce more than one row for a request.',
+                ),
+              },
+              {
+                label: t('受影响请求'),
+                value: record.affected_requests,
+                description: t(
+                  'Affected requests counts distinct failed requests in this fault cluster. It deduplicates by request ID, then upstream request ID, and falls back to log ID. It is not used to calculate route error rate.',
+                ),
+              },
+              {
+                label: t('受影响用户'),
+                value: record.affected_users,
+                description: t(
+                  "Affected users counts distinct non-zero user IDs found in this fault cluster's error logs.",
+                ),
+              },
+              {
+                label: t('Route attempts'),
+                value: record.route_attempt_count,
+                description: t(
+                  'Route attempts count successful consume logs plus error logs for the same channel, model, and group in the selected time range. They are log attempts, not distinct requests.',
+                ),
+              },
+            ].map((metric) => (
               <div
-                key={label}
+                key={metric.label}
                 className='rounded border border-solid border-gray-100 bg-gray-50 px-3 py-2'
               >
                 <Typography.Text type='tertiary' size='small'>
-                  {label}
+                  <ErrorMetricHelp description={metric.description}>
+                    {metric.label}
+                  </ErrorMetricHelp>
                 </Typography.Text>
-                <div className='mt-1 font-semibold tabular-nums'>{value}</div>
+                <div className='mt-1 font-semibold tabular-nums'>
+                  {metric.value}
+                </div>
               </div>
             ))}
           </div>
@@ -388,13 +577,9 @@ function ErrorClusterDetails({
               <Typography.Text type='tertiary' size='small'>
                 {t('路由')}
               </Typography.Text>
-              <div className='mt-1 break-all font-mono'>
-                {record.model_name || '-'}
+              <div className='mt-1'>
+                <ErrorRouteIdentity record={record} t={t} />
               </div>
-              <Typography.Text type='tertiary' size='small'>
-                {record.group || '-'} · {record.channel_name || t('未知渠道')} #
-                {record.channel || '-'}
-              </Typography.Text>
             </div>
             <div>
               <Typography.Text type='tertiary' size='small'>
@@ -469,7 +654,15 @@ function ErrorClusterDetails({
 
           <div className='border-t border-solid border-gray-200 pt-4'>
             <div className='mb-2 flex items-center justify-between gap-2'>
-              <Typography.Text strong>{t('路由对比')}</Typography.Text>
+              <Typography.Text strong>
+                <ErrorMetricHelp
+                  description={t(
+                    'Peer channels are channels available for the same model and group. Their route error rates and attempt counts use the same selected time range.',
+                  )}
+                >
+                  {t('路由对比')}
+                </ErrorMetricHelp>
+              </Typography.Text>
               <Typography.Text type='tertiary' size='small'>
                 {record.peer_channels?.length || 0}
               </Typography.Text>
@@ -505,8 +698,18 @@ export default function ErrorWorkbench() {
         t('错误日志'),
         summary.total_logs,
         summary.truncated ? t('仅聚合最近扫描记录') : t('已覆盖当前筛选范围'),
+        t(
+          'Error logs is the total number of matching error-log rows in the selected time range. If scanning is truncated, this total still covers all matches while fault clusters use only the latest scanned rows.',
+        ),
       ],
-      [t('故障簇'), summary.items.length, t('按稳定错误指纹聚合')],
+      [
+        t('故障簇'),
+        summary.items.length,
+        t('按稳定错误指纹聚合'),
+        t(
+          'A fault cluster groups error logs by model, group, channel, and a normalized error fingerprint. The visible list is ranked by severity and capped by the fault cluster limit.',
+        ),
+      ],
       [
         t('受影响请求'),
         summary.items.reduce(
@@ -514,11 +717,17 @@ export default function ErrorWorkbench() {
           0,
         ),
         t('当前可见故障簇'),
+        t(
+          "Visible affected requests is the sum of each visible fault cluster's distinct failed-request count. The same request can be counted more than once if it appears in multiple clusters.",
+        ),
       ],
       [
         t('紧急故障簇'),
         getUrgentClusterCount(summary.items),
         t('高和严重等级'),
+        t(
+          'Urgent clusters are visible clusters classified as high or critical by channel status, HTTP status, route error rate, route attempts, and cluster error-log count.',
+        ),
       ],
     ],
     [summary, t],
@@ -642,12 +851,16 @@ export default function ErrorWorkbench() {
           </div>
 
           <div className='grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4'>
-            {statCards.map(([label, value, hint]) => (
+            {statCards.map(([label, value, hint, description]) => (
               <div
                 key={label}
                 className='rounded border border-solid border-gray-200 bg-gray-50 p-4'
               >
-                <Typography.Text type='tertiary'>{label}</Typography.Text>
+                <Typography.Text type='tertiary'>
+                  <ErrorMetricHelp description={description}>
+                    {label}
+                  </ErrorMetricHelp>
+                </Typography.Text>
                 <div className='mt-1 text-2xl font-semibold tabular-nums'>
                   {value}
                 </div>
@@ -679,7 +892,13 @@ export default function ErrorWorkbench() {
             </div>
             <div style={{ width: 120 }}>
               <Typography.Text type='tertiary' size='small'>
-                {t('数量')}
+                <ErrorMetricHelp
+                  description={t(
+                    'Limit controls how many fault clusters are returned after severity ranking. It does not limit the route attempts used to calculate each route error rate.',
+                  )}
+                >
+                  {t('Fault cluster limit')}
+                </ErrorMetricHelp>
               </Typography.Text>
               <InputNumber
                 value={filters.limit}

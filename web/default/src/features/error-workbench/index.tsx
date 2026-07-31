@@ -29,13 +29,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import { testChannel as testChannelRequest } from '@/features/channels/api'
+import { useDebounce } from '@/hooks'
 import { api } from '@/lib/api'
 import { formatTimestampToDate } from '@/lib/format'
-import { useDebounce } from '@/hooks'
-import { testChannel as testChannelRequest } from '@/features/channels/api'
 
 import { ErrorClusterDetails } from './components/error-cluster-details'
 import { ErrorClusterList } from './components/error-cluster-list'
+import { ErrorMetricHelp } from './components/error-metric-help'
 import {
   DEFAULT_FILTERS,
   EMPTY_SUMMARY,
@@ -59,7 +60,7 @@ async function getErrorSummary(filters: ErrorWorkbenchFilters) {
     {
       params: buildSummaryParams(filters),
       disableDuplicate: true,
-    },
+    }
   )
   if (!response.data.success) {
     throw new Error(response.data.message || 'Failed to load error summary')
@@ -76,11 +77,11 @@ export function ErrorWorkbench() {
   const debouncedLimit = useDebounce(filters.limit, FILTER_INPUT_DEBOUNCE_MS)
   const debouncedModelName = useDebounce(
     filters.modelName,
-    FILTER_INPUT_DEBOUNCE_MS,
+    FILTER_INPUT_DEBOUNCE_MS
   )
   const debouncedChannel = useDebounce(
     filters.channel,
-    FILTER_INPUT_DEBOUNCE_MS,
+    FILTER_INPUT_DEBOUNCE_MS
   )
   const debouncedGroup = useDebounce(filters.group, FILTER_INPUT_DEBOUNCE_MS)
 
@@ -106,7 +107,7 @@ export function ErrorWorkbench() {
     mutationFn: async (input: { channelId: number; modelName: string }) => {
       const response = await testChannelRequest(
         input.channelId,
-        input.modelName ? { model: input.modelName } : undefined,
+        input.modelName ? { model: input.modelName } : undefined
       )
       if (!response.success) {
         throw new Error(response.message || t('Channel test failed'))
@@ -122,7 +123,7 @@ export function ErrorWorkbench() {
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error ? error.message : t('Channel test failed'),
+        error instanceof Error ? error.message : t('Channel test failed')
       )
     },
     onSettled: () => {
@@ -132,7 +133,7 @@ export function ErrorWorkbench() {
 
   const setFilterValue = (
     key: keyof ErrorWorkbenchFilters,
-    value: string | number,
+    value: string | number
   ) => {
     setFilters((previous) => ({ ...previous, [key]: value }))
   }
@@ -179,7 +180,13 @@ export function ErrorWorkbench() {
           <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
             <div className='rounded-lg border px-4 py-3'>
               <div className='text-muted-foreground text-xs'>
-                {t('Error logs')}
+                <ErrorMetricHelp
+                  description={t(
+                    'Error logs is the total number of matching error-log rows in the selected time range. If scanning is truncated, this total still covers all matches while fault clusters use only the latest scanned rows.'
+                  )}
+                >
+                  {t('Error logs')}
+                </ErrorMetricHelp>
               </div>
               <div className='mt-1 text-2xl font-semibold tabular-nums'>
                 {summary.total_logs.toLocaleString()}
@@ -192,7 +199,13 @@ export function ErrorWorkbench() {
             </div>
             <div className='rounded-lg border px-4 py-3'>
               <div className='text-muted-foreground text-xs'>
-                {t('Fault clusters')}
+                <ErrorMetricHelp
+                  description={t(
+                    'A fault cluster groups error logs by model, group, channel, and a normalized error fingerprint. The visible list is ranked by severity and capped by the fault cluster limit.'
+                  )}
+                >
+                  {t('Fault clusters')}
+                </ErrorMetricHelp>
               </div>
               <div className='mt-1 text-2xl font-semibold tabular-nums'>
                 {summary.items.length.toLocaleString()}
@@ -203,7 +216,13 @@ export function ErrorWorkbench() {
             </div>
             <div className='rounded-lg border px-4 py-3'>
               <div className='text-muted-foreground text-xs'>
-                {t('Affected requests')}
+                <ErrorMetricHelp
+                  description={t(
+                    "Visible affected requests is the sum of each visible fault cluster's distinct failed-request count. The same request can be counted more than once if it appears in multiple clusters."
+                  )}
+                >
+                  {t('Affected requests')}
+                </ErrorMetricHelp>
               </div>
               <div className='mt-1 text-2xl font-semibold tabular-nums'>
                 {getVisibleAffectedRequests(summary.items).toLocaleString()}
@@ -214,7 +233,13 @@ export function ErrorWorkbench() {
             </div>
             <div className='rounded-lg border px-4 py-3'>
               <div className='text-muted-foreground text-xs'>
-                {t('Urgent clusters')}
+                <ErrorMetricHelp
+                  description={t(
+                    'Urgent clusters are visible clusters classified as high or critical by channel status, HTTP status, route error rate, route attempts, and cluster error-log count.'
+                  )}
+                >
+                  {t('Urgent clusters')}
+                </ErrorMetricHelp>
               </div>
               <div className='mt-1 text-2xl font-semibold tabular-nums'>
                 {getUrgentClusterCount(summary.items).toLocaleString()}
@@ -260,7 +285,15 @@ export function ErrorWorkbench() {
                 </NativeSelect>
               </div>
               <div className='space-y-1.5'>
-                <Label htmlFor='error-workbench-limit'>{t('Limit')}</Label>
+                <Label htmlFor='error-workbench-limit'>
+                  <ErrorMetricHelp
+                    description={t(
+                      'Limit controls how many fault clusters are returned after severity ranking. It does not limit the route attempts used to calculate each route error rate.'
+                    )}
+                  >
+                    {t('Fault cluster limit')}
+                  </ErrorMetricHelp>
+                </Label>
                 <Input
                   id='error-workbench-limit'
                   type='number'

@@ -3982,6 +3982,25 @@
     "获取错误汇总失败": "获取错误汇总失败",
     "按稳定错误指纹聚合故障，并提供日志与路由证据。": "按稳定错误指纹聚合故障，并提供日志与路由证据。",
     "错误日志较多，本页仅聚合最近扫描到的部分记录。可缩短时间范围或增加筛选条件。": "错误日志较多，本页仅聚合最近扫描到的部分记录。可缩短时间范围或增加筛选条件。",
-    "Upstream Request ID": "上游请求 ID"
+    "Upstream Request ID": "上游请求 ID",
+    "A fault cluster groups error logs by model, group, channel, and a normalized error fingerprint. The visible list is ranked by severity and capped by the fault cluster limit.": "故障簇会按模型、分组、渠道和标准化错误指纹聚合错误日志。可见列表按严重程度排序，并受故障簇上限限制。",
+    "Affected requests counts distinct failed requests in this fault cluster. It deduplicates by request ID, then upstream request ID, and falls back to log ID. It is not used to calculate route error rate.": "受影响请求表示该故障簇内去重后的失败请求数。依次按请求 ID、上游请求 ID 去重；两者都没有时按日志 ID 计数。它不参与路由错误率计算。",
+    "Affected users counts distinct non-zero user IDs found in this fault cluster's error logs.": "受影响用户表示该故障簇错误日志中非零用户 ID 的去重数量。",
+    "Cluster error logs": "故障簇错误日志",
+    "Cluster error logs counts error-log rows with this exact fingerprint in the selected time range. Retries can produce more than one row for a request.": "故障簇错误日志表示所选时间范围内具有相同错误指纹的错误日志行数。重试可能让同一个请求产生多条日志。",
+    "Error logs is the total number of matching error-log rows in the selected time range. If scanning is truncated, this total still covers all matches while fault clusters use only the latest scanned rows.": "错误日志表示所选时间范围内匹配的错误日志总行数。如果扫描被截断，该总数仍覆盖全部匹配记录，但故障簇只使用最近扫描到的日志。",
+    "Fault cluster limit": "故障簇上限",
+    "Fingerprint": "错误指纹",
+    "Limit controls how many fault clusters are returned after severity ranking. It does not limit the route attempts used to calculate each route error rate.": "故障簇上限控制按严重程度排序后返回的故障簇数量，不限制每个路由错误率计算所使用的路由尝试次数。",
+    "Peer channels are channels available for the same model and group. Their route error rates and attempt counts use the same selected time range.": "同路渠道是可用于同一模型和分组的渠道。其路由错误率和尝试次数使用相同的所选时间范围。",
+    "Route attempts": "路由尝试次数",
+    "Route attempts count successful consume logs plus error logs for the same channel, model, and group in the selected time range. They are log attempts, not distinct requests.": "路由尝试次数等于所选时间范围内同一渠道、模型和分组的成功消费日志数加错误日志数。它统计的是日志尝试次数，不是去重请求数。",
+    "Route error rate": "路由错误率",
+    "Route error rate = error attempts / total route attempts for the same channel, model, and group in the selected time range. This route has {{errors}} error attempts out of {{attempts}} total attempts ({{rate}}). It includes all error fingerprints on the route.": "路由错误率等于所选时间范围内同一渠道、模型和分组的错误尝试数除以路由总尝试数。该路由共有 {{attempts}} 次尝试，其中 {{errors}} 次错误，错误率为 {{rate}}；统计包含该路由下的所有错误指纹。",
+    "Severity uses channel status, HTTP status, route error rate, route attempts, and cluster error-log count. Critical requires an enabled channel with at least 5 attempts and at least 50% errors; high covers enabled-channel authentication, server, or at least 20% route errors; medium covers HTTP errors or at least 3 logs; otherwise severity is low.": "严重程度由渠道状态、HTTP 状态、路由错误率、路由尝试次数和故障簇错误日志数共同决定。严重：已启用渠道至少 5 次尝试且错误率不低于 50%；高：已启用渠道发生鉴权错误、服务端错误或路由错误率不低于 20%；中：HTTP 错误或故障簇至少 3 条错误日志；其余为低。",
+    "The fingerprint is derived from error type, error code, HTTP status, and normalized error text. Changing request IDs, URLs, UUIDs, and long tokens are removed before grouping.": "错误指纹根据错误类型、错误代码、HTTP 状态和标准化后的错误文本生成。分组前会移除变化的请求 ID、URL、UUID 和长令牌。",
+    "Trend compares this cluster's error-log count in the newer half of the selected time range with the older half. New means only the newer half has errors; rising or falling requires a meaningful change; otherwise it is stable.": "趋势会比较所选时间范围前后两个等长时段内该故障簇的错误日志数。新增表示仅后半段出现错误；上升或下降要求变化达到一定幅度，否则为稳定。",
+    "Urgent clusters are visible clusters classified as high or critical by channel status, HTTP status, route error rate, route attempts, and cluster error-log count.": "紧急故障簇是根据渠道状态、HTTP 状态、路由错误率、路由尝试次数和故障簇错误日志数判定为高或严重的可见故障簇。",
+    "Visible affected requests is the sum of each visible fault cluster's distinct failed-request count. The same request can be counted more than once if it appears in multiple clusters.": "可见受影响请求是每个可见故障簇去重失败请求数的总和。同一个请求若出现在多个故障簇中，可能会被重复计数。"
   }
 }

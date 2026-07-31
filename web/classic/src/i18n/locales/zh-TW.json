@@ -3846,6 +3846,25 @@
     "获取错误汇总失败": "取得錯誤彙總失敗",
     "按稳定错误指纹聚合故障，并提供日志与路由证据。": "依穩定錯誤指紋彙總故障，並提供日誌與路由證據。",
     "错误日志较多，本页仅聚合最近扫描到的部分记录。可缩短时间范围或增加筛选条件。": "錯誤日誌較多，本頁僅彙總最近掃描的部分記錄。可縮短時間範圍或增加篩選條件。",
-    "Upstream Request ID": "上游請求 ID"
+    "Upstream Request ID": "上游請求 ID",
+    "A fault cluster groups error logs by model, group, channel, and a normalized error fingerprint. The visible list is ranked by severity and capped by the fault cluster limit.": "故障簇會按模型、分組、渠道和標準化錯誤指紋聚合錯誤日誌。可見列表按嚴重程度排序，並受故障簇上限限制。",
+    "Affected requests counts distinct failed requests in this fault cluster. It deduplicates by request ID, then upstream request ID, and falls back to log ID. It is not used to calculate route error rate.": "受影響請求表示該故障簇內去重後的失敗請求數。依次按請求 ID、上游請求 ID 去重；兩者都沒有時按日誌 ID 計數。它不參與路由錯誤率計算。",
+    "Affected users counts distinct non-zero user IDs found in this fault cluster's error logs.": "受影響使用者表示該故障簇錯誤日誌中非零使用者 ID 的去重數量。",
+    "Cluster error logs": "故障簇錯誤日誌",
+    "Cluster error logs counts error-log rows with this exact fingerprint in the selected time range. Retries can produce more than one row for a request.": "故障簇錯誤日誌表示所選時間範圍內具有相同錯誤指紋的錯誤日誌行數。重試可能讓同一個請求產生多條日誌。",
+    "Error logs is the total number of matching error-log rows in the selected time range. If scanning is truncated, this total still covers all matches while fault clusters use only the latest scanned rows.": "錯誤日誌表示所選時間範圍內符合條件的錯誤日誌總行數。如果掃描被截斷，該總數仍涵蓋全部符合記錄，但故障簇只使用最近掃描到的日誌。",
+    "Fault cluster limit": "故障簇上限",
+    "Fingerprint": "錯誤指紋",
+    "Limit controls how many fault clusters are returned after severity ranking. It does not limit the route attempts used to calculate each route error rate.": "故障簇上限控制按嚴重程度排序後傳回的故障簇數量，不限制每個路由錯誤率計算所使用的路由嘗試次數。",
+    "Peer channels are channels available for the same model and group. Their route error rates and attempt counts use the same selected time range.": "同路渠道是可用於同一模型和分組的渠道。其路由錯誤率和嘗試次數使用相同的所選時間範圍。",
+    "Route attempts": "路由嘗試次數",
+    "Route attempts count successful consume logs plus error logs for the same channel, model, and group in the selected time range. They are log attempts, not distinct requests.": "路由嘗試次數等於所選時間範圍內同一渠道、模型和分組的成功消費日誌數加錯誤日誌數。它統計的是日誌嘗試次數，不是去重請求數。",
+    "Route error rate": "路由錯誤率",
+    "Route error rate = error attempts / total route attempts for the same channel, model, and group in the selected time range. This route has {{errors}} error attempts out of {{attempts}} total attempts ({{rate}}). It includes all error fingerprints on the route.": "路由錯誤率等於所選時間範圍內同一渠道、模型和分組的錯誤嘗試數除以路由總嘗試數。該路由共有 {{attempts}} 次嘗試，其中 {{errors}} 次錯誤，錯誤率為 {{rate}}；統計包含該路由下的所有錯誤指紋。",
+    "Severity uses channel status, HTTP status, route error rate, route attempts, and cluster error-log count. Critical requires an enabled channel with at least 5 attempts and at least 50% errors; high covers enabled-channel authentication, server, or at least 20% route errors; medium covers HTTP errors or at least 3 logs; otherwise severity is low.": "嚴重程度由渠道狀態、HTTP 狀態、路由錯誤率、路由嘗試次數和故障簇錯誤日誌數共同決定。嚴重：已啟用渠道至少 5 次嘗試且錯誤率不低於 50%；高：已啟用渠道發生驗證錯誤、伺服器錯誤或路由錯誤率不低於 20%；中：HTTP 錯誤或故障簇至少 3 條錯誤日誌；其餘為低。",
+    "The fingerprint is derived from error type, error code, HTTP status, and normalized error text. Changing request IDs, URLs, UUIDs, and long tokens are removed before grouping.": "錯誤指紋根據錯誤類型、錯誤代碼、HTTP 狀態和標準化後的錯誤文字產生。分組前會移除變動的請求 ID、URL、UUID 和長權杖。",
+    "Trend compares this cluster's error-log count in the newer half of the selected time range with the older half. New means only the newer half has errors; rising or falling requires a meaningful change; otherwise it is stable.": "趨勢會比較所選時間範圍前後兩個等長時段內該故障簇的錯誤日誌數。新增表示僅後半段出現錯誤；上升或下降要求變化達到一定幅度，否則為穩定。",
+    "Urgent clusters are visible clusters classified as high or critical by channel status, HTTP status, route error rate, route attempts, and cluster error-log count.": "緊急故障簇是根據渠道狀態、HTTP 狀態、路由錯誤率、路由嘗試次數和故障簇錯誤日誌數判定為高或嚴重的可見故障簇。",
+    "Visible affected requests is the sum of each visible fault cluster's distinct failed-request count. The same request can be counted more than once if it appears in multiple clusters.": "可見受影響請求是每個可見故障簇去重失敗請求數的總和。同一個請求若出現在多個故障簇中，可能會被重複計數。"
   }
 }

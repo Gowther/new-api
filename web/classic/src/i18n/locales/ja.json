@@ -3822,6 +3822,25 @@
     "获取错误汇总失败": "エラー概要の取得に失敗しました",
     "按稳定错误指纹聚合故障，并提供日志与路由证据。": "安定したエラー指紋で障害を集約し、ログとルーティングの根拠を表示します。",
     "错误日志较多，本页仅聚合最近扫描到的部分记录。可缩短时间范围或增加筛选条件。": "最近スキャンしたエラーのみを集約しています。期間を短くするか、フィルターを追加してください。",
-    "Upstream Request ID": "上流リクエストID"
+    "Upstream Request ID": "上流リクエストID",
+    "A fault cluster groups error logs by model, group, channel, and a normalized error fingerprint. The visible list is ranked by severity and capped by the fault cluster limit.": "障害クラスタは、モデル、グループ、チャネル、正規化されたエラーフィンガープリントごとにエラーログを集約します。表示リストは重大度順に並び、障害クラスタ上限で制限されます。",
+    "Affected requests counts distinct failed requests in this fault cluster. It deduplicates by request ID, then upstream request ID, and falls back to log ID. It is not used to calculate route error rate.": "影響を受けたリクエストは、この障害クラスタ内の重複を除いた失敗リクエスト数です。リクエスト ID、上流リクエスト ID、ログ ID の順で重複を除きます。ルートエラー率の計算には使用しません。",
+    "Affected users counts distinct non-zero user IDs found in this fault cluster's error logs.": "影響を受けたユーザーは、この障害クラスタのエラーログにある 0 以外のユーザー ID を重複除去した数です。",
+    "Cluster error logs": "クラスタのエラーログ",
+    "Cluster error logs counts error-log rows with this exact fingerprint in the selected time range. Retries can produce more than one row for a request.": "クラスタのエラーログは、選択期間内にこのフィンガープリントと一致するエラーログ行数です。再試行により 1 件のリクエストから複数行が生成される場合があります。",
+    "Error logs is the total number of matching error-log rows in the selected time range. If scanning is truncated, this total still covers all matches while fault clusters use only the latest scanned rows.": "エラーログは、選択期間内で条件に一致するエラーログ行の総数です。スキャンが打ち切られても総数は全件を示しますが、障害クラスタには直近にスキャンした行だけが使われます。",
+    "Fault cluster limit": "障害クラスタ上限",
+    "Fingerprint": "エラーフィンガープリント",
+    "Limit controls how many fault clusters are returned after severity ranking. It does not limit the route attempts used to calculate each route error rate.": "障害クラスタ上限は、重大度順に並べた後に返すクラスタ数を制御します。各ルートエラー率の計算に使うルート試行回数は制限しません。",
+    "Peer channels are channels available for the same model and group. Their route error rates and attempt counts use the same selected time range.": "同一ルートのチャネルは、同じモデルとグループで利用可能なチャネルです。ルートエラー率と試行回数には同じ選択期間を使用します。",
+    "Route attempts": "ルート試行回数",
+    "Route attempts count successful consume logs plus error logs for the same channel, model, and group in the selected time range. They are log attempts, not distinct requests.": "ルート試行回数は、選択期間内の同じチャネル、モデル、グループについて、成功した消費ログとエラーログを合計したものです。重複を除いたリクエスト数ではなく、ログ上の試行回数です。",
+    "Route error rate": "ルートエラー率",
+    "Route error rate = error attempts / total route attempts for the same channel, model, and group in the selected time range. This route has {{errors}} error attempts out of {{attempts}} total attempts ({{rate}}). It includes all error fingerprints on the route.": "ルートエラー率は、選択期間内の同じチャネル、モデル、グループにおけるエラー試行数を総試行数で割った値です。このルートは全 {{attempts}} 回中 {{errors}} 回がエラー（{{rate}}）で、ルート上のすべてのエラーフィンガープリントを含みます。",
+    "Severity uses channel status, HTTP status, route error rate, route attempts, and cluster error-log count. Critical requires an enabled channel with at least 5 attempts and at least 50% errors; high covers enabled-channel authentication, server, or at least 20% route errors; medium covers HTTP errors or at least 3 logs; otherwise severity is low.": "重大度は、チャネル状態、HTTP ステータス、ルートエラー率、試行回数、クラスタのエラーログ数で決まります。重大は有効なチャネルで 5 回以上の試行かつ 50% 以上のエラー、高は有効なチャネルで認証エラー、サーバーエラー、または 20% 以上のルートエラー、中は HTTP エラーまたは 3 件以上のログ、それ以外は低です。",
+    "The fingerprint is derived from error type, error code, HTTP status, and normalized error text. Changing request IDs, URLs, UUIDs, and long tokens are removed before grouping.": "エラーフィンガープリントは、エラー種別、エラーコード、HTTP ステータス、正規化したエラー文から生成します。変動するリクエスト ID、URL、UUID、長いトークンはグループ化前に除去します。",
+    "Trend compares this cluster's error-log count in the newer half of the selected time range with the older half. New means only the newer half has errors; rising or falling requires a meaningful change; otherwise it is stable.": "トレンドは、選択期間を前後半に分け、このクラスタのエラーログ数を比較します。新規は後半だけにエラーがある状態で、上昇または下降には十分な変化が必要です。それ以外は安定です。",
+    "Urgent clusters are visible clusters classified as high or critical by channel status, HTTP status, route error rate, route attempts, and cluster error-log count.": "緊急クラスタは、チャネル状態、HTTP ステータス、ルートエラー率、試行回数、クラスタのエラーログ数により高または重大と判定された表示中のクラスタです。",
+    "Visible affected requests is the sum of each visible fault cluster's distinct failed-request count. The same request can be counted more than once if it appears in multiple clusters.": "表示中の影響リクエスト数は、各障害クラスタで重複を除いた失敗リクエスト数の合計です。同じリクエストが複数クラスタに現れる場合は重複して数えられます。"
   }
 }

@@ -34,11 +34,13 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
-import { cn } from '@/lib/utils'
 import { formatTimestampToDate } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 import { formatErrorRate } from '../lib'
 import type { ErrorSummaryItem, ErrorSummaryPeerChannel } from '../types'
+import { ErrorMetricHelp, RouteErrorRateHelp } from './error-metric-help'
+import { ErrorIdentityValue, ErrorRouteIdentity } from './error-route-identity'
 
 type ErrorClusterDetailsProps = {
   record: ErrorSummaryItem | null
@@ -59,12 +61,15 @@ function DetailMetric(props: {
   label: string
   value: string | number
   icon: ReactNode
+  description: string
 }) {
   return (
     <div className='bg-muted/25 min-w-0 rounded-md border px-3 py-2.5'>
       <div className='text-muted-foreground flex items-center gap-1.5 text-xs'>
         {props.icon}
-        {props.label}
+        <ErrorMetricHelp description={props.description}>
+          {props.label}
+        </ErrorMetricHelp>
       </div>
       <div className='mt-1 truncate text-base font-semibold tabular-nums'>
         {props.value}
@@ -94,14 +99,16 @@ function PeerChannelRow(props: {
     <div
       className={cn(
         'grid gap-3 px-3 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center',
-        props.peer.is_current && 'bg-amber-50/60 dark:bg-amber-950/15',
+        props.peer.is_current && 'bg-amber-50/60 dark:bg-amber-950/15'
       )}
     >
       <div className='min-w-0 space-y-1.5'>
         <div className='flex min-w-0 flex-wrap items-center gap-1.5'>
-          <span className='max-w-64 truncate text-sm font-medium'>
-            {props.peer.channel_name || t('Unknown channel')}
-          </span>
+          <ErrorIdentityValue
+            value={props.peer.channel_name || t('Unknown channel')}
+            compact
+            className='max-w-64 text-sm font-medium'
+          />
           <span className='text-muted-foreground font-mono text-xs'>
             #{props.peer.channel}
           </span>
@@ -121,12 +128,25 @@ function PeerChannelRow(props: {
           </Badge>
         </div>
         <div className='text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 text-xs'>
-          <span>
-            {t('Error rate')} {formatErrorRate(props.peer.recent_error_rate)}
-          </span>
-          <span>
-            {t('Attempts')} {props.peer.recent_attempt_count || 0}
-          </span>
+          <RouteErrorRateHelp
+            errors={props.peer.recent_error_count}
+            attempts={props.peer.recent_attempt_count}
+            rate={formatErrorRate(props.peer.recent_error_rate)}
+          >
+            <span>
+              {t('Route error rate')}{' '}
+              {formatErrorRate(props.peer.recent_error_rate)}
+            </span>
+          </RouteErrorRateHelp>
+          <ErrorMetricHelp
+            description={t(
+              'Route attempts count successful consume logs plus error logs for the same channel, model, and group in the selected time range. They are log attempts, not distinct requests.'
+            )}
+          >
+            <span>
+              {t('Route attempts')} {props.peer.recent_attempt_count || 0}
+            </span>
+          </ErrorMetricHelp>
           <span>
             {t('Priority')} {props.peer.channel_priority || 0}
           </span>
@@ -200,12 +220,19 @@ export function ErrorClusterDetails(props: ErrorClusterDetailsProps) {
               </Badge>
             )}
           </div>
-          <h2 className='break-all text-base font-semibold leading-6'>
+          <h2 className='text-base leading-6 font-semibold break-all'>
             {record.error_summary || t('No error message')}
           </h2>
-          <p className='text-muted-foreground text-xs font-mono'>
-            {record.fingerprint}
-          </p>
+          <div className='text-muted-foreground flex min-w-0 items-center gap-2 text-xs'>
+            <ErrorMetricHelp
+              description={t(
+                'The fingerprint is derived from error type, error code, HTTP status, and normalized error text. Changing request IDs, URLs, UUIDs, and long tokens are removed before grouping.'
+              )}
+            >
+              {t('Fingerprint')}
+            </ErrorMetricHelp>
+            <ErrorIdentityValue value={record.fingerprint} compact mono />
+          </div>
         </div>
         <div className='flex flex-wrap gap-2'>
           <Button
@@ -245,42 +272,63 @@ export function ErrorClusterDetails(props: ErrorClusterDetailsProps) {
 
       <ScrollArea className='min-h-0 flex-1'>
         <div className='space-y-5 p-4'>
-          <div className='grid gap-2 sm:grid-cols-2 xl:grid-cols-4'>
+          <div className='grid gap-2 sm:grid-cols-2 xl:grid-cols-5'>
             <DetailMetric
-              label={t('Error rate')}
+              label={t('Route error rate')}
               value={formatErrorRate(record.route_error_rate)}
               icon={<Activity className='size-3.5' />}
+              description={t(
+                'Route error rate = error attempts / total route attempts for the same channel, model, and group in the selected time range. This route has {{errors}} error attempts out of {{attempts}} total attempts ({{rate}}). It includes all error fingerprints on the route.',
+                {
+                  errors: record.route_error_count,
+                  attempts: record.route_attempt_count,
+                  rate: formatErrorRate(record.route_error_rate),
+                }
+              )}
+            />
+            <DetailMetric
+              label={t('Cluster error logs')}
+              value={record.count}
+              icon={<FileWarning className='size-3.5' />}
+              description={t(
+                'Cluster error logs counts error-log rows with this exact fingerprint in the selected time range. Retries can produce more than one row for a request.'
+              )}
             />
             <DetailMetric
               label={t('Affected requests')}
               value={record.affected_requests}
               icon={<FileWarning className='size-3.5' />}
+              description={t(
+                'Affected requests counts distinct failed requests in this fault cluster. It deduplicates by request ID, then upstream request ID, and falls back to log ID. It is not used to calculate route error rate.'
+              )}
             />
             <DetailMetric
               label={t('Affected users')}
               value={record.affected_users}
               icon={<Users className='size-3.5' />}
+              description={t(
+                "Affected users counts distinct non-zero user IDs found in this fault cluster's error logs."
+              )}
             />
             <DetailMetric
-              label={t('Attempts')}
+              label={t('Route attempts')}
               value={record.route_attempt_count}
               icon={<Gauge className='size-3.5' />}
+              description={t(
+                'Route attempts count successful consume logs plus error logs for the same channel, model, and group in the selected time range. They are log attempts, not distinct requests.'
+              )}
             />
           </div>
 
           <div className='grid gap-4 text-sm sm:grid-cols-2'>
             <div className='space-y-2'>
               <div className='text-muted-foreground text-xs'>{t('Route')}</div>
-              <div className='space-y-1'>
-                <div className='break-all font-mono'>
-                  {record.model_name || '-'}
-                </div>
-                <div className='text-muted-foreground'>
-                  {record.group || '-'} ·{' '}
-                  {record.channel_name || t('Unknown channel')} #
-                  {record.channel || '-'}
-                </div>
-              </div>
+              <ErrorRouteIdentity
+                modelName={record.model_name}
+                group={record.group}
+                channelName={record.channel_name}
+                channelId={record.channel}
+              />
             </div>
             <div className='space-y-2'>
               <div className='text-muted-foreground text-xs'>
@@ -381,7 +429,15 @@ export function ErrorClusterDetails(props: ErrorClusterDetailsProps) {
 
           <div className='space-y-2'>
             <div className='flex items-center justify-between gap-2'>
-              <h3 className='text-sm font-semibold'>{t('Route comparison')}</h3>
+              <h3 className='text-sm font-semibold'>
+                <ErrorMetricHelp
+                  description={t(
+                    'Peer channels are channels available for the same model and group. Their route error rates and attempt counts use the same selected time range.'
+                  )}
+                >
+                  {t('Route comparison')}
+                </ErrorMetricHelp>
+              </h3>
               <span className='text-muted-foreground text-xs tabular-nums'>
                 {record.peer_channels?.length || 0}
               </span>

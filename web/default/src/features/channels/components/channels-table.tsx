@@ -25,7 +25,7 @@ import type {
   Row,
 } from '@tanstack/react-table'
 import { Eye, EyeOff } from 'lucide-react'
-import { useState, useMemo, useEffect } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -135,21 +135,56 @@ export function ChannelsTable() {
     ],
   })
 
-  const handleColumnFiltersChange: OnChangeFn<ColumnFiltersState> = (
-    updater
-  ) => {
-    onColumnFiltersChange((previous) => {
-      const next = typeof updater === 'function' ? updater(previous) : updater
-      const status = next.find((f) => f.id === 'status')?.value as
-        | string[]
-        | undefined
-      localStorage.setItem(
-        CHANNELS_STATUS_FILTER_STORAGE_KEY,
-        status?.[0] ?? 'all'
+  const handleColumnFiltersChange: OnChangeFn<ColumnFiltersState> = useCallback(
+    (updater) => {
+      onColumnFiltersChange((previous) => {
+        const next = typeof updater === 'function' ? updater(previous) : updater
+        const status = next.find((filter) => filter.id === 'status')?.value as
+          | string[]
+          | undefined
+        localStorage.setItem(
+          CHANNELS_STATUS_FILTER_STORAGE_KEY,
+          status?.[0] ?? 'all'
+        )
+        return next
+      })
+    },
+    [onColumnFiltersChange]
+  )
+
+  const handleGlobalSearchChange: OnChangeFn<string> = useCallback(
+    (updater) => {
+      const nextValue =
+        typeof updater === 'function' ? updater(globalFilter ?? '') : updater
+      onGlobalFilterChange?.(updater)
+      if (!nextValue.trim()) return
+
+      handleColumnFiltersChange((previous) =>
+        previous.filter((filter) => filter.id === 'model')
       )
-      return next
-    })
-  }
+    },
+    [globalFilter, handleColumnFiltersChange, onGlobalFilterChange]
+  )
+
+  const handleModelSearchFiltersChange: OnChangeFn<ColumnFiltersState> =
+    useCallback(
+      (updater) => {
+        handleColumnFiltersChange((previous) => {
+          const next =
+            typeof updater === 'function' ? updater(previous) : updater
+          const nextModelValue = next.find(
+            (filter) => filter.id === 'model'
+          )?.value
+          const hasModelSearch =
+            typeof nextModelValue === 'string' && nextModelValue.trim() !== ''
+
+          return globalFilter?.trim() || hasModelSearch
+            ? next.filter((filter) => filter.id === 'model')
+            : next
+        })
+      },
+      [globalFilter, handleColumnFiltersChange]
+    )
 
   // Extract filters from column filters
   const statusFilter =
@@ -170,11 +205,12 @@ export function ChannelsTable() {
   } = useDebouncedColumnFilter({
     columnFilters,
     columnId: 'model',
-    onColumnFiltersChange,
+    onColumnFiltersChange: handleModelSearchFiltersChange,
   })
 
   // Determine whether to use search or regular list API
   const shouldSearch = Boolean(globalFilter?.trim() || modelFilter.trim())
+  const shouldUseTagMode = enableTagMode && !shouldSearch
 
   const sortParams = useMemo(() => {
     const activeSort = sorting[0]
@@ -223,18 +259,20 @@ export function ChannelsTable() {
       keyword: globalFilter,
       model: modelFilter,
       group:
-        groupFilter.length > 0 && !groupFilter.includes('all')
+        !shouldSearch && groupFilter.length > 0 && !groupFilter.includes('all')
           ? groupFilter[0]
           : undefined,
       status:
-        statusFilter.length > 0 && !statusFilter.includes('all')
+        !shouldSearch &&
+        statusFilter.length > 0 &&
+        !statusFilter.includes('all')
           ? statusFilter[0]
           : undefined,
       type:
-        typeFilter.length > 0 && !typeFilter.includes('all')
+        !shouldSearch && typeFilter.length > 0 && !typeFilter.includes('all')
           ? Number(typeFilter[0])
           : undefined,
-      tag_mode: enableTagMode,
+      tag_mode: shouldUseTagMode,
       id_sort: idSort,
       ...sortParams,
       p: pagination.pageIndex + 1,
@@ -245,19 +283,7 @@ export function ChannelsTable() {
         return searchChannels({
           keyword: globalFilter,
           model: modelFilter,
-          group:
-            groupFilter.length > 0 && !groupFilter.includes('all')
-              ? groupFilter[0]
-              : undefined,
-          status:
-            statusFilter.length > 0 && !statusFilter.includes('all')
-              ? statusFilter[0]
-              : undefined,
-          type:
-            typeFilter.length > 0 && !typeFilter.includes('all')
-              ? Number(typeFilter[0])
-              : undefined,
-          tag_mode: enableTagMode,
+          tag_mode: false,
           id_sort: idSort,
           ...sortParams,
           p: pagination.pageIndex + 1,
@@ -277,7 +303,7 @@ export function ChannelsTable() {
             typeFilter.length > 0 && !typeFilter.includes('all')
               ? Number(typeFilter[0])
               : undefined,
-          tag_mode: enableTagMode,
+          tag_mode: shouldUseTagMode,
           id_sort: idSort,
           ...sortParams,
           p: pagination.pageIndex + 1,
@@ -292,12 +318,12 @@ export function ChannelsTable() {
   const channels = useMemo(() => {
     const rawChannels = data?.data?.items || []
 
-    if (enableTagMode && rawChannels.length > 0) {
+    if (shouldUseTagMode && rawChannels.length > 0) {
       return aggregateChannelsByTag(rawChannels)
     }
 
     return rawChannels
-  }, [data, enableTagMode])
+  }, [data, shouldUseTagMode])
 
   const totalCount = data?.data?.total || 0
   const typeCounts = data?.data?.type_counts
@@ -325,7 +351,7 @@ export function ChannelsTable() {
     onSortingChange: handleSortingChange,
     onColumnFiltersChange: handleColumnFiltersChange,
     onPaginationChange,
-    onGlobalFilterChange,
+    onGlobalFilterChange: handleGlobalSearchChange,
     getSubRows: (row: Channel & { children?: Channel[] }) => row.children,
     manualPagination: true,
     manualSorting: true,

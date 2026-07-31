@@ -387,7 +387,11 @@ export const useChannelsData = () => {
     const { searchKeyword, searchGroup, searchModel } = getFormValues();
     setSearching(true);
     try {
-      if (searchKeyword === '' && searchGroup === '' && searchModel === '') {
+      const keyword = searchKeyword.trim();
+      const model = searchModel.trim();
+      const hasTextSearch = keyword !== '' || model !== '';
+
+      if (!hasTextSearch && searchGroup === '') {
         await loadChannels(
           page,
           pageSz,
@@ -399,11 +403,33 @@ export const useChannelsData = () => {
         return;
       }
 
-      const typeParam = typeKey !== 'all' ? `&type=${typeKey}` : '';
-      const statusParam = statusF !== 'all' ? `&status=${statusF}` : '';
-      const res = await API.get(
-        `/api/channel/search?keyword=${searchKeyword}&group=${searchGroup}&model=${searchModel}&id_sort=${sortFlag}&tag_mode=${enableTagMode}&p=${page}&page_size=${pageSz}${typeParam}${statusParam}`,
-      );
+      if (hasTextSearch) {
+        setActiveTypeKey('all');
+        setStatusFilter('all');
+        localStorage.setItem('channel-status-filter', 'all');
+        if (searchGroup !== '') {
+          formApi?.setValue('searchGroup', '');
+        }
+      }
+
+      const effectiveGroup = hasTextSearch ? '' : searchGroup;
+      const shouldUseTagMode = hasTextSearch ? false : enableTagMode;
+      const params = new URLSearchParams({
+        keyword,
+        group: effectiveGroup,
+        model,
+        id_sort: String(sortFlag),
+        tag_mode: String(shouldUseTagMode),
+        p: String(page),
+        page_size: String(pageSz),
+      });
+      if (!hasTextSearch && typeKey !== 'all') {
+        params.set('type', typeKey);
+      }
+      if (!hasTextSearch && statusF !== 'all') {
+        params.set('status', statusF);
+      }
+      const res = await API.get(`/api/channel/search?${params.toString()}`);
       const { success, message, data } = res.data;
       if (success) {
         const { items = [], total = 0, type_counts = {} } = data;
@@ -412,7 +438,7 @@ export const useChannelsData = () => {
           0,
         );
         setTypeCounts({ ...type_counts, all: sumAll });
-        setChannelFormat(items, enableTagMode);
+        setChannelFormat(items, shouldUseTagMode);
         setChannelCount(total);
         setActivePage(page);
       } else {

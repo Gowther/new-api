@@ -31,16 +31,22 @@ import { useState, useMemo, useContext } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import {
+  CHANNEL_REMARK_CLOSE_DELAY,
+  CHANNEL_REMARK_HOVER_DELAY,
+  ChannelRemarkHoverContent,
+  ChannelRemarkText,
+} from '@/components/channel-remark-hover-content'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { BadgeListCell } from '@/components/data-table'
 import { GroupBadge } from '@/components/group-badge'
-import { LinkifiedText } from '@/components/linkified-text'
 import { ProviderBadge } from '@/components/provider-badge'
 import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import { TableId } from '@/components/table-id'
 import { TruncatedText } from '@/components/truncated-text'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { HoverCard, HoverCardTrigger } from '@/components/ui/hover-card'
 import {
   Tooltip,
   TooltipContent,
@@ -666,23 +672,20 @@ export function useChannelsColumns(
                   <UpstreamUpdateTags channel={channel} />
                 </div>
                 {channel.remark && (
-                  <TooltipProvider delay={200}>
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <span className='text-muted-foreground text-xs' />
-                        }
-                      >
-                        {truncateText(channel.remark, 40)}
-                      </TooltipTrigger>
-                      <TooltipContent
-                        side='bottom'
-                        className='max-w-xs items-start text-left break-words'
-                      >
-                        <LinkifiedText text={channel.remark} />
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <HoverCard>
+                    <HoverCardTrigger
+                      render={
+                        <span className='text-muted-foreground -my-1 inline-flex min-h-7 cursor-help items-center py-1 text-xs' />
+                      }
+                      delay={CHANNEL_REMARK_HOVER_DELAY}
+                      closeDelay={CHANNEL_REMARK_CLOSE_DELAY}
+                    >
+                      {truncateText(channel.remark, 40)}
+                    </HoverCardTrigger>
+                    <ChannelRemarkHoverContent side='bottom'>
+                      <ChannelRemarkText text={channel.remark} />
+                    </ChannelRemarkHoverContent>
+                  </HoverCard>
                 )}
               </div>
             </div>

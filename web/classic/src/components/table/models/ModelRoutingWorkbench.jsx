@@ -43,7 +43,7 @@ import {
 } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
 
-import { LinkifiedText } from '../../common/LinkifiedText';
+import { ChannelRemarkTooltip } from '../../common/ChannelRemarkTooltip';
 import { CHANNEL_OPTIONS } from '../../../constants';
 import {
   API,
@@ -1009,6 +1009,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
             strong
             ellipsis
             type={isEnabled ? undefined : 'tertiary'}
+            className={remark ? '-my-1 cursor-help py-1' : ''}
             style={{
               display: 'block',
               width: '100%',
@@ -1051,17 +1052,9 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
             <div className='flex min-w-0 items-center gap-2'>
               <div className='min-w-0 flex-1'>
                 {remark ? (
-                  <Tooltip
-                    content={
-                      <div className='max-w-xs break-words text-sm'>
-                        <LinkifiedText text={remark} />
-                      </div>
-                    }
-                    trigger='hover'
-                    position='topLeft'
-                  >
+                  <ChannelRemarkTooltip remark={remark}>
                     {nameNode}
-                  </Tooltip>
+                  </ChannelRemarkTooltip>
                 ) : (
                   nameNode
                 )}

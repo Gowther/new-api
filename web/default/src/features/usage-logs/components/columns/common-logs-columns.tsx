@@ -16,19 +16,25 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { Comment01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Comment01Icon } from '@hugeicons/core-free-icons'
-import { HugeiconsIcon } from '@hugeicons/react'
 import { CircleAlert, GitBranch, Sparkles, KeyRound } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import {
+  CHANNEL_REMARK_CLOSE_DELAY,
+  CHANNEL_REMARK_HOVER_DELAY,
+  ChannelRemarkHoverContent,
+  ChannelRemarkText,
+} from '@/components/channel-remark-hover-content'
 import { CopyButton } from '@/components/copy-button'
-import { LinkifiedText } from '@/components/linkified-text'
 import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { HoverCard, HoverCardTrigger } from '@/components/ui/hover-card'
 import {
   Popover,
   PopoverContent,
@@ -391,8 +397,9 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             : `#${log.channel}`
           const channelIdDisplay = `#${log.channel}`
           const channelName = sensitiveVisible ? log.channel_name : '••••'
-          const showChannelRemark =
-            sensitiveVisible && Boolean(log.channel_remark?.trim())
+          const channelRemark = sensitiveVisible
+            ? log.channel_remark?.trim()
+            : undefined
           const multiKeyIndex = other?.admin_info?.multi_key_index
           const showMultiKeyIndex =
             other?.admin_info?.is_multi_key === true &&
@@ -400,159 +407,157 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             Number.isFinite(multiKeyIndex)
 
           return (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <div className='flex max-w-[160px] flex-col gap-0.5' />
-                  }
-                >
-                  <div className='relative inline-flex w-fit items-center gap-1'>
-                    <StatusBadge
-                      label={channelIdDisplay}
-                      autoColor={String(log.channel)}
-                      copyable={false}
-                      onClick={() => applyQuickFilter('channel', log.channel)}
-                      size='sm'
-                      showDot={false}
-                      className='cursor-pointer font-mono hover:underline'
+            <HoverCard>
+              <HoverCardTrigger
+                render={
+                  <div className='-my-1 flex max-w-[160px] flex-col gap-0.5 py-1' />
+                }
+                delay={CHANNEL_REMARK_HOVER_DELAY}
+                closeDelay={CHANNEL_REMARK_CLOSE_DELAY}
+              >
+                <div className='relative inline-flex w-fit items-center gap-1'>
+                  <StatusBadge
+                    label={channelIdDisplay}
+                    autoColor={String(log.channel)}
+                    copyable={false}
+                    onClick={() => applyQuickFilter('channel', log.channel)}
+                    size='sm'
+                    showDot={false}
+                    className='cursor-pointer font-mono hover:underline'
+                  />
+                  <span onClick={(event) => event.stopPropagation()}>
+                    <CopyButton
+                      value={String(log.channel)}
+                      size='icon'
+                      tooltip={t('Copy to clipboard')}
+                      className='text-muted-foreground hover:text-foreground size-5'
+                      iconClassName='size-3'
                     />
-                    <span onClick={(event) => event.stopPropagation()}>
-                      <CopyButton
-                        value={String(log.channel)}
-                        size='icon'
-                        tooltip={t('Copy to clipboard')}
-                        className='text-muted-foreground hover:text-foreground size-5'
-                        iconClassName='size-3'
+                  </span>
+                  {channelRemark && (
+                    <span
+                      className='text-muted-foreground -m-1 inline-flex size-7 shrink-0 cursor-help items-center justify-center'
+                      aria-label={t('Remark')}
+                    >
+                      <HugeiconsIcon
+                        icon={Comment01Icon}
+                        strokeWidth={2}
+                        className='size-3.5'
+                        aria-hidden='true'
                       />
-                    </span>
-                    {showChannelRemark && (
-                      <span
-                        className='text-muted-foreground inline-flex size-5 shrink-0 cursor-help items-center justify-center'
-                        aria-label={t('Remark')}
-                      >
-                        <HugeiconsIcon
-                          icon={Comment01Icon}
-                          strokeWidth={2}
-                          className='size-3.5'
-                          aria-hidden='true'
-                        />
-                      </span>
-                    )}
-                    {showMultiKeyIndex && (
-                      <StatusBadge
-                        label={String(multiKeyIndex)}
-                        size='sm'
-                        showDot={false}
-                        copyable={false}
-                        variant='neutral'
-                        className='h-5 min-w-5 justify-center rounded-full px-1 font-mono text-xs'
-                        aria-label={`${t('Key')} ${multiKeyIndex}`}
-                      />
-                    )}
-                    {hasRetryChain && (
-                      <Popover>
-                        <PopoverTrigger
-                          render={
-                            <button
-                              type='button'
-                              className='text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex size-5 shrink-0 items-center justify-center rounded-full transition-colors focus-visible:ring-2 focus-visible:outline-none'
-                              aria-label={t('Retry Chain')}
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          }
-                        >
-                          <GitBranch
-                            className='size-3.5 text-amber-500'
-                            aria-hidden='true'
-                          />
-                        </PopoverTrigger>
-                        <PopoverContent
-                          side='top'
-                          align='start'
-                          className='w-64 text-xs'
-                        >
-                          <div className='flex flex-col gap-1'>
-                            <p className='font-medium'>{t('Retry Chain')}</p>
-                            <p className='text-muted-foreground font-mono break-all'>
-                              {channelChain}
-                            </p>
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-                    )}
-                    {affinity && (
-                      <button
-                        type='button'
-                        className='absolute -top-1 -right-1 leading-none text-amber-500'
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setAffinityTarget({
-                            rule_name: affinity.rule_name || '',
-                            using_group:
-                              affinity.using_group ||
-                              affinity.selected_group ||
-                              '',
-                            key_hint: affinity.key_hint || '',
-                            key_fp: affinity.key_fp || '',
-                          })
-                          setAffinityDialogOpen(true)
-                        }}
-                      >
-                        <Sparkles className='size-3 fill-current' />
-                      </button>
-                    )}
-                  </div>
-                  {log.channel_name && (
-                    <span className='text-muted-foreground/70 truncate [font-family:var(--font-body)] !text-xs'>
-                      {channelName}
                     </span>
                   )}
-                </TooltipTrigger>
-                <TooltipContent className='max-w-xs'>
-                  <div className='space-y-1'>
-                    <p>
-                      {sensitiveVisible ? channelDisplay : channelIdDisplay}
-                    </p>
-                    {channelChain && (
-                      <p className='text-muted-foreground text-xs'>
-                        {t('Chain')}: {channelChain}
-                      </p>
-                    )}
-                    {showMultiKeyIndex && (
-                      <p className='text-muted-foreground text-xs'>
-                        {t('Key')}: {multiKeyIndex}
-                      </p>
-                    )}
-                    {showChannelRemark && (
-                      <div className='border-t pt-1 text-xs'>
-                        <p className='font-medium'>{t('Remark')}</p>
-                        <LinkifiedText
-                          text={log.channel_remark}
-                          className='text-muted-foreground'
+                  {showMultiKeyIndex && (
+                    <StatusBadge
+                      label={String(multiKeyIndex)}
+                      size='sm'
+                      showDot={false}
+                      copyable={false}
+                      variant='neutral'
+                      className='h-5 min-w-5 justify-center rounded-full px-1 font-mono text-xs'
+                      aria-label={`${t('Key')} ${multiKeyIndex}`}
+                    />
+                  )}
+                  {hasRetryChain && (
+                    <Popover>
+                      <PopoverTrigger
+                        render={
+                          <button
+                            type='button'
+                            className='text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex size-5 shrink-0 items-center justify-center rounded-full transition-colors focus-visible:ring-2 focus-visible:outline-none'
+                            aria-label={t('Retry Chain')}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        }
+                      >
+                        <GitBranch
+                          className='size-3.5 text-amber-500'
+                          aria-hidden='true'
                         />
-                      </div>
-                    )}
-                    {affinity && (
-                      <div className='border-t pt-1 text-xs'>
-                        <p className='font-medium'>{t('Channel Affinity')}</p>
-                        <p>
-                          {t('Rule')}: {affinity.rule_name || '-'}
-                        </p>
-                        <p>
-                          {t('Group')}:{' '}
-                          {sensitiveVisible
-                            ? affinity.using_group ||
-                              affinity.selected_group ||
-                              '-'
-                            : '••••'}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        side='top'
+                        align='start'
+                        className='w-64 text-xs'
+                      >
+                        <div className='flex flex-col gap-1'>
+                          <p className='font-medium'>{t('Retry Chain')}</p>
+                          <p className='text-muted-foreground font-mono break-all'>
+                            {channelChain}
+                          </p>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                  {affinity && (
+                    <button
+                      type='button'
+                      className='absolute -top-1 -right-1 leading-none text-amber-500'
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setAffinityTarget({
+                          rule_name: affinity.rule_name || '',
+                          using_group:
+                            affinity.using_group ||
+                            affinity.selected_group ||
+                            '',
+                          key_hint: affinity.key_hint || '',
+                          key_fp: affinity.key_fp || '',
+                        })
+                        setAffinityDialogOpen(true)
+                      }}
+                    >
+                      <Sparkles className='size-3 fill-current' />
+                    </button>
+                  )}
+                </div>
+                {log.channel_name && (
+                  <span className='text-muted-foreground/70 truncate [font-family:var(--font-body)] !text-xs'>
+                    {channelName}
+                  </span>
+                )}
+              </HoverCardTrigger>
+              <ChannelRemarkHoverContent>
+                <div className='space-y-1'>
+                  <p>{sensitiveVisible ? channelDisplay : channelIdDisplay}</p>
+                  {channelChain && (
+                    <p className='text-muted-foreground text-xs'>
+                      {t('Chain')}: {channelChain}
+                    </p>
+                  )}
+                  {showMultiKeyIndex && (
+                    <p className='text-muted-foreground text-xs'>
+                      {t('Key')}: {multiKeyIndex}
+                    </p>
+                  )}
+                  {channelRemark && (
+                    <div className='border-t pt-1 text-xs'>
+                      <p className='font-medium'>{t('Remark')}</p>
+                      <ChannelRemarkText
+                        text={channelRemark}
+                        className='text-muted-foreground'
+                      />
+                    </div>
+                  )}
+                  {affinity && (
+                    <div className='border-t pt-1 text-xs'>
+                      <p className='font-medium'>{t('Channel Affinity')}</p>
+                      <p>
+                        {t('Rule')}: {affinity.rule_name || '-'}
+                      </p>
+                      <p>
+                        {t('Group')}:{' '}
+                        {sensitiveVisible
+                          ? affinity.using_group ||
+                            affinity.selected_group ||
+                            '-'
+                          : '••••'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </ChannelRemarkHoverContent>
+            </HoverCard>
           )
         },
       },

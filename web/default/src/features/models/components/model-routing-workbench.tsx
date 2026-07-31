@@ -32,8 +32,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import {
+  CHANNEL_REMARK_CLOSE_DELAY,
+  CHANNEL_REMARK_HOVER_DELAY,
+  ChannelRemarkHoverContent,
+  ChannelRemarkText,
+} from '@/components/channel-remark-hover-content'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { LinkifiedText } from '@/components/linkified-text'
 import { ProviderBadge } from '@/components/provider-badge'
 import { StatusBadge } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
@@ -44,6 +49,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty'
+import { HoverCard, HoverCardTrigger } from '@/components/ui/hover-card'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Switch } from '@/components/ui/switch'
@@ -55,12 +61,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
 import {
   deleteChannel,
   getChannelModelVendorGroups,
@@ -1545,29 +1545,26 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                             <div className='flex min-w-0 items-center gap-2'>
                               <div className='min-w-0 flex-1'>
                                 {channelRemark ? (
-                                  <TooltipProvider delay={200}>
-                                    <Tooltip>
-                                      <TooltipTrigger
-                                        render={
-                                          <div
-                                            className={cn(
-                                              'block min-w-0 truncate font-medium cursor-help',
-                                              !isEnabled &&
-                                                'text-muted-foreground'
-                                            )}
-                                          />
-                                        }
-                                      >
-                                        {channel.name}
-                                      </TooltipTrigger>
-                                      <TooltipContent
-                                        side='top'
-                                        className='max-w-xs items-start text-left break-words'
-                                      >
-                                        <LinkifiedText text={channelRemark} />
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
+                                  <HoverCard>
+                                    <HoverCardTrigger
+                                      render={
+                                        <div
+                                          className={cn(
+                                            '-my-1 block min-w-0 cursor-help truncate py-1 font-medium',
+                                            !isEnabled &&
+                                              'text-muted-foreground'
+                                          )}
+                                        />
+                                      }
+                                      delay={CHANNEL_REMARK_HOVER_DELAY}
+                                      closeDelay={CHANNEL_REMARK_CLOSE_DELAY}
+                                    >
+                                      {channel.name}
+                                    </HoverCardTrigger>
+                                    <ChannelRemarkHoverContent side='top'>
+                                      <ChannelRemarkText text={channelRemark} />
+                                    </ChannelRemarkHoverContent>
+                                  </HoverCard>
                                 ) : (
                                   <div
                                     className={cn(

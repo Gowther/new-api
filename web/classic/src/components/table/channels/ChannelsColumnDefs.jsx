@@ -35,8 +35,6 @@ import {
   renderQuota,
   getChannelIcon,
   renderQuotaWithAmount,
-  showSuccess,
-  showError,
   showInfo,
 } from '../../../helpers';
 import {
@@ -50,7 +48,7 @@ import {
   IconAlertTriangle,
 } from '@douyinfe/semi-icons';
 import { FaRandom } from 'react-icons/fa';
-import { LinkifiedText } from '../../common/LinkifiedText';
+import { ChannelRemarkTooltip } from '../../common/ChannelRemarkTooltip';
 
 // Render functions
 const renderType = (type, record = {}, t) => {
@@ -351,37 +349,11 @@ export const getChannelsColumns = ({
           (pendingAddCount > 0 || pendingRemoveCount > 0);
         const nameNode =
           record.remark && record.remark.trim() !== '' ? (
-            <Tooltip
-              content={
-                <div className='flex flex-col gap-2 max-w-xs'>
-                  <div className='text-sm'>
-                    <LinkifiedText text={record.remark} />
-                  </div>
-                  <Button
-                    size='small'
-                    type='primary'
-                    theme='outline'
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigator.clipboard
-                        .writeText(record.remark)
-                        .then(() => {
-                          showSuccess(t('复制成功'));
-                        })
-                        .catch(() => {
-                          showError(t('复制失败'));
-                        });
-                    }}
-                  >
-                    {t('复制')}
-                  </Button>
-                </div>
-              }
-              trigger='hover'
-              position='topLeft'
-            >
-              <span>{text}</span>
-            </Tooltip>
+            <ChannelRemarkTooltip remark={record.remark}>
+              <span className='-my-1 inline-flex min-h-7 cursor-help items-center py-1'>
+                {text}
+              </span>
+            </ChannelRemarkTooltip>
           ) : (
             <span>{text}</span>
           );

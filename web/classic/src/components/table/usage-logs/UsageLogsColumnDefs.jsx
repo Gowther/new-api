@@ -42,7 +42,7 @@ import {
   IconHelpCircle,
 } from '@douyinfe/semi-icons';
 import { CircleAlert, Route, Sparkles } from 'lucide-react';
-import { LinkifiedText } from '../../common/LinkifiedText';
+import { ChannelRemarkTooltip } from '../../common/ChannelRemarkTooltip';
 
 const colors = [
   'amber',
@@ -583,30 +583,18 @@ export const getLogsColumns = ({
                 </span>
               </Tooltip>
               {record.channel_remark && (
-                <Tooltip
-                  content={
-                    <div
-                      style={{
-                        maxWidth: 320,
-                        lineHeight: 1.6,
-                        wordBreak: 'break-word',
-                      }}
-                    >
-                      <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                        {record.channel_name || t('未知渠道')}
-                      </div>
-                      <LinkifiedText text={record.channel_remark} />
-                    </div>
-                  }
-                  trigger='hover'
-                  position='topLeft'
+                <ChannelRemarkTooltip
+                  remark={record.channel_remark}
+                  title={record.channel_name || t('未知渠道')}
                 >
                   <span
                     aria-label={t('备注')}
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
-                      marginLeft: 2,
+                      justifyContent: 'center',
+                      width: 28,
+                      height: 28,
                       color: 'var(--semi-color-text-2)',
                       cursor: 'help',
                     }}
@@ -614,7 +602,7 @@ export const getLogsColumns = ({
                   >
                     <IconCommentStroked size='small' />
                   </span>
-                </Tooltip>
+                </ChannelRemarkTooltip>
               )}
               {showMarker && (
                 <Tooltip

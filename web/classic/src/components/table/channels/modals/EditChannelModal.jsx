@@ -1414,8 +1414,6 @@ const EditChannelModal = (props) => {
         (data.param_override && data.param_override.trim()) ||
         (data.status_code_mapping && data.status_code_mapping.trim()) ||
         (data.header_override && data.header_override.trim()) ||
-        (data.tag && data.tag.trim()) ||
-        (data.remark && data.remark.trim()) ||
         (data.priority && data.priority !== 0) ||
         (data.weight && data.weight !== 0) ||
         (data.proxy && data.proxy.trim()) ||
@@ -3172,22 +3170,6 @@ const EditChannelModal = (props) => {
                     {t('渠道行为')}
                   </Text>
 
-                  <Form.Input
-                    field='tag'
-                    label={t('渠道标签')}
-                    placeholder={t('渠道标签')}
-                    showClear
-                    onChange={(value) => handleInputChange('tag', value)}
-                  />
-                  <Form.TextArea
-                    field='remark'
-                    label={t('备注')}
-                    placeholder={t('请输入备注（仅管理员可见）')}
-                    maxLength={255}
-                    showClear
-                    onChange={(value) => handleInputChange('remark', value)}
-                  />
-
                   <Row gutter={12}>
                     <Col span={12}>
                       <Form.InputNumber
@@ -3580,6 +3562,22 @@ const EditChannelModal = (props) => {
                         showClear
                         onChange={(value) => handleInputChange('name', value)}
                         autoComplete='new-password'
+                      />
+
+                      <Form.Input
+                        field='tag'
+                        label={t('渠道标签')}
+                        placeholder={t('渠道标签')}
+                        showClear
+                        onChange={(value) => handleInputChange('tag', value)}
+                      />
+                      <Form.TextArea
+                        field='remark'
+                        label={t('备注')}
+                        placeholder={t('请输入备注（仅管理员可见）')}
+                        maxLength={255}
+                        showClear
+                        onChange={(value) => handleInputChange('remark', value)}
                       />
 
                       {inputs.type === 33 && (

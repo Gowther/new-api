@@ -267,7 +267,6 @@ const CHANNEL_EDITOR_MAIN_SECTION_IDS = [
 ]
 const ADVANCED_SETTINGS_SECTION_IDS = {
   routingStrategy: 'channel-section-advanced-routing-strategy',
-  internalNotes: 'channel-section-advanced-internal-notes',
   overrideRules: 'channel-section-advanced-override-rules',
   extraSettings: 'channel-section-advanced-extra-settings',
   automaticTesting: 'channel-section-advanced-automatic-testing',
@@ -345,8 +344,6 @@ function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
     hasConfiguredOverrideValue(values.header_override) ||
     values.advanced_custom?.trim() ||
     hasConfiguredOverrideValue(values.status_code_mapping) ||
-    values.tag?.trim() ||
-    values.remark?.trim() ||
     values.priority ||
     values.weight ||
     values.proxy?.trim() ||
@@ -766,8 +763,6 @@ export function ChannelMutateDrawer({
   const currentWeight = form.watch('weight')
   const currentTestModel = form.watch('test_model')
   const currentAutoBan = form.watch('auto_ban')
-  const currentTag = form.watch('tag')
-  const currentRemark = form.watch('remark')
   const currentStatusCodeMapping = form.watch('status_code_mapping')
   const currentParamOverride = form.watch('param_override')
   const currentHeaderOverride = form.watch('header_override')
@@ -916,7 +911,8 @@ export function ChannelMutateDrawer({
     formErrors.name ||
     formErrors.type ||
     formErrors.status ||
-    formErrors.openai_organization
+    formErrors.openai_organization ||
+    formErrors.remark
   )
   const credentialsHaveErrors = Boolean(
     formErrors.key ||
@@ -974,9 +970,6 @@ export function ChannelMutateDrawer({
     currentTestModel?.trim() ||
     (currentAutoBan ?? 1) !== 1
   )
-  const internalNotesConfigured = Boolean(
-    currentTag?.trim() || currentRemark?.trim()
-  )
   const overrideRulesConfigured = Boolean(
     hasConfiguredOverrideValue(currentStatusCodeMapping) ||
     hasConfiguredOverrideValue(currentParamOverride) ||
@@ -1019,7 +1012,6 @@ export function ChannelMutateDrawer({
   )
   const advancedConfigured = Boolean(
     routingStrategyConfigured ||
-    internalNotesConfigured ||
     overrideRulesConfigured ||
     extraSettingsConfigured ||
     automaticTestingConfigured ||
@@ -1031,11 +1023,6 @@ export function ChannelMutateDrawer({
       id: ADVANCED_SETTINGS_SECTION_IDS.routingStrategy,
       title: t('Routing Strategy'),
       configured: routingStrategyConfigured,
-    },
-    {
-      id: ADVANCED_SETTINGS_SECTION_IDS.internalNotes,
-      title: t('Internal Notes'),
-      configured: internalNotesConfigured,
     },
     {
       id: ADVANCED_SETTINGS_SECTION_IDS.overrideRules,
@@ -2256,6 +2243,51 @@ export function ChannelMutateDrawer({
                                     {...field}
                                   />
                                 </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+
+                        <div className='grid gap-4 sm:grid-cols-2'>
+                          <FormField
+                            control={form.control}
+                            name='tag'
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>{t('Tag')}</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    placeholder={t(FIELD_PLACEHOLDERS.TAG)}
+                                    {...field}
+                                  />
+                                </FormControl>
+                                <FormDescription>
+                                  {t(FIELD_DESCRIPTIONS.TAG)}
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name='remark'
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>{t('Remark')}</FormLabel>
+                                <FormControl>
+                                  <Textarea
+                                    placeholder={t(
+                                      FIELD_PLACEHOLDERS.REMARK
+                                    )}
+                                    rows={2}
+                                    {...field}
+                                  />
+                                </FormControl>
+                                <FormDescription>
+                                  {t(FIELD_DESCRIPTIONS.REMARK)}
+                                </FormDescription>
                                 <FormMessage />
                               </FormItem>
                             )}
@@ -3973,63 +4005,6 @@ export function ChannelMutateDrawer({
                                 </FormItem>
                               )}
                             />
-                          </div>
-
-                          <div
-                            id={ADVANCED_SETTINGS_SECTION_IDS.internalNotes}
-                            className={configuredAdvancedSectionClassName(
-                              'flex scroll-mt-4 flex-col gap-4 border-t pt-4',
-                              internalNotesConfigured
-                            )}
-                          >
-                            <SubHeading
-                              title={t('Internal Notes')}
-                              icon={<FileText className='h-3.5 w-3.5' />}
-                            />
-                            <div className='grid gap-4 sm:grid-cols-2'>
-                              <FormField
-                                control={form.control}
-                                name='tag'
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>{t('Tag')}</FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        placeholder={t(FIELD_PLACEHOLDERS.TAG)}
-                                        {...field}
-                                      />
-                                    </FormControl>
-                                    <FormDescription>
-                                      {t(FIELD_DESCRIPTIONS.TAG)}
-                                    </FormDescription>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-
-                              <FormField
-                                control={form.control}
-                                name='remark'
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>{t('Remark')}</FormLabel>
-                                    <FormControl>
-                                      <Textarea
-                                        placeholder={t(
-                                          FIELD_PLACEHOLDERS.REMARK
-                                        )}
-                                        rows={2}
-                                        {...field}
-                                      />
-                                    </FormControl>
-                                    <FormDescription>
-                                      {t(FIELD_DESCRIPTIONS.REMARK)}
-                                    </FormDescription>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                            </div>
                           </div>
 
                           <div

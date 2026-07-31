@@ -66,6 +66,7 @@ const ROUTING_LAST_SELECTION_KEY = 'model-routing-last-selection';
 const ROUTING_PROVIDER_DEFAULT_SELECTIONS_KEY =
   'model-routing-provider-default-selections:v1';
 const ROUTING_LAST_PROVIDER_KEY = 'model-routing-last-provider:v1';
+const ROUTING_SHOW_ALL_MODELS_KEY = 'model-routing-show-all-models:v1';
 const PREFERRED_DEFAULT_VENDOR_NAME = 'OpenAI';
 const PREFERRED_DEFAULT_MODEL_NAME = 'gpt-5.5';
 
@@ -184,6 +185,23 @@ const readStoredProviderKey = (key) => {
 const writeStoredProviderKey = (key, providerKey) => {
   try {
     window.localStorage.setItem(key, providerKey);
+  } catch {}
+};
+
+const readStoredShowAllModels = () => {
+  try {
+    return window.localStorage.getItem(ROUTING_SHOW_ALL_MODELS_KEY) !== 'false';
+  } catch {
+    return true;
+  }
+};
+
+const writeStoredShowAllModels = (showAllModels) => {
+  try {
+    window.localStorage.setItem(
+      ROUTING_SHOW_ALL_MODELS_KEY,
+      String(showAllModels),
+    );
   } catch {}
 };
 
@@ -464,6 +482,9 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   const [channels, setChannels] = useState([]);
   const [providerSearch, setProviderSearch] = useState('');
   const [modelSearch, setModelSearch] = useState('');
+  const [showAllModels, setShowAllModels] = useState(() =>
+    readStoredShowAllModels(),
+  );
   const [selectedProviderKey, setSelectedProviderKey] = useState(null);
   const [selectedModelName, setSelectedModelName] = useState(null);
   const [routingChanges, setRoutingChanges] = useState({});
@@ -504,9 +525,28 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     loadRoutingData();
   }, [loadRoutingData]);
 
+  const enabledChannelCountsByModel = useMemo(() => {
+    const counts = new Map();
+    channels.forEach((channel) => {
+      if (channel.status !== CHANNEL_STATUS.ENABLED) return;
+      new Set(splitCsv(channel.models)).forEach((modelName) => {
+        counts.set(modelName, (counts.get(modelName) || 0) + 1);
+      });
+    });
+    return counts;
+  }, [channels]);
+
+  const visibleModels = useMemo(() => {
+    if (showAllModels) return models;
+    return models.flatMap((model) => {
+      const channelCount = enabledChannelCountsByModel.get(model.model_name);
+      return channelCount ? [{ ...model, channelCount }] : [];
+    });
+  }, [enabledChannelCountsByModel, models, showAllModels]);
+
   const providerOptions = useMemo(() => {
     const modelCounts = new Map();
-    models.forEach((model) => {
+    visibleModels.forEach((model) => {
       const key = getProviderKey(model);
       modelCounts.set(key, (modelCounts.get(key) || 0) + 1);
     });
@@ -532,15 +572,15 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     }
 
     return options;
-  }, [models, t, vendors]);
+  }, [t, vendors, visibleModels]);
 
   const targetRoutingSelection = useMemo(() => {
     if (!targetModelName) return null;
-    const targetModel = models.find(
+    const targetModel = visibleModels.find(
       (model) => model.model_name === targetModelName,
     );
     return targetModel ? getRoutingSelectionFromModel(targetModel) : null;
-  }, [models, targetModelName]);
+  }, [targetModelName, visibleModels]);
 
   const filteredProviders = useMemo(() => {
     const search = providerSearch.trim().toLowerCase();
@@ -561,10 +601,10 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
 
   const providerModels = useMemo(() => {
     if (!selectedProviderKey) return [];
-    return models
+    return visibleModels
       .filter((model) => getProviderKey(model) === selectedProviderKey)
       .sort((a, b) => a.model_name.localeCompare(b.model_name));
-  }, [models, selectedProviderKey]);
+  }, [selectedProviderKey, visibleModels]);
 
   const filteredModels = useMemo(() => {
     const search = modelSearch.trim().toLowerCase();
@@ -590,8 +630,8 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   const initialRoutingSelection = useMemo(
     () =>
       targetRoutingSelection ||
-      resolveInitialRoutingSelection(models, providerDefaultSelections),
-    [models, providerDefaultSelections, targetRoutingSelection],
+      resolveInitialRoutingSelection(visibleModels, providerDefaultSelections),
+    [providerDefaultSelections, targetRoutingSelection, visibleModels],
   );
 
   const isSelectedDefaultModel = isSameProviderDefaultSelection(
@@ -716,6 +756,11 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     setSelectedProviderKey(providerKey);
     setSelectedModelName(null);
     setModelSearch('');
+  };
+
+  const handleShowAllModelsChange = (checked) => {
+    setShowAllModels(checked);
+    writeStoredShowAllModels(checked);
   };
 
   const handleSetDefaultModel = () => {
@@ -1009,7 +1054,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
             strong
             ellipsis
             type={isEnabled ? undefined : 'tertiary'}
-            className={remark ? '-my-1 cursor-help py-1' : ''}
+            className='-my-1 cursor-help py-1'
             style={{
               display: 'block',
               width: '100%',
@@ -1051,13 +1096,9 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
             </div>
             <div className='flex min-w-0 items-center gap-2'>
               <div className='min-w-0 flex-1'>
-                {remark ? (
-                  <ChannelRemarkTooltip remark={remark}>
-                    {nameNode}
-                  </ChannelRemarkTooltip>
-                ) : (
-                  nameNode
-                )}
+                <ChannelRemarkTooltip title={record.name} remark={remark}>
+                  {nameNode}
+                </ChannelRemarkTooltip>
               </div>
               {!isEnabled ? (
                 <Tag color={statusMeta.color} shape='circle' size='small'>
@@ -1278,6 +1319,15 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                 {selectedProvider?.label || t('模型')}
               </Text>
               <div className='flex shrink-0 items-center gap-2'>
+                <Text type='tertiary' size='small'>
+                  {t(showAllModels ? '全部模型' : '已启用')}
+                </Text>
+                <Switch
+                  size='small'
+                  checked={showAllModels}
+                  onChange={handleShowAllModelsChange}
+                  aria-label={t('全部模型')}
+                />
                 <Tag color='grey' shape='circle' size='small'>
                   {providerModels.length}
                 </Tag>

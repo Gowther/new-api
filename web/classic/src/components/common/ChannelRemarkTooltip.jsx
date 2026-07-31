@@ -37,14 +37,22 @@ export function ChannelRemarkTooltip(props) {
       content={
         <div style={{ lineHeight: 1.6 }}>
           {props.title ? (
-            <div style={{ fontWeight: 600, marginBottom: 4 }}>
+            <div
+              style={{
+                fontWeight: 600,
+                marginBottom: props.remark ? 4 : 0,
+                overflowWrap: 'anywhere',
+              }}
+            >
               {props.title}
             </div>
           ) : null}
-          <LinkifiedText
-            text={props.remark}
-            linkClassName='whitespace-nowrap'
-          />
+          {props.remark ? (
+            <LinkifiedText
+              text={props.remark}
+              linkClassName='whitespace-nowrap'
+            />
+          ) : null}
         </div>
       }
       trigger='hover'

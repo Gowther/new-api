@@ -105,6 +105,7 @@ const ROUTING_LAST_SELECTION_KEY = 'model-routing-last-selection'
 const ROUTING_PROVIDER_DEFAULT_SELECTIONS_KEY =
   'model-routing-provider-default-selections:v1'
 const ROUTING_LAST_PROVIDER_KEY = 'model-routing-last-provider:v1'
+const ROUTING_SHOW_ALL_MODELS_KEY = 'model-routing-show-all-models:v1'
 const PREFERRED_DEFAULT_VENDOR_NAME = 'OpenAI'
 const PREFERRED_DEFAULT_MODEL_NAME = 'gpt-5.5'
 
@@ -325,6 +326,25 @@ function writeStoredProviderKey(key: string, providerKey: string) {
   if (typeof window === 'undefined') return
   try {
     window.localStorage.setItem(key, providerKey)
+  } catch {}
+}
+
+function readStoredShowAllModels(): boolean {
+  if (typeof window === 'undefined') return true
+  try {
+    return window.localStorage.getItem(ROUTING_SHOW_ALL_MODELS_KEY) !== 'false'
+  } catch {
+    return true
+  }
+}
+
+function writeStoredShowAllModels(showAllModels: boolean) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(
+      ROUTING_SHOW_ALL_MODELS_KEY,
+      String(showAllModels)
+    )
   } catch {}
 }
 
@@ -569,6 +589,9 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
   )
   const [providerSearch, setProviderSearch] = useState('')
   const [modelSearch, setModelSearch] = useState('')
+  const [showAllModels, setShowAllModels] = useState(() =>
+    readStoredShowAllModels()
+  )
   const [selectedProviderKey, setSelectedProviderKey] = useState<string | null>(
     null
   )
@@ -620,7 +643,23 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
       ),
     [channels, modelVendorGroups, pricingModels, pricingVendors]
   )
-  const models = routingCatalog.models
+  const enabledChannelCountsByModel = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const channel of channels) {
+      if (channel.status !== CHANNEL_STATUS.ENABLED) continue
+      for (const modelName of new Set(splitCsv(channel.models))) {
+        counts.set(modelName, (counts.get(modelName) ?? 0) + 1)
+      }
+    }
+    return counts
+  }, [channels])
+  const models = useMemo(() => {
+    if (showAllModels) return routingCatalog.models
+    return routingCatalog.models.flatMap((model) => {
+      const channelCount = enabledChannelCountsByModel.get(model.model_name)
+      return channelCount ? [{ ...model, channelCount }] : []
+    })
+  }, [enabledChannelCountsByModel, routingCatalog.models, showAllModels])
   const vendors = routingCatalog.vendors
 
   const targetRoutingSelection = useMemo(() => {
@@ -865,6 +904,11 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     setSelectedProviderKey(providerKey)
     setModelSearch('')
     setSelectedModelName(null)
+  }
+
+  const handleShowAllModelsChange = (checked: boolean) => {
+    setShowAllModels(checked)
+    writeStoredShowAllModels(checked)
   }
 
   const handleSetDefaultModel = () => {
@@ -1272,29 +1316,40 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
               <div className='truncate text-sm font-medium'>
                 {selectedProvider?.label ?? t('Models')}
               </div>
-              <span className='text-muted-foreground shrink-0 text-xs tabular-nums'>
-                {providerModels.length}
-              </span>
-              <Button
-                type='button'
-                variant='ghost'
-                size='icon-sm'
-                onClick={handleSetDefaultModel}
-                disabled={!selectedModel}
-                title={t('Set as default model')}
-                aria-label={t('Set as default model')}
-                className={cn(
-                  'shrink-0',
-                  isSelectedDefaultModel && 'text-warning'
-                )}
-              >
-                <Star
-                  className={cn(
-                    'size-4',
-                    isSelectedDefaultModel && 'fill-current'
-                  )}
+              <div className='flex shrink-0 items-center gap-2'>
+                <span className='text-muted-foreground text-xs'>
+                  {t(showAllModels ? 'All Models' : 'Enabled')}
+                </span>
+                <Switch
+                  size='sm'
+                  checked={showAllModels}
+                  onCheckedChange={handleShowAllModelsChange}
+                  aria-label={t('All Models')}
                 />
-              </Button>
+                <span className='text-muted-foreground text-xs tabular-nums'>
+                  {providerModels.length}
+                </span>
+                <Button
+                  type='button'
+                  variant='ghost'
+                  size='icon-sm'
+                  onClick={handleSetDefaultModel}
+                  disabled={!selectedModel}
+                  title={t('Set as default model')}
+                  aria-label={t('Set as default model')}
+                  className={cn(
+                    'shrink-0',
+                    isSelectedDefaultModel && 'text-warning'
+                  )}
+                >
+                  <Star
+                    className={cn(
+                      'size-4',
+                      isSelectedDefaultModel && 'fill-current'
+                    )}
+                  />
+                </Button>
+              </div>
             </div>
             <div className='relative'>
               <Search className='text-muted-foreground pointer-events-none absolute top-2.5 left-2.5 size-4' />
@@ -1544,37 +1599,34 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                             </div>
                             <div className='flex min-w-0 items-center gap-2'>
                               <div className='min-w-0 flex-1'>
-                                {channelRemark ? (
-                                  <HoverCard>
-                                    <HoverCardTrigger
-                                      render={
-                                        <div
-                                          className={cn(
-                                            '-my-1 block min-w-0 cursor-help truncate py-1 font-medium',
-                                            !isEnabled &&
-                                              'text-muted-foreground'
-                                          )}
-                                        />
-                                      }
-                                      delay={CHANNEL_REMARK_HOVER_DELAY}
-                                      closeDelay={CHANNEL_REMARK_CLOSE_DELAY}
-                                    >
-                                      {channel.name}
-                                    </HoverCardTrigger>
-                                    <ChannelRemarkHoverContent side='top'>
-                                      <ChannelRemarkText text={channelRemark} />
-                                    </ChannelRemarkHoverContent>
-                                  </HoverCard>
-                                ) : (
-                                  <div
-                                    className={cn(
-                                      'min-w-0 truncate font-medium',
-                                      !isEnabled && 'text-muted-foreground'
-                                    )}
+                                <HoverCard>
+                                  <HoverCardTrigger
+                                    render={
+                                      <div
+                                        className={cn(
+                                          '-my-1 block min-w-0 cursor-help truncate py-1 font-medium',
+                                          !isEnabled && 'text-muted-foreground'
+                                        )}
+                                      />
+                                    }
+                                    delay={CHANNEL_REMARK_HOVER_DELAY}
+                                    closeDelay={CHANNEL_REMARK_CLOSE_DELAY}
                                   >
                                     {channel.name}
-                                  </div>
-                                )}
+                                  </HoverCardTrigger>
+                                  <ChannelRemarkHoverContent side='top'>
+                                    <div className='font-medium break-words'>
+                                      {channel.name}
+                                    </div>
+                                    {channelRemark ? (
+                                      <div className='mt-2 border-t pt-2'>
+                                        <ChannelRemarkText
+                                          text={channelRemark}
+                                        />
+                                      </div>
+                                    ) : null}
+                                  </ChannelRemarkHoverContent>
+                                </HoverCard>
                               </div>
                               {!isEnabled ? (
                                 <StatusBadge

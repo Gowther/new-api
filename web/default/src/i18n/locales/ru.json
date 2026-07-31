@@ -5421,5 +5421,13 @@
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
     "Zoom": "Zoom"
-  }
+  },
+  "Review official price changes": "Проверить изменения официальных цен",
+  "The following saved mappings have price changes. Confirm to synchronize them.": "Следующие сохраненные сопоставления содержат изменения цен. Подтвердите синхронизацию.",
+  "Official source": "Официальный источник",
+  "Changed pricing fields": "Измененные поля ценообразования",
+  "Confirm and Sync": "Подтвердить и синхронизировать",
+  "No saved official price changes found": "Изменения сохраненных официальных цен не найдены",
+  "Failed to preview saved official prices": "Не удалось просмотреть сохраненные официальные цены",
+  "{{changed}} model(s) will change, {{unchanged}} unchanged, {{skipped}} without an available official price.": "Будут изменены модели: {{changed}}; без изменений: {{unchanged}}; без доступной официальной цены: {{skipped}}."
 }

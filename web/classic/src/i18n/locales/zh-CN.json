@@ -4002,5 +4002,12 @@
     "Trend compares this cluster's error-log count in the newer half of the selected time range with the older half. New means only the newer half has errors; rising or falling requires a meaningful change; otherwise it is stable.": "趋势会比较所选时间范围前后两个等长时段内该故障簇的错误日志数。新增表示仅后半段出现错误；上升或下降要求变化达到一定幅度，否则为稳定。",
     "Urgent clusters are visible clusters classified as high or critical by channel status, HTTP status, route error rate, route attempts, and cluster error-log count.": "紧急故障簇是根据渠道状态、HTTP 状态、路由错误率、路由尝试次数和故障簇错误日志数判定为高或严重的可见故障簇。",
     "Visible affected requests is the sum of each visible fault cluster's distinct failed-request count. The same request can be counted more than once if it appears in multiple clusters.": "可见受影响请求是每个可见故障簇去重失败请求数的总和。同一个请求若出现在多个故障簇中，可能会被重复计数。"
-  }
+  },
+  "已保存官方价格预览失败": "已保存官方价格预览失败",
+  "查看官方价格变更": "查看官方价格变更",
+  "官方来源": "官方来源",
+  "变更的定价字段": "变更的定价字段",
+  "确认并同步": "确认并同步",
+  "未发现已保存官方价格变更": "未发现已保存官方价格变更",
+  "将更新 {{changed}} 个模型，{{unchanged}} 个未变化，{{skipped}} 个暂无可用官方价格。": "将更新 {{changed}} 个模型，{{unchanged}} 个未变化，{{skipped}} 个暂无可用官方价格。"
 }

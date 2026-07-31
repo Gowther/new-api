@@ -5421,5 +5421,13 @@
     "Zhipu": "智譜",
     "Zhipu V4": "智譜 V4",
     "Zoom": "縮放"
-  }
+  },
+  "Review official price changes": "檢視官方價格變更",
+  "The following saved mappings have price changes. Confirm to synchronize them.": "以下已儲存對應的價格有變動，確認後將同步。",
+  "Official source": "官方來源",
+  "Changed pricing fields": "變更的定價欄位",
+  "Confirm and Sync": "確認並同步",
+  "No saved official price changes found": "未發現已儲存官方價格變更",
+  "Failed to preview saved official prices": "已儲存官方價格預覽失敗",
+  "{{changed}} model(s) will change, {{unchanged}} unchanged, {{skipped}} without an available official price.": "將更新 {{changed}} 個模型，{{unchanged}} 個未變更，{{skipped}} 個暫無可用官方價格。"
 }

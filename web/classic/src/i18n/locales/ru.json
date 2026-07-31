@@ -3896,5 +3896,12 @@
     "Trend compares this cluster's error-log count in the newer half of the selected time range with the older half. New means only the newer half has errors; rising or falling requires a meaningful change; otherwise it is stable.": "Тренд сравнивает число ошибок кластера в новой и старой половинах выбранного периода. Новый означает ошибки только в новой половине; рост или падение требуют заметного изменения; иначе тренд стабильный.",
     "Urgent clusters are visible clusters classified as high or critical by channel status, HTTP status, route error rate, route attempts, and cluster error-log count.": "Срочные кластеры — видимые кластеры с высокой или критической оценкой по состоянию канала, HTTP-статусу, доле ошибок, числу попыток и журналов кластера.",
     "Visible affected requests is the sum of each visible fault cluster's distinct failed-request count. The same request can be counted more than once if it appears in multiple clusters.": "Видимые затронутые запросы — сумма уникальных неуспешных запросов по каждому видимому кластеру. Один запрос может учитываться несколько раз, если он входит в разные кластеры."
-  }
+  },
+  "已保存官方价格预览失败": "Не удалось просмотреть сохраненные официальные цены",
+  "查看官方价格变更": "Проверить изменения официальных цен",
+  "官方来源": "Официальный источник",
+  "变更的定价字段": "Измененные поля ценообразования",
+  "确认并同步": "Подтвердить и синхронизировать",
+  "未发现已保存官方价格变更": "Изменения сохраненных официальных цен не найдены",
+  "将更新 {{changed}} 个模型，{{unchanged}} 个未变化，{{skipped}} 个暂无可用官方价格。": "Будут изменены модели: {{changed}}; без изменений: {{unchanged}}; без доступной официальной цены: {{skipped}}."
 }

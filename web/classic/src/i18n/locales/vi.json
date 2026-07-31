@@ -4403,5 +4403,12 @@
     "Trend compares this cluster's error-log count in the newer half of the selected time range with the older half. New means only the newer half has errors; rising or falling requires a meaningful change; otherwise it is stable.": "Xu hướng so sánh số nhật ký lỗi của cụm giữa nửa mới và nửa cũ của khoảng thời gian đã chọn. Mới nghĩa là chỉ nửa mới có lỗi; tăng hoặc giảm cần mức thay đổi đáng kể; nếu không thì ổn định.",
     "Urgent clusters are visible clusters classified as high or critical by channel status, HTTP status, route error rate, route attempts, and cluster error-log count.": "Cụm khẩn cấp là các cụm hiển thị được xếp mức cao hoặc nghiêm trọng theo trạng thái kênh, trạng thái HTTP, tỷ lệ lỗi tuyến, số lần thử và số nhật ký lỗi của cụm.",
     "Visible affected requests is the sum of each visible fault cluster's distinct failed-request count. The same request can be counted more than once if it appears in multiple clusters.": "Yêu cầu bị ảnh hưởng đang hiển thị là tổng số yêu cầu thất bại riêng biệt của từng cụm. Một yêu cầu có thể bị tính nhiều lần nếu xuất hiện trong nhiều cụm."
-  }
+  },
+  "已保存官方价格预览失败": "Không thể xem trước giá chính thức đã lưu",
+  "查看官方价格变更": "Xem thay đổi giá chính thức",
+  "官方来源": "Nguồn chính thức",
+  "变更的定价字段": "Trường định giá đã thay đổi",
+  "确认并同步": "Xác nhận và đồng bộ",
+  "未发现已保存官方价格变更": "Không tìm thấy thay đổi giá chính thức đã lưu",
+  "将更新 {{changed}} 个模型，{{unchanged}} 个未变化，{{skipped}} 个暂无可用官方价格。": "{{changed}} mô hình sẽ thay đổi, {{unchanged}} không thay đổi, {{skipped}} không có giá chính thức khả dụng."
 }

@@ -5421,5 +5421,13 @@
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V 4",
     "Zoom": "ズーム"
-  }
+  },
+  "Review official price changes": "公式価格の変更を確認",
+  "The following saved mappings have price changes. Confirm to synchronize them.": "次の保存済みマッピングには価格変更があります。確認して同期してください。",
+  "Official source": "公式ソース",
+  "Changed pricing fields": "変更された価格フィールド",
+  "Confirm and Sync": "確認して同期",
+  "No saved official price changes found": "保存済み公式価格の変更は見つかりませんでした",
+  "Failed to preview saved official prices": "保存済み公式価格のプレビューに失敗しました",
+  "{{changed}} model(s) will change, {{unchanged}} unchanged, {{skipped}} without an available official price.": "{{changed}} 件のモデルが変更され、{{unchanged}} 件は変更なし、{{skipped}} 件は利用可能な公式価格がありません。"
 }

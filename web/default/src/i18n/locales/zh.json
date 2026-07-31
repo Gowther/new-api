@@ -5421,5 +5421,13 @@
     "Zhipu": "智谱",
     "Zhipu V4": "智谱 V4",
     "Zoom": "缩放"
-  }
+  },
+  "Review official price changes": "查看官方价格变更",
+  "The following saved mappings have price changes. Confirm to synchronize them.": "以下已保存映射的价格有变动，确认后将同步。",
+  "Official source": "官方来源",
+  "Changed pricing fields": "变更的定价字段",
+  "Confirm and Sync": "确认并同步",
+  "No saved official price changes found": "未发现已保存官方价格变更",
+  "Failed to preview saved official prices": "已保存官方价格预览失败",
+  "{{changed}} model(s) will change, {{unchanged}} unchanged, {{skipped}} without an available official price.": "将更新 {{changed}} 个模型，{{unchanged}} 个未变化，{{skipped}} 个暂无可用官方价格。"
 }

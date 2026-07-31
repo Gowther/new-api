@@ -63,6 +63,8 @@ const officialPriceFieldOrder = [
   'billing_expr',
 ];
 
+const officialPriceRatioFields = officialPriceFieldOrder.slice(0, 7);
+
 function officialPriceMappingKey(mapping) {
   if (!mapping) return '';
   return `${mapping.source}\u0000${mapping.provider || ''}\u0000${mapping.upstream_model}`;
@@ -74,6 +76,84 @@ function officialPriceMappingFromCandidate(candidate) {
     provider: candidate.provider,
     upstream_model: candidate.upstream_model,
   };
+}
+
+function hasOfficialPriceField(fields, field) {
+  return Object.prototype.hasOwnProperty.call(fields, field);
+}
+
+function projectOfficialPriceFields(current, candidate) {
+  const next = { ...current };
+  const fields = candidate.fields || {};
+  const hasModelPrice = hasOfficialPriceField(fields, 'model_price');
+  const hasRatioPrice = Object.keys(fields).some(
+    (field) =>
+      field !== 'model_price' &&
+      field !== 'billing_mode' &&
+      field !== 'billing_expr',
+  );
+
+  if (hasModelPrice) {
+    officialPriceRatioFields.forEach((field) => delete next[field]);
+  }
+  if (hasRatioPrice) {
+    delete next.model_price;
+  }
+
+  return { ...next, ...fields };
+}
+
+function buildSavedOfficialPriceComparison(models) {
+  const changes = [];
+  let savedCount = 0;
+  let skippedCount = 0;
+  let unchangedCount = 0;
+
+  models.forEach((model) => {
+    if (!model.mapping) return;
+    savedCount += 1;
+
+    const candidate = (model.candidates || []).find(
+      (item) =>
+        officialPriceMappingKey(officialPriceMappingFromCandidate(item)) ===
+        officialPriceMappingKey(model.mapping),
+    );
+    if (!candidate) {
+      skippedCount += 1;
+      return;
+    }
+
+    const current = model.current || {};
+    const projected = projectOfficialPriceFields(current, candidate);
+    const fields = [
+      ...new Set([...Object.keys(current), ...Object.keys(projected)]),
+    ]
+      .sort(officialPriceFieldSort)
+      .flatMap((field) => {
+        if (current[field] === projected[field]) return [];
+        return [
+          {
+            field,
+            current: current[field],
+            official: projected[field],
+          },
+        ];
+      });
+
+    if (fields.length === 0) {
+      unchangedCount += 1;
+      return;
+    }
+
+    changes.push({
+      modelName: model.model_name,
+      source: candidate.source,
+      upstreamModel: candidate.upstream_model,
+      fields,
+    });
+  });
+
+  return { changes, savedCount, skippedCount, unchangedCount };
 }
 
 function officialPriceFieldSort(left, right) {
@@ -138,12 +218,16 @@ function OfficialPriceSyncContent({
   onApplied,
 }) {
   const isScoped = modelNames !== undefined;
+  const isMobile = useIsMobile();
   const modelNamesKey = modelNames?.join('\u0000') || '';
   const [previewData, setPreviewData] = useState(null);
   const [selectedMappings, setSelectedMappings] = useState({});
   const [searchKeyword, setSearchKeyword] = useState('');
   const [mappingFilter, setMappingFilter] = useState('all');
   const [candidateFilter, setCandidateFilter] = useState('all');
+  const [savedSyncPreview, setSavedSyncPreview] = useState(null);
+  const [savedSyncConfirmVisible, setSavedSyncConfirmVisible] = useState(false);
+  const [savedSyncPreviewLoading, setSavedSyncPreviewLoading] = useState(false);
   const [selectedSources, setSelectedSources] = useState(
     OFFICIAL_PRICE_SOURCES.map((source) => source.value),
   );
@@ -156,6 +240,8 @@ function OfficialPriceSyncContent({
     setSearchKeyword('');
     setMappingFilter('all');
     setCandidateFilter('all');
+    setSavedSyncPreview(null);
+    setSavedSyncConfirmVisible(false);
   }, [modelNamesKey]);
 
   const fieldLabelMap = useMemo(
@@ -172,6 +258,11 @@ function OfficialPriceSyncContent({
       billing_expr: t('表达式计费'),
     }),
     [t],
+  );
+
+  const savedSyncComparison = useMemo(
+    () => buildSavedOfficialPriceComparison(savedSyncPreview?.models || []),
+    [savedSyncPreview],
   );
 
   const filteredModels = useMemo(() => {
@@ -256,6 +347,26 @@ function OfficialPriceSyncContent({
     }
   };
 
+  const previewSavedOfficialPrices = async () => {
+    setSavedSyncPreviewLoading(true);
+    try {
+      const res = await API.post('/api/ratio_sync/official/preview', {
+        sources: OFFICIAL_PRICE_SOURCES.map((source) => source.value),
+      });
+      if (!res.data.success) {
+        showError(res.data.message || t('已保存官方价格预览失败'));
+        return;
+      }
+
+      setSavedSyncPreview(res.data.data || { models: [] });
+      setSavedSyncConfirmVisible(true);
+    } catch (error) {
+      showError(t('已保存官方价格预览失败') + ': ' + error.message);
+    } finally {
+      setSavedSyncPreviewLoading(false);
+    }
+  };
+
   const applyOfficialMappings = async (mappings, applyAll) => {
     setApplying(true);
     try {
@@ -265,7 +376,7 @@ function OfficialPriceSyncContent({
       });
       if (!res.data.success) {
         showError(res.data.message || t('官方价格同步失败'));
-        return;
+        return false;
       }
 
       setPreviewData((prev) =>
@@ -280,11 +391,18 @@ function OfficialPriceSyncContent({
       );
       refresh();
       onApplied?.(res.data.data);
+      return true;
     } catch (error) {
       showError(t('官方价格同步失败') + ': ' + error.message);
+      return false;
     } finally {
       setApplying(false);
     }
+  };
+
+  const confirmSavedOfficialPriceSync = async () => {
+    const applied = await applyOfficialMappings({}, true);
+    if (applied) setSavedSyncConfirmVisible(false);
   };
 
   const selectOfficialCandidate = (modelName, candidate) => {
@@ -317,7 +435,12 @@ function OfficialPriceSyncContent({
   };
 
   const selectedCount = Object.keys(selectedMappings).length;
-  const panelDisabled = disabled || loading || applying;
+  const panelDisabled =
+    disabled ||
+    loading ||
+    applying ||
+    savedSyncPreviewLoading ||
+    savedSyncConfirmVisible;
   const sourceStatus = previewData?.source_results || [];
   const columns = [
     {
@@ -531,8 +654,8 @@ function OfficialPriceSyncContent({
               icon={<RefreshCcw size={14} />}
               type='secondary'
               disabled={panelDisabled}
-              loading={applying}
-              onClick={() => applyOfficialMappings({}, true)}
+              loading={savedSyncPreviewLoading}
+              onClick={previewSavedOfficialPrices}
             >
               {t('同步已保存官方价格')}
             </Button>
@@ -581,6 +704,104 @@ function OfficialPriceSyncContent({
           loading={loading}
         />
       )}
+
+      <Modal
+        title={t('查看官方价格变更')}
+        visible={savedSyncConfirmVisible}
+        confirmLoading={applying}
+        cancelButtonProps={{ disabled: applying }}
+        okButtonProps={{
+          disabled: applying || savedSyncComparison.changes.length === 0,
+        }}
+        okText={t('确认并同步')}
+        cancelText={t('取消')}
+        maskClosable={!applying}
+        onCancel={
+          applying ? undefined : () => setSavedSyncConfirmVisible(false)
+        }
+        onOk={confirmSavedOfficialPriceSync}
+        size={isMobile ? 'full-width' : 'large'}
+        bodyStyle={{ maxHeight: '70vh', overflowY: 'auto' }}
+      >
+        <div className='flex flex-col gap-4'>
+          <p className='text-sm text-gray-500'>
+            {t(
+              '将更新 {{changed}} 个模型，{{unchanged}} 个未变化，{{skipped}} 个暂无可用官方价格。',
+              {
+                changed: savedSyncComparison.changes.length,
+                unchanged: savedSyncComparison.unchangedCount,
+                skipped: savedSyncComparison.skippedCount,
+              },
+            )}
+          </p>
+
+          {savedSyncComparison.changes.length === 0 ? (
+            <p className='text-sm text-gray-500'>
+              {t('未发现已保存官方价格变更')}
+            </p>
+          ) : (
+            <Table
+              columns={[
+                {
+                  title: t('模型'),
+                  dataIndex: 'modelName',
+                  render: (modelName) => (
+                    <span className='font-mono text-sm'>{modelName}</span>
+                  ),
+                },
+                {
+                  title: t('官方来源'),
+                  dataIndex: 'source',
+                  width: 180,
+                  render: (source, record) => (
+                    <div className='flex flex-col gap-1'>
+                      <Tag color='blue' shape='circle' className='w-fit'>
+                        {source}
+                      </Tag>
+                      <span className='break-all text-sm'>
+                        {record.upstreamModel}
+                      </span>
+                    </div>
+                  ),
+                },
+                {
+                  title: t('变更的定价字段'),
+                  dataIndex: 'fields',
+                  render: (fields) => (
+                    <div className='flex min-w-[280px] flex-col gap-1.5'>
+                      {fields.map((field) => (
+                        <div
+                          key={field.field}
+                          className='flex flex-wrap items-center gap-x-2 gap-y-1 text-sm'
+                        >
+                          <Tag
+                            color={stringToColor(field.field)}
+                            shape='circle'
+                          >
+                            {fieldLabelMap[field.field] || field.field}
+                          </Tag>
+                          <span className='font-mono'>
+                            {formatOfficialPriceValue(field.current)}
+                          </span>
+                          <span className='text-gray-500'>→</span>
+                          <span className='font-mono'>
+                            {formatOfficialPriceValue(field.official)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ),
+                },
+              ]}
+              dataSource={savedSyncComparison.changes}
+              rowKey='modelName'
+              pagination={false}
+              scroll={{ x: 'max-content' }}
+              size='small'
+            />
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -4020,5 +4020,12 @@
     "Trend compares this cluster's error-log count in the newer half of the selected time range with the older half. New means only the newer half has errors; rising or falling requires a meaningful change; otherwise it is stable.": "Trend compares this cluster's error-log count in the newer half of the selected time range with the older half. New means only the newer half has errors; rising or falling requires a meaningful change; otherwise it is stable.",
     "Urgent clusters are visible clusters classified as high or critical by channel status, HTTP status, route error rate, route attempts, and cluster error-log count.": "Urgent clusters are visible clusters classified as high or critical by channel status, HTTP status, route error rate, route attempts, and cluster error-log count.",
     "Visible affected requests is the sum of each visible fault cluster's distinct failed-request count. The same request can be counted more than once if it appears in multiple clusters.": "Visible affected requests is the sum of each visible fault cluster's distinct failed-request count. The same request can be counted more than once if it appears in multiple clusters."
-  }
+  },
+  "已保存官方价格预览失败": "Failed to preview saved official prices",
+  "查看官方价格变更": "Review official price changes",
+  "官方来源": "Official source",
+  "变更的定价字段": "Changed pricing fields",
+  "确认并同步": "Confirm and Sync",
+  "未发现已保存官方价格变更": "No saved official price changes found",
+  "将更新 {{changed}} 个模型，{{unchanged}} 个未变化，{{skipped}} 个暂无可用官方价格。": "{{changed}} model(s) will change, {{unchanged}} unchanged, {{skipped}} without an available official price."
 }

@@ -60,24 +60,12 @@ import type {
   OfficialPriceModelPreview,
   OfficialPricePreviewData,
 } from '../types'
-import { RATIO_TYPE_OPTIONS } from './constants'
-
-const PRICE_FIELD_ORDER = [
-  'model_ratio',
-  'completion_ratio',
-  'cache_ratio',
-  'create_cache_ratio',
-  'image_ratio',
-  'audio_ratio',
-  'audio_completion_ratio',
-  'model_price',
-  'billing_mode',
-  'billing_expr',
-]
-
-const EXTRA_FIELD_LABELS: Record<string, string> = {
-  billing_mode: 'Billing mode',
-}
+import { OfficialPriceSyncConfirmDialog } from './official-price-sync-confirm-dialog'
+import {
+  buildSavedOfficialPriceComparison,
+  getOfficialPriceFieldLabelKey,
+  getOfficialPriceFieldOrder,
+} from './official-price-sync-diff'
 
 const OFFICIAL_PRICE_SOURCES = [
   { value: 'models.dev', label: 'models.dev' },
@@ -100,8 +88,7 @@ function mappingFromCandidate(
 }
 
 function fieldOrder(field: string) {
-  const index = PRICE_FIELD_ORDER.indexOf(field)
-  return index === -1 ? PRICE_FIELD_ORDER.length : index
+  return getOfficialPriceFieldOrder(field)
 }
 
 function formatFieldValue(value: OfficialPriceFieldValue | undefined) {
@@ -165,10 +152,7 @@ function FieldList({ fields }: FieldListProps) {
   return (
     <div className='flex min-w-[220px] flex-wrap gap-1.5'>
       {entries.map(([field, value]) => {
-        const label =
-          RATIO_TYPE_OPTIONS.find((option) => option.value === field)?.label ||
-          EXTRA_FIELD_LABELS[field] ||
-          field
+        const label = getOfficialPriceFieldLabelKey(field)
         return (
           <Badge key={field} variant='outline' className='max-w-[360px]'>
             <span className='truncate'>
@@ -268,8 +252,10 @@ export function OfficialPriceSync({
   >({})
   const [search, setSearch] = useState('')
   const [mappingFilter, setMappingFilter] = useState<MappingFilter>('all')
-  const [candidateFilter, setCandidateFilter] =
-    useState<CandidateFilter>('all')
+  const [candidateFilter, setCandidateFilter] = useState<CandidateFilter>('all')
+  const [savedSyncPreview, setSavedSyncPreview] =
+    useState<OfficialPricePreviewData>()
+  const [savedSyncDialogOpen, setSavedSyncDialogOpen] = useState(false)
   const [selectedSources, setSelectedSources] = useState<string[]>(() =>
     OFFICIAL_PRICE_SOURCES.map((source) => source.value)
   )
@@ -280,6 +266,8 @@ export function OfficialPriceSync({
     setSearch('')
     setMappingFilter('all')
     setCandidateFilter('all')
+    setSavedSyncPreview(undefined)
+    setSavedSyncDialogOpen(false)
   }, [modelNamesKey])
 
   const previewMutation = useMutation({
@@ -334,6 +322,23 @@ export function OfficialPriceSync({
     },
   })
 
+  const savedSyncPreviewMutation = useMutation({
+    mutationFn: previewOfficialPriceSync,
+    onSuccess: (data) => {
+      if (!data.success) {
+        toast.error(
+          data.message || t('Failed to preview saved official prices')
+        )
+        return
+      }
+      setSavedSyncPreview(data.data)
+      setSavedSyncDialogOpen(true)
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || t('Failed to preview saved official prices'))
+    },
+  })
+
   const filteredModels = useMemo(() => {
     const models = previewData?.models || []
     const keyword = search.trim().toLowerCase()
@@ -359,7 +364,15 @@ export function OfficialPriceSync({
     })
   }, [candidateFilter, mappingFilter, previewData?.models, search])
 
-  const isLoading = previewMutation.isPending || applyMutation.isPending
+  const savedSyncComparison = useMemo(
+    () => buildSavedOfficialPriceComparison(savedSyncPreview?.models || []),
+    [savedSyncPreview?.models]
+  )
+  const isLoading =
+    previewMutation.isPending ||
+    savedSyncPreviewMutation.isPending ||
+    applyMutation.isPending
+  const panelDisabled = isLoading || savedSyncDialogOpen
   const selectedCount = Object.keys(selectedMappings).length
 
   const handleSelectCandidate = (
@@ -400,7 +413,20 @@ export function OfficialPriceSync({
   }
 
   const handleApplySaved = () => {
-    applyMutation.mutate({ mappings: {}, apply_all: true })
+    savedSyncPreviewMutation.mutate({
+      sources: OFFICIAL_PRICE_SOURCES.map((source) => source.value),
+    })
+  }
+
+  const handleConfirmSaved = () => {
+    applyMutation.mutate(
+      { mappings: {}, apply_all: true },
+      {
+        onSuccess: (data) => {
+          if (data.success) setSavedSyncDialogOpen(false)
+        },
+      }
+    )
   }
 
   const mappingFilterItems = [
@@ -455,7 +481,7 @@ export function OfficialPriceSync({
                   onCheckedChange={(checked) =>
                     handleSourceChange(source.value, !!checked)
                   }
-                  disabled={isLoading}
+                  disabled={panelDisabled}
                 />
                 <Label htmlFor={id} className='cursor-pointer text-sm'>
                   {source.label}
@@ -473,7 +499,7 @@ export function OfficialPriceSync({
               onChange={(event) => setSearch(event.target.value)}
               placeholder={t('Search model name...')}
               className='pl-8'
-              disabled={isLoading || !previewData}
+              disabled={panelDisabled || !previewData}
             />
           </div>
           <div className='flex items-center gap-1.5'>
@@ -486,7 +512,7 @@ export function OfficialPriceSync({
               onValueChange={(value) => {
                 if (value) setMappingFilter(value as MappingFilter)
               }}
-              disabled={isLoading || !previewData}
+              disabled={panelDisabled || !previewData}
             >
               <SelectTrigger
                 className='w-[132px]'
@@ -515,7 +541,7 @@ export function OfficialPriceSync({
               onValueChange={(value) => {
                 if (value) setCandidateFilter(value as CandidateFilter)
               }}
-              disabled={isLoading || !previewData}
+              disabled={panelDisabled || !previewData}
             >
               <SelectTrigger
                 className='w-[144px]'
@@ -542,7 +568,7 @@ export function OfficialPriceSync({
                 model_names: modelNames,
               })
             }
-            disabled={isLoading || selectedSources.length === 0}
+            disabled={panelDisabled || selectedSources.length === 0}
           >
             {previewMutation.isPending ? (
               <Loader2 className='animate-spin' />
@@ -555,9 +581,9 @@ export function OfficialPriceSync({
             <Button
               variant='secondary'
               onClick={handleApplySaved}
-              disabled={isLoading}
+              disabled={panelDisabled}
             >
-              {applyMutation.isPending ? (
+              {savedSyncPreviewMutation.isPending ? (
                 <Loader2 className='animate-spin' />
               ) : (
                 <RefreshCcw />
@@ -567,7 +593,7 @@ export function OfficialPriceSync({
           )}
           <Button
             onClick={handleApplySelected}
-            disabled={isLoading || selectedCount === 0}
+            disabled={panelDisabled || selectedCount === 0}
           >
             {applyMutation.isPending ? (
               <Loader2 className='animate-spin' />
@@ -581,19 +607,21 @@ export function OfficialPriceSync({
         </div>
       </div>
 
-      {!previewData ? (
+      {!previewData && (
         <div className='flex h-40 items-center justify-center rounded-md border'>
           <p className='text-muted-foreground text-sm'>
             {t('No official price preview yet')}
           </p>
         </div>
-      ) : filteredModels.length === 0 ? (
+      )}
+      {previewData && filteredModels.length === 0 && (
         <div className='flex h-40 items-center justify-center rounded-md border'>
           <p className='text-muted-foreground text-sm'>
             {t('No official price matches found')}
           </p>
         </div>
-      ) : (
+      )}
+      {previewData && filteredModels.length > 0 && (
         <Table>
           <TableHeader>
             <TableRow>
@@ -640,7 +668,7 @@ export function OfficialPriceSync({
                               mappingKey(selectedMappings[model.model_name]) ===
                               mappingKey(candidateMapping)
                             }
-                            disabled={isLoading}
+                            disabled={panelDisabled}
                             onSelect={() =>
                               handleSelectCandidate(model.model_name, candidate)
                             }
@@ -655,6 +683,14 @@ export function OfficialPriceSync({
           </TableBody>
         </Table>
       )}
+
+      <OfficialPriceSyncConfirmDialog
+        open={savedSyncDialogOpen}
+        onOpenChange={setSavedSyncDialogOpen}
+        comparison={savedSyncComparison}
+        onConfirm={handleConfirmSaved}
+        isLoading={applyMutation.isPending}
+      />
     </div>
   )
 }

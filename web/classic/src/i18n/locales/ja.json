@@ -3842,5 +3842,12 @@
     "Trend compares this cluster's error-log count in the newer half of the selected time range with the older half. New means only the newer half has errors; rising or falling requires a meaningful change; otherwise it is stable.": "トレンドは、選択期間を前後半に分け、このクラスタのエラーログ数を比較します。新規は後半だけにエラーがある状態で、上昇または下降には十分な変化が必要です。それ以外は安定です。",
     "Urgent clusters are visible clusters classified as high or critical by channel status, HTTP status, route error rate, route attempts, and cluster error-log count.": "緊急クラスタは、チャネル状態、HTTP ステータス、ルートエラー率、試行回数、クラスタのエラーログ数により高または重大と判定された表示中のクラスタです。",
     "Visible affected requests is the sum of each visible fault cluster's distinct failed-request count. The same request can be counted more than once if it appears in multiple clusters.": "表示中の影響リクエスト数は、各障害クラスタで重複を除いた失敗リクエスト数の合計です。同じリクエストが複数クラスタに現れる場合は重複して数えられます。"
-  }
+  },
+  "已保存官方价格预览失败": "保存済み公式価格のプレビューに失敗しました",
+  "查看官方价格变更": "公式価格の変更を確認",
+  "官方来源": "公式ソース",
+  "变更的定价字段": "変更された価格フィールド",
+  "确认并同步": "確認して同期",
+  "未发现已保存官方价格变更": "保存済み公式価格の変更は見つかりませんでした",
+  "将更新 {{changed}} 个模型，{{unchanged}} 个未变化，{{skipped}} 个暂无可用官方价格。": "{{changed}} 件のモデルが変更され、{{unchanged}} 件は変更なし、{{skipped}} 件は利用可能な公式価格がありません。"
 }

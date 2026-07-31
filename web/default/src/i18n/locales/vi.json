@@ -5421,5 +5421,13 @@
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
     "Zoom": "Zoom"
-  }
+  },
+  "Review official price changes": "Xem thay đổi giá chính thức",
+  "The following saved mappings have price changes. Confirm to synchronize them.": "Các ánh xạ đã lưu sau có thay đổi giá. Hãy xác nhận để đồng bộ.",
+  "Official source": "Nguồn chính thức",
+  "Changed pricing fields": "Trường định giá đã thay đổi",
+  "Confirm and Sync": "Xác nhận và đồng bộ",
+  "No saved official price changes found": "Không tìm thấy thay đổi giá chính thức đã lưu",
+  "Failed to preview saved official prices": "Không thể xem trước giá chính thức đã lưu",
+  "{{changed}} model(s) will change, {{unchanged}} unchanged, {{skipped}} without an available official price.": "{{changed}} mô hình sẽ thay đổi, {{unchanged}} không thay đổi, {{skipped}} không có giá chính thức khả dụng."
 }

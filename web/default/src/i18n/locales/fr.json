@@ -5421,5 +5421,13 @@
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
     "Zoom": "Zoom"
-  }
+  },
+  "Review official price changes": "Examiner les modifications de prix officiels",
+  "The following saved mappings have price changes. Confirm to synchronize them.": "Les mappages enregistrés suivants comportent des modifications de prix. Confirmez pour les synchroniser.",
+  "Official source": "Source officielle",
+  "Changed pricing fields": "Champs de tarification modifiés",
+  "Confirm and Sync": "Confirmer et synchroniser",
+  "No saved official price changes found": "Aucune modification de prix officiel enregistrée trouvée",
+  "Failed to preview saved official prices": "Échec de l’aperçu des prix officiels enregistrés",
+  "{{changed}} model(s) will change, {{unchanged}} unchanged, {{skipped}} without an available official price.": "{{changed}} modèle(s) seront modifiés, {{unchanged}} inchangé(s), {{skipped}} sans prix officiel disponible."
 }

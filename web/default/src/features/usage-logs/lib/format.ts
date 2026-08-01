@@ -250,6 +250,35 @@ export function hasAnyCacheTokens(
   )
 }
 
+/**
+ * Format the cache-read rate using the provider's prompt token semantics.
+ * Anthropic reports prompt tokens without cache reads, while other providers
+ * include cache reads in prompt tokens.
+ */
+export function formatCacheReadRate(
+  cacheReadTokens: number,
+  promptTokens: number,
+  isClaude: boolean
+): string | null {
+  const normalizedCacheReadTokens = Number(cacheReadTokens)
+  const normalizedPromptTokens = Number(promptTokens)
+  if (
+    !Number.isFinite(normalizedCacheReadTokens) ||
+    !Number.isFinite(normalizedPromptTokens) ||
+    normalizedCacheReadTokens <= 0 ||
+    normalizedPromptTokens < 0
+  ) {
+    return null
+  }
+
+  const denominator = isClaude
+    ? normalizedPromptTokens + normalizedCacheReadTokens
+    : normalizedPromptTokens
+  if (denominator <= 0) return null
+
+  return `${((normalizedCacheReadTokens / denominator) * 100).toFixed(2)}%`
+}
+
 export function getTieredBillingSummary(
   other: LogOtherData | null
 ): TieredBillingSummary | null {

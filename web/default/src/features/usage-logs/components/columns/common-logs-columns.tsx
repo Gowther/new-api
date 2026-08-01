@@ -59,6 +59,7 @@ import { LOG_TYPE_ALL_VALUE } from '../../constants'
 import type { UsageLog } from '../../data/schema'
 import {
   formatModelName,
+  formatCacheReadRate,
   getFirstResponseTimeColor,
   getResponseTimeColor,
   getTieredBillingSummary,
@@ -850,6 +851,11 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         }
 
         const cacheReadTokens = other?.cache_tokens || 0
+        const cacheReadRate = formatCacheReadRate(
+          cacheReadTokens,
+          promptTokens,
+          other?.claude === true
+        )
         const cacheWrite5m = other?.cache_creation_tokens_5m || 0
         const cacheWrite1h = other?.cache_creation_tokens_1h || 0
         const hasSplitCache = cacheWrite5m > 0 || cacheWrite1h > 0
@@ -868,6 +874,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                 {cacheReadTokens > 0 && (
                   <span className='text-muted-foreground/60'>
                     {t('Cache')}↓ {cacheReadTokens.toLocaleString()}
+                    {cacheReadRate && ` (${cacheReadRate})`}
                   </span>
                 )}
                 {cacheWriteTokens > 0 && (

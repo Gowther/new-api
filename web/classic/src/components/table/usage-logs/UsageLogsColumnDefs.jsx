@@ -377,7 +377,24 @@ function formatTokenCount(value) {
   return toTokenNumber(value).toLocaleString();
 }
 
-function getPromptCacheSummary(other) {
+function formatCacheReadRate(cacheReadTokens, promptTokens, isClaude) {
+  const normalizedCacheReadTokens = toTokenNumber(cacheReadTokens);
+  const normalizedPromptTokens = toTokenNumber(promptTokens);
+  if (normalizedCacheReadTokens <= 0) {
+    return null;
+  }
+
+  const denominator = isClaude
+    ? normalizedPromptTokens + normalizedCacheReadTokens
+    : normalizedPromptTokens;
+  if (denominator <= 0) {
+    return null;
+  }
+
+  return `${((normalizedCacheReadTokens / denominator) * 100).toFixed(2)}%`;
+}
+
+function getPromptCacheSummary(other, promptTokens) {
   if (!other || typeof other !== 'object') {
     return null;
   }
@@ -399,6 +416,11 @@ function getPromptCacheSummary(other) {
 
   return {
     cacheReadTokens,
+    cacheReadRate: formatCacheReadRate(
+      cacheReadTokens,
+      promptTokens,
+      other.claude === true,
+    ),
     cacheWriteTokens,
   };
 }
@@ -825,14 +847,17 @@ export const getLogsColumns = ({
       dataIndex: 'prompt_tokens',
       render: (text, record, index) => {
         const other = getLogOther(record.other);
-        const cacheSummary = getPromptCacheSummary(other);
+        const cacheSummary = getPromptCacheSummary(other, text);
         const hasCacheRead = (cacheSummary?.cacheReadTokens || 0) > 0;
         const hasCacheWrite = (cacheSummary?.cacheWriteTokens || 0) > 0;
+        const cacheReadText = hasCacheRead
+          ? `${t('缓存读')} ${formatTokenCount(cacheSummary.cacheReadTokens)}${cacheSummary.cacheReadRate ? ` (${cacheSummary.cacheReadRate})` : ''}`
+          : '';
         let cacheText = '';
         if (hasCacheRead && hasCacheWrite) {
-          cacheText = `${t('缓存读')} ${formatTokenCount(cacheSummary.cacheReadTokens)} · ${t('写')} ${formatTokenCount(cacheSummary.cacheWriteTokens)}`;
+          cacheText = `${cacheReadText} · ${t('写')} ${formatTokenCount(cacheSummary.cacheWriteTokens)}`;
         } else if (hasCacheRead) {
-          cacheText = `${t('缓存读')} ${formatTokenCount(cacheSummary.cacheReadTokens)}`;
+          cacheText = cacheReadText;
         } else if (hasCacheWrite) {
           cacheText = `${t('缓存写')} ${formatTokenCount(cacheSummary.cacheWriteTokens)}`;
         }

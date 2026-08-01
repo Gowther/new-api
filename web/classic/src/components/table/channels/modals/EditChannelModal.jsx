@@ -70,6 +70,7 @@ import ModelSelectModal from './ModelSelectModal';
 import SingleModelSelectModal from './SingleModelSelectModal';
 import OllamaModelModal from './OllamaModelModal';
 import ParamOverrideEditorModal from './ParamOverrideEditorModal';
+import AdvancedCustomEditorModal from './AdvancedCustomEditorModal';
 import ModelMappingPreviewModal from './ModelMappingPreviewModal';
 import QuickMappingSuggestionModal from './QuickMappingSuggestionModal';
 import JSONEditor from '../../../common/ui/JSONEditor';
@@ -87,6 +88,14 @@ import {
   collectInvalidStatusCodeEntries,
   collectNewDisallowedStatusCodeRedirects,
 } from './statusCodeRiskGuard';
+import {
+  CHANNEL_TYPE_ADVANCED_CUSTOM,
+  advancedCustomConfigUsesRelativeUpstreamPath,
+  getAdvancedCustomStats,
+  parseAdvancedCustomConfig,
+  stringifyAdvancedCustomConfig,
+  validateAdvancedCustomConfig,
+} from './advancedCustom';
 import {
   IconSave,
   IconClose,
@@ -353,6 +362,7 @@ const EditChannelModal = (props) => {
     system_prompt: '',
     system_prompt_override: false,
     settings: '',
+    advanced_custom: '',
     // 仅 Vertex: 密钥格式（存入 settings.vertex_key_type）
     vertex_key_type: 'json',
     // 仅 AWS: 密钥格式和区域（存入 settings.aws_key_type 和 settings.aws_region）
@@ -616,11 +626,17 @@ const EditChannelModal = (props) => {
       };
     }
   }, [inputs.param_override, t]);
+  const advancedCustomStats = useMemo(
+    () => getAdvancedCustomStats(inputs.advanced_custom),
+    [inputs.advanced_custom],
+  );
   const [isIonetChannel, setIsIonetChannel] = useState(false);
   const [ionetMetadata, setIonetMetadata] = useState(null);
   const [codexCredentialRefreshing, setCodexCredentialRefreshing] =
     useState(false);
   const [paramOverrideEditorVisible, setParamOverrideEditorVisible] =
+    useState(false);
+  const [advancedCustomEditorVisible, setAdvancedCustomEditorVisible] =
     useState(false);
 
   // 密钥显示状态
@@ -1270,6 +1286,9 @@ const EditChannelModal = (props) => {
           const parsedSettings = JSON.parse(data.settings);
           data.azure_responses_version =
             parsedSettings.azure_responses_version || '';
+          data.advanced_custom = parsedSettings.advanced_custom
+            ? stringifyAdvancedCustomConfig(parsedSettings.advanced_custom)
+            : '';
           // 读取 Vertex 密钥格式
           data.vertex_key_type = parsedSettings.vertex_key_type || 'json';
           // 读取 AWS 密钥格式和区域
@@ -1331,6 +1350,7 @@ const EditChannelModal = (props) => {
           data.upstream_model_update_last_check_time = 0;
           data.upstream_model_update_last_detected_models = [];
           data.upstream_model_update_ignored_models = '';
+          data.advanced_custom = '';
         }
       } else {
         // 兼容历史数据：老渠道没有 settings 时，默认按 json 展示
@@ -1351,6 +1371,7 @@ const EditChannelModal = (props) => {
         data.upstream_model_update_last_check_time = 0;
         data.upstream_model_update_last_detected_models = [];
         data.upstream_model_update_ignored_models = '';
+        data.advanced_custom = '';
       }
 
       if (
@@ -1422,7 +1443,8 @@ const EditChannelModal = (props) => {
         data.pass_through_body_enabled ||
         data.force_format ||
         data.claude_beta_query ||
-        data.system_prompt_override;
+        data.system_prompt_override ||
+        (data.advanced_custom && data.advanced_custom.trim());
       if (hasAdvancedValues) {
         setAdvancedSettingsOpen(true);
       }
@@ -1870,6 +1892,7 @@ const EditChannelModal = (props) => {
     setSplitByModelVendor(false);
     setModelVendorGroups([]);
     setModelVendorGroupLoading(false);
+    setAdvancedCustomEditorVisible(false);
     // 重置高级设置折叠状态
     setAdvancedSettingsOpen(false);
     // 清空表单中的key_mode字段
@@ -2093,6 +2116,7 @@ const EditChannelModal = (props) => {
     const formValues = formApiRef.current ? formApiRef.current.getValues() : {};
     let localInputs = { ...formValues };
     localInputs.param_override = inputs.param_override;
+    localInputs.advanced_custom = inputs.advanced_custom || '';
 
     if (localInputs.type === 57) {
       if (batch) {
@@ -2213,6 +2237,33 @@ const EditChannelModal = (props) => {
     ) {
       showInfo(t('请输入API地址！'));
       return;
+    }
+    let advancedCustomConfig = null;
+    if (localInputs.type === CHANNEL_TYPE_ADVANCED_CUSTOM) {
+      advancedCustomConfig = parseAdvancedCustomConfig(
+        localInputs.advanced_custom,
+      );
+      const advancedCustomError =
+        validateAdvancedCustomConfig(advancedCustomConfig);
+      if (advancedCustomError) {
+        const prefix =
+          advancedCustomError.routeIndex === undefined
+            ? ''
+            : `${t('Route')} ${advancedCustomError.routeIndex + 1}: `;
+        showError(`${prefix}${t(advancedCustomError.message)}`);
+        return;
+      }
+      if (
+        advancedCustomConfigUsesRelativeUpstreamPath(advancedCustomConfig) &&
+        !String(localInputs.base_url || '').trim()
+      ) {
+        showError(
+          t(
+            'Base URL is required when an advanced route uses an upstream path',
+          ),
+        );
+        return;
+      }
     }
     const hasModelMapping =
       typeof localInputs.model_mapping === 'string' &&
@@ -2443,6 +2494,12 @@ const EditChannelModal = (props) => {
       settings.upstream_model_update_last_check_time = 0;
     }
 
+    if (localInputs.type === CHANNEL_TYPE_ADVANCED_CUSTOM) {
+      settings.advanced_custom = advancedCustomConfig;
+    } else if ('advanced_custom' in settings) {
+      delete settings.advanced_custom;
+    }
+
     localInputs.settings = JSON.stringify(settings);
 
     // 清理不需要发送到后端的字段
@@ -2472,6 +2529,7 @@ const EditChannelModal = (props) => {
     delete localInputs.upstream_model_update_last_check_time;
     delete localInputs.upstream_model_update_last_detected_models;
     delete localInputs.upstream_model_update_ignored_models;
+    delete localInputs.advanced_custom;
 
     let res;
     localInputs.auto_ban = localInputs.auto_ban ? 1 : 0;
@@ -2726,9 +2784,10 @@ const EditChannelModal = (props) => {
       CHANNEL_OPTIONS.map((opt) => ({
         ...opt,
         // 保持 label 为纯文本以支持搜索
-        label: opt.label,
+        label:
+          opt.value === CHANNEL_TYPE_ADVANCED_CUSTOM ? t(opt.label) : opt.label,
       })),
-    [],
+    [t],
   );
 
   const renderChannelOption = (renderProps) => {
@@ -4292,9 +4351,15 @@ const EditChannelModal = (props) => {
                                   }
                                   showClear
                                   disabled={isIonetLocked}
-                                  extraText={t(
-                                    '对于官方渠道，new-api已经内置地址，除非是第三方代理站点或者Azure的特殊接入地址，否则不需要填写',
-                                  )}
+                                  extraText={
+                                    inputs.type === CHANNEL_TYPE_ADVANCED_CUSTOM
+                                      ? t(
+                                          'Base URL is required when an advanced route uses an upstream path',
+                                        )
+                                      : t(
+                                          '对于官方渠道，new-api已经内置地址，除非是第三方代理站点或者Azure的特殊接入地址，否则不需要填写',
+                                        )
+                                  }
                                 />
                               </div>
                             )}
@@ -4368,6 +4433,54 @@ const EditChannelModal = (props) => {
                               />
                             </div>
                           )}
+                        </div>
+                      )}
+
+                      {inputs.type === CHANNEL_TYPE_ADVANCED_CUSTOM && (
+                        <div
+                          className='rounded-xl p-3 mt-4'
+                          style={{
+                            backgroundColor: 'var(--semi-color-fill-0)',
+                            border: '1px solid var(--semi-color-fill-2)',
+                          }}
+                        >
+                          <div className='flex items-start justify-between gap-3'>
+                            <div>
+                              <Text strong>{t('Advanced Custom Routes')}</Text>
+                              <Text
+                                type='tertiary'
+                                size='small'
+                                className='mt-1 block'
+                              >
+                                {t('Advanced Custom')}
+                              </Text>
+                            </div>
+                            <Button
+                              size='small'
+                              type='primary'
+                              theme='outline'
+                              onClick={() =>
+                                setAdvancedCustomEditorVisible(true)
+                              }
+                            >
+                              {t('Configure routes')}
+                            </Button>
+                          </div>
+                          <Space wrap spacing={6} className='mt-3'>
+                            <Tag color='blue'>
+                              {`${t('Routes')}: ${advancedCustomStats.routeCount}`}
+                            </Tag>
+                            {advancedCustomStats.routeTypeLabels.map(
+                              (label) => (
+                                <Tag key={label} color='grey'>
+                                  {t(label)}
+                                </Tag>
+                              ),
+                            )}
+                            {!advancedCustomStats.valid && (
+                              <Tag color='orange'>{t('Incomplete')}</Tag>
+                            )}
+                          </Space>
                         </div>
                       )}
 
@@ -5056,6 +5169,16 @@ const EditChannelModal = (props) => {
         onSave={(nextValue) => {
           handleInputChange('param_override', nextValue);
           setParamOverrideEditorVisible(false);
+        }}
+      />
+
+      <AdvancedCustomEditorModal
+        visible={advancedCustomEditorVisible}
+        value={inputs.advanced_custom || ''}
+        onCancel={() => setAdvancedCustomEditorVisible(false)}
+        onSave={(nextValue) => {
+          handleInputChange('advanced_custom', nextValue);
+          setAdvancedCustomEditorVisible(false);
         }}
       />
 

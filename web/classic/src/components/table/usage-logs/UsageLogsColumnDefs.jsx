@@ -41,7 +41,7 @@ import {
   IconCopy,
   IconHelpCircle,
 } from '@douyinfe/semi-icons';
-import { CircleAlert, Route, Sparkles } from 'lucide-react';
+import { CircleAlert, ExternalLink, Route, Sparkles } from 'lucide-react';
 import { ChannelRemarkTooltip } from '../../common/ChannelRemarkTooltip';
 
 const colors = [
@@ -282,6 +282,27 @@ function CopyTextButton({ text, copyText, t }) {
       style={{ height: 22, minWidth: 22, padding: 2 }}
       onClick={(event) => {
         copyText(event, text);
+      }}
+    />
+  );
+}
+
+function ViewChannelButton({ keyword, viewChannel, t }) {
+  if (!keyword || !viewChannel) {
+    return null;
+  }
+  return (
+    <Button
+      icon={<ExternalLink size={14} />}
+      size='small'
+      theme='borderless'
+      type='tertiary'
+      aria-label={`${t('查看')} ${t('渠道')}`}
+      title={`${t('查看')} ${t('渠道')}`}
+      style={{ height: 22, minWidth: 22, padding: 2 }}
+      onClick={(event) => {
+        event.stopPropagation();
+        viewChannel(keyword);
       }}
     />
   );
@@ -538,6 +559,7 @@ export const getLogsColumns = ({
   COLUMN_KEYS,
   copyText,
   applyColumnFilter,
+  viewChannel,
   showUserInfoFunc,
   openChannelAffinityUsageCacheModal,
   isAdminUser,
@@ -597,9 +619,9 @@ export const getLogsColumns = ({
                   >
                     {text}
                   </Tag>
-                  <CopyTextButton
-                    text={String(text)}
-                    copyText={copyText}
+                  <ViewChannelButton
+                    keyword={String(text || record.channel_name || '').trim()}
+                    viewChannel={viewChannel}
                     t={t}
                   />
                 </span>

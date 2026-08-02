@@ -17,7 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Empty, Descriptions } from '@douyinfe/semi-ui';
 import CardTable from '../../common/ui/CardTable';
 import {
@@ -27,6 +28,7 @@ import {
 import { getLogsColumns } from './UsageLogsColumnDefs';
 
 const LogsTable = (logsData) => {
+  const navigate = useNavigate();
   const {
     logs,
     expandData,
@@ -49,6 +51,13 @@ const LogsTable = (logsData) => {
     COLUMN_KEYS,
   } = logsData;
 
+  const viewChannel = useCallback(
+    (keyword) => {
+      navigate(`/console/channel?keyword=${encodeURIComponent(keyword)}`);
+    },
+    [navigate],
+  );
+
   // Get all columns
   const allColumns = useMemo(() => {
     return getLogsColumns({
@@ -56,6 +65,7 @@ const LogsTable = (logsData) => {
       COLUMN_KEYS,
       copyText,
       applyColumnFilter,
+      viewChannel,
       showUserInfoFunc,
       openChannelAffinityUsageCacheModal,
       isAdminUser,
@@ -66,6 +76,7 @@ const LogsTable = (logsData) => {
     COLUMN_KEYS,
     copyText,
     applyColumnFilter,
+    viewChannel,
     showUserInfoFunc,
     openChannelAffinityUsageCacheModal,
     isAdminUser,

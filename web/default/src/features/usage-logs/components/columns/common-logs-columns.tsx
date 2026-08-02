@@ -21,7 +21,7 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
-import { CircleAlert, GitBranch, Sparkles, KeyRound } from 'lucide-react'
+import { CircleAlert, ExternalLink, GitBranch, Sparkles, KeyRound } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -426,15 +426,21 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                     showDot={false}
                     className='cursor-pointer font-mono hover:underline'
                   />
-                  <span onClick={(event) => event.stopPropagation()}>
-                    <CopyButton
-                      value={String(log.channel)}
-                      size='icon'
-                      tooltip={t('Copy to clipboard')}
-                      className='text-muted-foreground hover:text-foreground size-5'
-                      iconClassName='size-3'
-                    />
-                  </span>
+                  <button
+                    type='button'
+                    className='text-muted-foreground hover:text-foreground inline-flex size-5 items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                    title={`${t('View')} ${t('Channel')}`}
+                    aria-label={`${t('View')} ${t('Channel')}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void navigate({
+                        to: '/channels',
+                        search: { filter: String(log.channel) },
+                      })
+                    }}
+                  >
+                    <ExternalLink className='size-3' aria-hidden='true' />
+                  </button>
                   {channelRemark && (
                     <span
                       className='text-muted-foreground -m-1 inline-flex size-7 shrink-0 cursor-help items-center justify-center'

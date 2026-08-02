@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useLocation } from 'react-router-dom';
 import {
   API,
   showError,
@@ -43,6 +44,9 @@ import { openCodexUsageModal } from '../../components/table/channels/modals/Code
 export const useChannelsData = () => {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
+  const location = useLocation();
+  const channelSearchKeyword =
+    new URLSearchParams(location.search).get('keyword')?.trim() || '';
 
   // Basic states
   const [channels, setChannels] = useState([]);
@@ -127,7 +131,7 @@ export const useChannelsData = () => {
   const [formApi, setFormApi] = useState(null);
 
   const formInitValues = {
-    searchKeyword: '',
+    searchKeyword: channelSearchKeyword,
     searchGroup: '',
     searchModel: '',
   };
@@ -161,11 +165,19 @@ export const useChannelsData = () => {
     setEnableTagMode(localEnableTagMode);
     setEnableBatchDelete(localEnableBatchDelete);
 
-    loadChannels(1, localPageSize, localIdSort, localEnableTagMode)
-      .then()
-      .catch((reason) => {
-        showError(reason);
-      });
+    const initialLoad = channelSearchKeyword
+      ? searchChannels(
+          localEnableTagMode,
+          'all',
+          'all',
+          1,
+          localPageSize,
+          localIdSort,
+        )
+      : loadChannels(1, localPageSize, localIdSort, localEnableTagMode);
+    initialLoad.then().catch((reason) => {
+      showError(reason);
+    });
     fetchGroups().then();
     loadChannelModels().then();
     fetchGlobalPassThroughEnabled().then();
@@ -313,7 +325,7 @@ export const useChannelsData = () => {
   const getFormValues = () => {
     const formValues = formApi ? formApi.getValues() : {};
     return {
-      searchKeyword: formValues.searchKeyword || '',
+      searchKeyword: String(formValues.searchKeyword ?? channelSearchKeyword),
       searchGroup: formValues.searchGroup || '',
       searchModel: formValues.searchModel || '',
     };

@@ -139,7 +139,11 @@ const ChannelsFilters = ({
             type='tertiary'
             onClick={() => {
               if (formApi) {
-                formApi.reset();
+                formApi.setValues({
+                  searchKeyword: '',
+                  searchGroup: '',
+                  searchModel: '',
+                });
                 // 重置后立即查询，使用setTimeout确保表单重置完成
                 setTimeout(() => {
                   refresh();

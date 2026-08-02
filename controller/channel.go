@@ -293,13 +293,25 @@ func SearchChannels(c *gin.Context) {
 	keyword := c.Query("keyword")
 	group := c.Query("group")
 	modelKeyword := c.Query("model")
+	var channelID *int
+	if channelIDParam := c.Query("channel_id"); channelIDParam != "" {
+		id, err := strconv.Atoi(channelIDParam)
+		if err != nil || id <= 0 {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "invalid channel_id",
+			})
+			return
+		}
+		channelID = &id
+	}
 	statusParam := c.Query("status")
 	statusFilter := parseStatusFilter(statusParam)
 	idSort, _ := strconv.ParseBool(c.Query("id_sort"))
 	sortOptions := model.NewChannelSortOptions(c.Query("sort_by"), c.Query("sort_order"), idSort)
 	enableTagMode, _ := strconv.ParseBool(c.Query("tag_mode"))
 	channelData := make([]*model.Channel, 0)
-	if enableTagMode {
+	if enableTagMode && channelID == nil {
 		tags, err := model.SearchTags(keyword, group, modelKeyword, idSort)
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{
@@ -325,7 +337,7 @@ func SearchChannels(c *gin.Context) {
 			}
 		}
 	} else {
-		channels, err := model.SearchChannels(keyword, group, modelKeyword, idSort, sortOptions)
+		channels, err := model.SearchChannels(keyword, group, modelKeyword, idSort, channelID, sortOptions)
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,

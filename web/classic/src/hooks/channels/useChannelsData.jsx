@@ -45,8 +45,16 @@ export const useChannelsData = () => {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
   const location = useLocation();
+  const channelSearchParams = new URLSearchParams(location.search);
+  const channelIDParam = channelSearchParams.get('channel_id');
+  const channelIDValue = Number(channelIDParam);
+  const directChannelID =
+    Number.isSafeInteger(channelIDValue) && channelIDValue > 0
+      ? channelIDValue
+      : undefined;
   const channelSearchKeyword =
-    new URLSearchParams(location.search).get('keyword')?.trim() || '';
+    channelSearchParams.get('keyword')?.trim() ||
+    (directChannelID ? String(directChannelID) : '');
 
   // Basic states
   const [channels, setChannels] = useState([]);
@@ -175,9 +183,13 @@ export const useChannelsData = () => {
           localIdSort,
         )
       : loadChannels(1, localPageSize, localIdSort, localEnableTagMode);
-    initialLoad.then().catch((reason) => {
-      showError(reason);
-    });
+    initialLoad
+      .catch((reason) => {
+        showError(reason);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
     fetchGroups().then();
     loadChannelModels().then();
     fetchGlobalPassThroughEnabled().then();
@@ -401,6 +413,10 @@ export const useChannelsData = () => {
     try {
       const keyword = searchKeyword.trim();
       const model = searchModel.trim();
+      const exactChannelID =
+        directChannelID && keyword === String(directChannelID)
+          ? directChannelID
+          : undefined;
       const hasTextSearch = keyword !== '' || model !== '';
 
       if (!hasTextSearch && searchGroup === '') {
@@ -435,6 +451,9 @@ export const useChannelsData = () => {
         p: String(page),
         page_size: String(pageSz),
       });
+      if (exactChannelID) {
+        params.set('channel_id', String(exactChannelID));
+      }
       if (!hasTextSearch && typeKey !== 'all') {
         params.set('type', typeKey);
       }

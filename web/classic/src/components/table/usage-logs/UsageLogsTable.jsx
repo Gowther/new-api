@@ -53,7 +53,14 @@ const LogsTable = (logsData) => {
 
   const viewChannel = useCallback(
     (keyword) => {
-      navigate(`/console/channel?keyword=${encodeURIComponent(keyword)}`);
+      const channelId = Number(keyword);
+      const params = new URLSearchParams();
+      if (Number.isSafeInteger(channelId) && channelId > 0) {
+        params.set('channel_id', String(channelId));
+      } else {
+        params.set('keyword', keyword);
+      }
+      navigate(`/console/channel?${params.toString()}`);
     },
     [navigate],
   );

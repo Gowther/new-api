@@ -87,6 +87,7 @@ function isDisabledChannelRow(channel: Channel) {
 
 export function ChannelsTable() {
   const { t } = useTranslation()
+  const routeSearch = route.useSearch()
   const {
     enableTagMode,
     idSort,
@@ -109,7 +110,7 @@ export function ChannelsTable() {
     onPaginationChange,
     ensurePageInRange,
   } = useTableUrlState({
-    search: route.useSearch(),
+    search: routeSearch,
     navigate: route.useNavigate(),
     pagination: {
       defaultPage: 1,
@@ -211,6 +212,13 @@ export function ChannelsTable() {
   // Determine whether to use search or regular list API
   const shouldSearch = Boolean(globalFilter?.trim() || modelFilter.trim())
   const shouldUseTagMode = enableTagMode && !shouldSearch
+  const exactChannelId =
+    typeof routeSearch.channelId === 'number' &&
+    Number.isSafeInteger(routeSearch.channelId) &&
+    routeSearch.channelId > 0 &&
+    globalFilter?.trim() === String(routeSearch.channelId)
+      ? routeSearch.channelId
+      : undefined
 
   const sortParams = useMemo(() => {
     const activeSort = sorting[0]
@@ -257,6 +265,7 @@ export function ChannelsTable() {
   const { data, isLoading, isFetching } = useQuery({
     queryKey: channelsQueryKeys.list({
       keyword: globalFilter,
+      channel_id: exactChannelId,
       model: modelFilter,
       group:
         !shouldSearch && groupFilter.length > 0 && !groupFilter.includes('all')
@@ -282,6 +291,7 @@ export function ChannelsTable() {
       if (shouldSearch) {
         return searchChannels({
           keyword: globalFilter,
+          channel_id: exactChannelId,
           model: modelFilter,
           tag_mode: false,
           id_sort: idSort,

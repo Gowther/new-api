@@ -433,9 +433,15 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                     aria-label={`${t('View')} ${t('Channel')}`}
                     onClick={(event) => {
                       event.stopPropagation()
+                      const channelId = Number(log.channel)
                       void navigate({
                         to: '/channels',
-                        search: { filter: String(log.channel) },
+                        search: {
+                          filter: String(log.channel),
+                          ...(Number.isSafeInteger(channelId) && channelId > 0
+                            ? { channelId }
+                            : {}),
+                        },
                       })
                     }}
                   >

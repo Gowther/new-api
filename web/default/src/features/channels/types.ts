@@ -406,6 +406,7 @@ export interface GetChannelsParams {
 
 export interface SearchChannelsParams {
   keyword?: string
+  channel_id?: number
   group?: string
   model?: string
   status?: string

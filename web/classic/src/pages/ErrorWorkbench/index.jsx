@@ -276,7 +276,7 @@ function getUrgentClusterCount(items) {
 
 function ErrorClusterList({ items, selectedKey, loading, onSelect, t }) {
   return (
-    <section className='flex min-h-[520px] min-w-0 flex-col rounded border border-solid border-gray-200 bg-white'>
+    <section className='flex h-[520px] min-w-0 flex-col overflow-hidden rounded border border-solid border-gray-200 bg-white xl:h-full'>
       <div className='flex items-center justify-between border-b border-solid border-gray-200 px-3 py-2'>
         <Typography.Text strong>
           <ErrorMetricHelp
@@ -291,7 +291,7 @@ function ErrorClusterList({ items, selectedKey, loading, onSelect, t }) {
           {items.length}
         </Typography.Text>
       </div>
-      <div className='min-h-0 flex-1 overflow-y-auto'>
+      <div className='min-h-0 flex-1 overscroll-contain overflow-y-auto'>
         {items.length === 0 ? (
           <div className='flex min-h-80 items-center justify-center px-6'>
             {loading ? <Spin /> : <Empty title={t('暂无错误日志')} />}
@@ -395,7 +395,7 @@ function ErrorClusterDetails({
 }) {
   if (!record) {
     return (
-      <section className='flex min-h-[520px] items-center justify-center rounded border border-solid border-gray-200 bg-white px-6 text-center'>
+      <section className='flex h-[520px] items-center justify-center rounded border border-solid border-gray-200 bg-white px-6 text-center xl:h-full'>
         <Typography.Text type='tertiary'>{t('请选择故障簇')}</Typography.Text>
       </section>
     );
@@ -465,7 +465,7 @@ function ErrorClusterDetails({
 
   const currentTestKey = `${record.key}:test:${record.channel}`;
   return (
-    <section className='flex min-h-[520px] min-w-0 flex-col overflow-hidden rounded border border-solid border-gray-200 bg-white'>
+    <section className='flex h-[520px] min-w-0 flex-col overflow-hidden rounded border border-solid border-gray-200 bg-white xl:h-full'>
       <div className='flex flex-wrap items-start justify-between gap-3 border-b border-solid border-gray-200 px-4 py-3'>
         <div className='min-w-0'>
           <Space spacing={4} wrap>
@@ -511,7 +511,7 @@ function ErrorClusterDetails({
         </Space>
       </div>
 
-      <div className='min-h-0 flex-1 overflow-y-auto'>
+      <div className='min-h-0 flex-1 overscroll-contain overflow-y-auto'>
         <div className='space-y-5 p-4'>
           <div className='grid gap-2 sm:grid-cols-2 xl:grid-cols-5'>
             {[
@@ -967,7 +967,7 @@ export default function ErrorWorkbench() {
             </Tag>
           )}
 
-          <div className='grid w-full grid-cols-1 gap-3 xl:grid-cols-[minmax(360px,0.85fr)_minmax(0,1.4fr)]'>
+          <div className='grid w-full grid-cols-1 gap-3 xl:h-[clamp(32.5rem,70dvh,48rem)] xl:grid-cols-[minmax(360px,0.85fr)_minmax(0,1.4fr)]'>
             <ErrorClusterList
               items={summary.items || []}
               selectedKey={selectedRecord?.key || null}

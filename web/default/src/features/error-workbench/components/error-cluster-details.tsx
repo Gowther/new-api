@@ -179,7 +179,7 @@ export function ErrorClusterDetails(props: ErrorClusterDetailsProps) {
 
   if (!record) {
     return (
-      <section className='bg-background text-muted-foreground flex min-h-[32rem] items-center justify-center rounded-lg border px-6 text-center text-sm'>
+      <section className='bg-background text-muted-foreground flex h-[32rem] items-center justify-center rounded-lg border px-6 text-center text-sm lg:h-full'>
         {t('Select a fault cluster')}
       </section>
     )
@@ -200,7 +200,7 @@ export function ErrorClusterDetails(props: ErrorClusterDetailsProps) {
   }
 
   return (
-    <section className='bg-background flex min-h-[32rem] min-w-0 flex-col overflow-hidden rounded-lg border'>
+    <section className='bg-background flex h-[32rem] min-w-0 flex-col overflow-hidden rounded-lg border lg:h-full'>
       <div className='flex flex-wrap items-start justify-between gap-3 border-b px-4 py-3'>
         <div className='min-w-0 space-y-1'>
           <div className='flex flex-wrap items-center gap-1.5'>
@@ -270,7 +270,7 @@ export function ErrorClusterDetails(props: ErrorClusterDetailsProps) {
         </div>
       </div>
 
-      <ScrollArea className='min-h-0 flex-1'>
+      <ScrollArea className='min-h-0 flex-1 overscroll-contain'>
         <div className='space-y-5 p-4'>
           <div className='grid gap-2 sm:grid-cols-2 xl:grid-cols-5'>
             <DetailMetric

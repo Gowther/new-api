@@ -371,7 +371,7 @@ export function ErrorWorkbench() {
             </div>
           </section>
 
-          <div className='grid min-h-0 gap-4 lg:grid-cols-[minmax(20rem,0.85fr)_minmax(0,1.4fr)]'>
+          <div className='grid min-h-0 gap-4 lg:h-[clamp(32rem,70dvh,48rem)] lg:grid-cols-[minmax(20rem,0.85fr)_minmax(0,1.4fr)]'>
             <ErrorClusterList
               items={summary.items}
               selectedKey={selectedRecord?.key ?? null}

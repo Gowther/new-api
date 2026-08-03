@@ -81,7 +81,7 @@ export function ErrorClusterList(props: ErrorClusterListProps) {
   const { t } = useTranslation()
 
   return (
-    <section className='bg-background flex min-h-[32rem] min-w-0 flex-col overflow-hidden rounded-lg border'>
+    <section className='bg-background flex h-[32rem] min-w-0 flex-col overflow-hidden rounded-lg border lg:h-full'>
       <div className='flex items-center justify-between gap-3 border-b px-3 py-2.5'>
         <h2 className='text-sm font-semibold'>
           <ErrorMetricHelp
@@ -96,7 +96,7 @@ export function ErrorClusterList(props: ErrorClusterListProps) {
           {props.items.length}
         </span>
       </div>
-      <ScrollArea className='min-h-0 flex-1'>
+      <ScrollArea className='min-h-0 flex-1 overscroll-contain'>
         {props.items.length === 0 ? (
           <div className='text-muted-foreground flex min-h-80 items-center justify-center px-6 text-center text-sm'>
             {props.loading ? t('Loading...') : t('No error logs found')}

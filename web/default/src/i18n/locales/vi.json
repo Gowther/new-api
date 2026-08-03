@@ -1950,6 +1950,7 @@
     "Failed to load key status": "Không thể tải trạng thái khóa",
     "Failed to load logs": "Không tải được nhật ký",
     "Failed to load Passkey status": "Không thể tải trạng thái Passkey",
+    "Failed to load playground channels": "Tải kênh playground thất bại",
     "Failed to load playground groups": "Tải nhóm playground thất bại",
     "Failed to load playground models": "Tải mô hình playground thất bại",
     "Failed to load profile": "Không thể tải hồ sơ",

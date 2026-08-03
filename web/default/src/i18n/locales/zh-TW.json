@@ -1950,6 +1950,7 @@
     "Failed to load key status": "載入金鑰狀態失敗",
     "Failed to load logs": "載入日誌失敗",
     "Failed to load Passkey status": "載入 Passkey 狀態失敗",
+    "Failed to load playground channels": "載入 playground 渠道失敗",
     "Failed to load playground groups": "載入 playground 分組失敗",
     "Failed to load playground models": "載入 playground 模型失敗",
     "Failed to load profile": "載入個人資料失敗",

@@ -21,20 +21,27 @@ import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
-import { getUserGroups, getUserModels } from '../api'
+import { getUserGroups, getUserModelChannels, getUserModels } from '../api'
 import {
   getGroupFallback,
   getModelFallback,
   getOptionLoadErrorMessage,
   shouldClearModelForGroup,
 } from '../lib'
-import type { GroupOption, ModelOption, PlaygroundConfig } from '../types'
+import type {
+  ChannelOption,
+  GroupOption,
+  ModelOption,
+  PlaygroundConfig,
+} from '../types'
 
 type UsePlaygroundOptionsParams = {
   currentGroup: string
   currentModel: string
+  currentChannelId: number | null
   setGroups: (groups: GroupOption[]) => void
   setModels: (models: ModelOption[]) => void
+  setChannels: (channels: ChannelOption[]) => void
   updateConfig: <K extends keyof PlaygroundConfig>(
     key: K,
     value: PlaygroundConfig[K]
@@ -44,8 +51,10 @@ type UsePlaygroundOptionsParams = {
 export function usePlaygroundOptions({
   currentGroup,
   currentModel,
+  currentChannelId,
   setGroups,
   setModels,
+  setChannels,
   updateConfig,
 }: UsePlaygroundOptionsParams) {
   const { t } = useTranslation()
@@ -59,6 +68,16 @@ export function usePlaygroundOptions({
     queryKey: ['playground-models', currentGroup],
     queryFn: () => getUserModels(currentGroup),
     enabled: currentGroup !== '',
+  })
+
+  const {
+    data: channelsData,
+    error: channelsError,
+    isError: isChannelsError,
+  } = useQuery({
+    queryKey: ['playground-model-channels', currentGroup, currentModel],
+    queryFn: () => getUserModelChannels(currentGroup, currentModel),
+    enabled: currentGroup !== '' && currentModel !== '',
   })
 
   const {
@@ -93,6 +112,17 @@ export function usePlaygroundOptions({
   }, [isGroupsError, groupsError, t])
 
   useEffect(() => {
+    if (!isChannelsError) return
+
+    toast.error(
+      getOptionLoadErrorMessage(
+        channelsError,
+        t('Failed to load playground channels')
+      )
+    )
+  }, [isChannelsError, channelsError, t])
+
+  useEffect(() => {
     if (!modelsData) return
 
     setModels(modelsData)
@@ -118,6 +148,22 @@ export function usePlaygroundOptions({
       updateConfig('group', fallback)
     }
   }, [groupsData, currentGroup, setGroups, updateConfig])
+
+  useEffect(() => {
+    setChannels([])
+  }, [currentGroup, currentModel, setChannels])
+
+  useEffect(() => {
+    if (!channelsData) return
+
+    setChannels(channelsData)
+    if (
+      channelsData.every((channel) => channel.id !== currentChannelId) &&
+      currentChannelId !== null
+    ) {
+      updateConfig('channelId', null)
+    }
+  }, [channelsData, currentChannelId, setChannels, updateConfig])
 
   return {
     isLoadingModels,

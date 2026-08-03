@@ -1950,6 +1950,7 @@
     "Failed to load key status": "Failed to load key status",
     "Failed to load logs": "Failed to load logs",
     "Failed to load Passkey status": "Failed to load Passkey status",
+    "Failed to load playground channels": "Failed to load playground channels",
     "Failed to load playground groups": "Failed to load playground groups",
     "Failed to load playground models": "Failed to load playground models",
     "Failed to load profile": "Failed to load profile",

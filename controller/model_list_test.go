@@ -35,6 +35,18 @@ type userModelsResponse struct {
 	Data    []string `json:"data"`
 }
 
+type testUserModelChannelResponse struct {
+	Id       int    `json:"id"`
+	Name     string `json:"name"`
+	Type     int    `json:"type"`
+	TypeName string `json:"type_name"`
+}
+
+type userModelChannelsResponse struct {
+	Success bool                           `json:"success"`
+	Data    []testUserModelChannelResponse `json:"data"`
+}
+
 func setupModelListControllerTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
@@ -203,6 +215,57 @@ func TestGetUserModelsFiltersByRequestedGroup(t *testing.T) {
 	GetUserModels(vipContext)
 
 	require.Empty(t, decodeUserModelsResponse(t, vipRecorder))
+}
+
+func TestGetUserModelChannelsFiltersByUserGroupModelAndStatus(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, db.Create(&model.User{
+		Id:       1003,
+		Username: "playground-channel-user",
+		Password: "password",
+		Group:    "default",
+		Status:   common.UserStatusEnabled,
+	}).Error)
+	require.NoError(t, db.Create(&[]model.Channel{
+		{Id: 11, Type: constant.ChannelTypeOpenAI, Key: "sk-primary", Status: common.ChannelStatusEnabled, Name: "primary"},
+		{Id: 12, Type: constant.ChannelTypeAnthropic, Key: "sk-disabled", Status: common.ChannelStatusManuallyDisabled, Name: "disabled"},
+		{Id: 13, Type: constant.ChannelTypeOpenAI, Key: "sk-other-model", Status: common.ChannelStatusEnabled, Name: "other-model"},
+		{Id: 14, Type: constant.ChannelTypeOpenAI, Key: "sk-vip", Status: common.ChannelStatusEnabled, Name: "vip"},
+	}).Error)
+	require.NoError(t, db.Create(&[]model.Ability{
+		{Group: "default", Model: "zz-playground-channel-model", ChannelId: 11, Enabled: true},
+		{Group: "default", Model: "zz-playground-channel-model", ChannelId: 12, Enabled: true},
+		{Group: "default", Model: "zz-other-model", ChannelId: 13, Enabled: true},
+		{Group: "vip", Model: "zz-playground-channel-model", ChannelId: 14, Enabled: true},
+	}).Error)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/user/self/model-channels?group=default&model=zz-playground-channel-model", nil)
+	ctx.Set("id", 1003)
+
+	GetUserModelChannels(ctx)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var payload userModelChannelsResponse
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &payload))
+	require.True(t, payload.Success)
+	require.Len(t, payload.Data, 1)
+	require.Equal(t, 11, payload.Data[0].Id)
+	require.Equal(t, "primary", payload.Data[0].Name)
+	require.Equal(t, "OpenAI", payload.Data[0].TypeName)
+
+	unauthorizedRecorder := httptest.NewRecorder()
+	unauthorizedContext, _ := gin.CreateTestContext(unauthorizedRecorder)
+	unauthorizedContext.Request = httptest.NewRequest(http.MethodGet, "/api/user/self/model-channels?group=not-allowed&model=zz-playground-channel-model", nil)
+	unauthorizedContext.Set("id", 1003)
+
+	GetUserModelChannels(unauthorizedContext)
+
+	var unauthorizedPayload userModelChannelsResponse
+	require.NoError(t, common.Unmarshal(unauthorizedRecorder.Body.Bytes(), &unauthorizedPayload))
+	require.True(t, unauthorizedPayload.Success)
+	require.Empty(t, unauthorizedPayload.Data)
 }
 
 func TestListModelsIncludesTieredBillingModel(t *testing.T) {

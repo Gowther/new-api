@@ -24,6 +24,7 @@ import type {
   ChatCompletionResponse,
   ModelOption,
   GroupOption,
+  ChannelOption,
 } from './types'
 
 /**
@@ -79,4 +80,36 @@ export async function getUserGroups(): Promise<GroupOption[]> {
     ratio: info.ratio,
     desc: info.desc,
   }))
+}
+
+/**
+ * Get channels that are available for the selected user group and model.
+ */
+export async function getUserModelChannels(
+  group: string,
+  model: string
+): Promise<ChannelOption[]> {
+  const res = await api.get(API_ENDPOINTS.USER_MODEL_CHANNELS, {
+    params: { group, model },
+  })
+  const { data } = res
+
+  if (!data.success || !Array.isArray(data.data)) {
+    return []
+  }
+
+  return data.data
+    .filter(
+      (channel: Record<string, unknown>) =>
+        typeof channel.id === 'number' &&
+        typeof channel.name === 'string' &&
+        typeof channel.type === 'number' &&
+        typeof channel.type_name === 'string'
+    )
+    .map((channel: Record<string, unknown>) => ({
+      id: channel.id as number,
+      name: channel.name as string,
+      type: channel.type as number,
+      typeName: channel.type_name as string,
+    }))
 }

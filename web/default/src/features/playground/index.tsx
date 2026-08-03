@@ -33,9 +33,11 @@ export function Playground() {
     isLoadingMessages,
     models,
     groups,
+    channels,
     updateMessages,
     setModels,
     setGroups,
+    setChannels,
     updateConfig,
     clearMessages,
   } = usePlaygroundState()
@@ -68,8 +70,10 @@ export function Playground() {
   const { isLoadingModels } = usePlaygroundOptions({
     currentGroup: config.group,
     currentModel: config.model,
+    currentChannelId: config.channelId,
     setGroups,
     setModels,
+    setChannels,
     updateConfig,
   })
 
@@ -102,9 +106,12 @@ export function Playground() {
           isModelLoading={isLoadingModels}
           modelValue={config.model}
           models={models}
+          channels={channels}
+          channelValue={config.channelId}
           onGroupChange={(value) => updateConfig('group', value)}
           onClearMessages={handleClearMessages}
           onModelChange={(value) => updateConfig('model', value)}
+          onChannelChange={(value) => updateConfig('channelId', value)}
           onStop={stopGeneration}
           onSubmit={handleSendMessage}
           hasMessages={messages.length > 0}

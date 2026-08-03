@@ -652,6 +652,58 @@ func GetUserModels(c *gin.Context) {
 	return
 }
 
+type userModelChannelResponse struct {
+	Id       int    `json:"id"`
+	Name     string `json:"name"`
+	Type     int    `json:"type"`
+	TypeName string `json:"type_name"`
+}
+
+func GetUserModelChannels(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		id = c.GetInt("id")
+	}
+	user, err := model.GetUserCache(id)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	modelName := c.Query("model")
+	group := c.Query("group")
+	if modelName == "" || group == "" {
+		c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": []userModelChannelResponse{}})
+		return
+	}
+
+	groups := service.GetUserUsableGroups(user.Group)
+	selectedGroups := []string{group}
+	if group == "auto" {
+		selectedGroups = service.GetUserAutoGroup(user.Group)
+	} else if _, ok := groups[group]; !ok {
+		c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": []userModelChannelResponse{}})
+		return
+	}
+
+	channels, err := model.GetEnabledChannelsForGroupsModel(selectedGroups, modelName)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	data := make([]userModelChannelResponse, 0, len(channels))
+	for _, channel := range channels {
+		data = append(data, userModelChannelResponse{
+			Id:       channel.Id,
+			Name:     channel.Name,
+			Type:     channel.Type,
+			TypeName: constant.GetChannelTypeName(channel.Type),
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": data})
+}
+
 func UpdateUser(c *gin.Context) {
 	var updatedUser model.User
 	err := json.NewDecoder(c.Request.Body).Decode(&updatedUser)

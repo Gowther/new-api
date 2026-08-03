@@ -24,17 +24,21 @@ import { PromptInputButton } from '@/components/ai-elements/prompt-input'
 import { ModelGroupSelector } from '@/components/model-group-selector'
 
 import { getInputControlState } from '../../lib'
-import type { GroupOption, ModelOption } from '../../types'
+import type { ChannelOption, GroupOption, ModelOption } from '../../types'
+import { PlaygroundChannelSelector } from './playground-channel-selector'
 
 type PlaygroundInputControlsProps = {
   disabled?: boolean
   groups: GroupOption[]
   groupValue: string
+  channels: ChannelOption[]
+  channelValue: number | null
   isGenerating?: boolean
   isModelLoading?: boolean
   models: ModelOption[]
   modelValue: string
   onGroupChange: (value: string) => void
+  onChannelChange: (value: number | null) => void
   onModelChange: (value: string) => void
   onStop?: () => void
   text: string
@@ -45,11 +49,14 @@ export function PlaygroundInputControls({
   disabled,
   groups,
   groupValue,
+  channels,
+  channelValue,
   isGenerating,
   isModelLoading = false,
   models,
   modelValue,
   onGroupChange,
+  onChannelChange,
   onModelChange,
   onStop,
   text,
@@ -79,6 +86,18 @@ export function PlaygroundInputControls({
     />
   )
 
+  const renderSelectors = () => (
+    <>
+      {renderSelector()}
+      <PlaygroundChannelSelector
+        channels={channels}
+        selectedChannelId={channelValue}
+        onChannelChange={onChannelChange}
+        disabled={isSelectorDisabled}
+      />
+    </>
+  )
+
   const renderSubmitButton = () =>
     shouldShowStop ? (
       <PromptInputButton
@@ -106,7 +125,7 @@ export function PlaygroundInputControls({
   return (
     <div className='flex w-full flex-col gap-2.5 md:flex-row md:items-center md:justify-between'>
       <div className='flex min-w-0 items-center justify-end md:hidden'>
-        {renderSelector()}
+        {renderSelectors()}
       </div>
 
       <div className='flex items-center justify-between gap-2 md:justify-start'>
@@ -117,7 +136,7 @@ export function PlaygroundInputControls({
       </div>
 
       <div className='hidden min-w-0 items-center gap-2 md:flex'>
-        {renderSelector()}
+        {renderSelectors()}
         {renderSubmitButton()}
       </div>
     </div>

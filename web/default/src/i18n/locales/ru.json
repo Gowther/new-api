@@ -1950,6 +1950,7 @@
     "Failed to load key status": "Не удалось загрузить статус ключей",
     "Failed to load logs": "Не удалось загрузить логи",
     "Failed to load Passkey status": "Не удалось загрузить статус Passkey",
+    "Failed to load playground channels": "Не удалось загрузить каналы playground",
     "Failed to load playground groups": "Не удалось загрузить группы площадки",
     "Failed to load playground models": "Не удалось загрузить модели площадки",
     "Failed to load profile": "Не удалось загрузить профиль",

@@ -36,7 +36,6 @@ export let API = axios.create({
   },
 });
 
-
 function redirectToOAuthUrl(url, options = {}) {
   const { openInNewTab = false } = options;
   const targetUrl = typeof url === 'string' ? url : url.toString();
@@ -48,7 +47,6 @@ function redirectToOAuthUrl(url, options = {}) {
 
   window.location.assign(targetUrl);
 }
-
 
 function patchAPIInstance(instance) {
   const originalGet = instance.get.bind(instance);
@@ -134,6 +132,10 @@ export const buildApiPayload = (
     messages: processedMessages,
     stream: inputs.stream,
   };
+
+  if (inputs.channelId !== undefined && inputs.channelId !== null) {
+    payload.channel_id = inputs.channelId;
+  }
 
   // 添加启用的参数
   const parameterMappings = {

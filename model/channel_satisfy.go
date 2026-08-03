@@ -5,6 +5,28 @@ import (
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 )
 
+func GetEnabledChannelsForGroupsModel(groups []string, modelName string) ([]*Channel, error) {
+	if len(groups) == 0 || modelName == "" {
+		return []*Channel{}, nil
+	}
+
+	modelNames := []string{modelName}
+	normalized := ratio_setting.FormatMatchingModelName(modelName)
+	if normalized != "" && normalized != modelName {
+		modelNames = append(modelNames, normalized)
+	}
+
+	var channels []*Channel
+	err := DB.Table("channels").
+		Select("channels.id, channels.name, channels.type").
+		Joins("JOIN abilities ON abilities.channel_id = channels.id").
+		Where("abilities."+commonGroupCol+" IN ? AND abilities.model IN ? AND abilities.enabled = ? AND channels.status = ?", groups, modelNames, true, common.ChannelStatusEnabled).
+		Distinct().
+		Order("channels.id ASC").
+		Find(&channels).Error
+	return channels, err
+}
+
 func IsChannelEnabledForGroupModel(group string, modelName string, channelID int) bool {
 	if group == "" || modelName == "" || channelID <= 0 {
 		return false

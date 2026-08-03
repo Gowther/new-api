@@ -25,8 +25,9 @@ import (
 )
 
 type ModelRequest struct {
-	Model string `json:"model"`
-	Group string `json:"group,omitempty"`
+	Model     string `json:"model"`
+	Group     string `json:"group,omitempty"`
+	ChannelId *int   `json:"channel_id,omitempty"`
 }
 
 func Distribute() func(c *gin.Context) {
@@ -91,6 +92,7 @@ func Distribute() func(c *gin.Context) {
 						abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidPlayground, map[string]any{"Error": err.Error()}))
 						return
 					}
+					modelRequest.ChannelId = playgroundRequest.ChannelId
 					if playgroundRequest.Group != "" {
 						if !service.GroupInUserUsableGroups(usingGroup, playgroundRequest.Group) && playgroundRequest.Group != usingGroup {
 							abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorGroupAccessDenied))
@@ -101,33 +103,72 @@ func Distribute() func(c *gin.Context) {
 					}
 				}
 
-				if preferredChannelID, found := service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found {
-					affinityUsable := false
-					preferred, err := model.CacheGetChannel(preferredChannelID)
-					if err == nil && preferred != nil && preferred.Status == common.ChannelStatusEnabled &&
-						channelSupportsRequestPath(preferred, c.Request.URL.Path) {
-						if usingGroup == "auto" {
-							userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
-							autoGroups := service.GetUserAutoGroup(userGroup)
-							for _, g := range autoGroups {
-								if model.IsChannelEnabledForGroupModel(g, modelRequest.Model, preferred.Id) {
-									selectGroup = g
-									common.SetContextKey(c, constant.ContextKeyAutoGroup, g)
-									channel = preferred
-									affinityUsable = true
-									service.MarkChannelAffinityUsed(c, g, preferred.Id)
-									break
-								}
-							}
-						} else if model.IsChannelEnabledForGroupModel(usingGroup, modelRequest.Model, preferred.Id) {
-							channel = preferred
-							selectGroup = usingGroup
-							affinityUsable = true
-							service.MarkChannelAffinityUsed(c, usingGroup, preferred.Id)
-						}
+				if strings.HasPrefix(c.Request.URL.Path, "/pg/chat/completions") && modelRequest.ChannelId != nil {
+					requestedChannel, getChannelErr := model.GetChannelById(*modelRequest.ChannelId, true)
+					if getChannelErr != nil {
+						abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidChannelId))
+						return
 					}
-					if !affinityUsable && !service.ShouldKeepChannelAffinityOnChannelDisabled() {
-						service.ClearCurrentChannelAffinityCache(c)
+					if requestedChannel.Status != common.ChannelStatusEnabled {
+						abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorChannelDisabled))
+						return
+					}
+					if !channelSupportsRequestPath(requestedChannel, c.Request.URL.Path) {
+						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, i18n.T(c, i18n.MsgDistributorNoAvailableChannel, map[string]any{"Group": usingGroup, "Model": modelRequest.Model}), types.ErrorCodeModelNotFound)
+						return
+					}
+
+					if usingGroup == "auto" {
+						userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
+						for _, group := range service.GetUserAutoGroup(userGroup) {
+							if model.IsChannelEnabledForGroupModel(group, modelRequest.Model, requestedChannel.Id) {
+								selectGroup = group
+								common.SetContextKey(c, constant.ContextKeyAutoGroup, group)
+								break
+							}
+						}
+					} else if model.IsChannelEnabledForGroupModel(usingGroup, modelRequest.Model, requestedChannel.Id) {
+						selectGroup = usingGroup
+					}
+					if selectGroup == "" {
+						abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorNoAvailableChannel, map[string]any{"Group": usingGroup, "Model": modelRequest.Model}), types.ErrorCodeModelNotFound)
+						return
+					}
+
+					channel = requestedChannel
+					common.SetContextKey(c, constant.ContextKeyUsingGroup, selectGroup)
+					common.SetContextKey(c, constant.ContextKeyTokenSpecificChannelId, strconv.Itoa(requestedChannel.Id))
+				}
+
+				if channel == nil {
+					if preferredChannelID, found := service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found {
+						affinityUsable := false
+						preferred, err := model.CacheGetChannel(preferredChannelID)
+						if err == nil && preferred != nil && preferred.Status == common.ChannelStatusEnabled &&
+							channelSupportsRequestPath(preferred, c.Request.URL.Path) {
+							if usingGroup == "auto" {
+								userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
+								autoGroups := service.GetUserAutoGroup(userGroup)
+								for _, g := range autoGroups {
+									if model.IsChannelEnabledForGroupModel(g, modelRequest.Model, preferred.Id) {
+										selectGroup = g
+										common.SetContextKey(c, constant.ContextKeyAutoGroup, g)
+										channel = preferred
+										affinityUsable = true
+										service.MarkChannelAffinityUsed(c, g, preferred.Id)
+										break
+									}
+								}
+							} else if model.IsChannelEnabledForGroupModel(usingGroup, modelRequest.Model, preferred.Id) {
+								channel = preferred
+								selectGroup = usingGroup
+								affinityUsable = true
+								service.MarkChannelAffinityUsed(c, usingGroup, preferred.Id)
+							}
+						}
+						if !affinityUsable && !service.ShouldKeepChannelAffinityOnChannelDisabled() {
+							service.ClearCurrentChannelAffinityCache(c)
+						}
 					}
 				}
 
@@ -218,7 +259,7 @@ func getModelFromJSONBody(c *gin.Context) (*ModelRequest, error) {
 		return nil, errors.New("invalid JSON request body")
 	}
 
-	values := gjson.GetManyBytes(requestBody, "model", "group")
+	values := gjson.GetManyBytes(requestBody, "model", "group", "channel_id")
 	model, err := getJSONStringValue(values[0], "model")
 	if err != nil {
 		return nil, err
@@ -227,6 +268,13 @@ func getModelFromJSONBody(c *gin.Context) (*ModelRequest, error) {
 	if err != nil {
 		return nil, err
 	}
+	var channelID *int
+	if strings.HasPrefix(c.Request.URL.Path, "/pg/chat/completions") {
+		channelID, err = getPositiveIntegerPointer(values[2], "channel_id")
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	if _, seekErr := storage.Seek(0, io.SeekStart); seekErr != nil {
 		return nil, seekErr
@@ -234,8 +282,9 @@ func getModelFromJSONBody(c *gin.Context) (*ModelRequest, error) {
 	c.Request.Body = io.NopCloser(storage)
 
 	return &ModelRequest{
-		Model: model,
-		Group: group,
+		Model:     model,
+		Group:     group,
+		ChannelId: channelID,
 	}, nil
 }
 
@@ -247,6 +296,20 @@ func getJSONStringValue(result gjson.Result, field string) (string, error) {
 		return "", fmt.Errorf("field %s must be a string", field)
 	}
 	return result.String(), nil
+}
+
+func getPositiveIntegerPointer(result gjson.Result, field string) (*int, error) {
+	if !result.Exists() || result.Type == gjson.Null {
+		return nil, nil
+	}
+	if result.Type != gjson.Number {
+		return nil, fmt.Errorf("field %s must be a positive integer", field)
+	}
+	value, err := strconv.Atoi(result.Raw)
+	if err != nil || value <= 0 {
+		return nil, fmt.Errorf("field %s must be a positive integer", field)
+	}
+	return &value, nil
 }
 
 func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {

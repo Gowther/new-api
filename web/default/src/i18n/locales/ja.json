@@ -1950,6 +1950,7 @@
     "Failed to load key status": "キー状態の読み込みに失敗しました",
     "Failed to load logs": "ログの読み込みに失敗しました",
     "Failed to load Passkey status": "Passkeyのステータスの読み込みに失敗しました",
+    "Failed to load playground channels": "Playground チャネルの読み込みに失敗しました",
     "Failed to load playground groups": "プレイグラウンドのグループ読み込みに失敗しました",
     "Failed to load playground models": "プレイグラウンドのモデル読み込みに失敗しました",
     "Failed to load profile": "プロファイルの読み込みに失敗しました",

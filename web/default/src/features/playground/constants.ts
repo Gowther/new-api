@@ -37,6 +37,7 @@ export const API_ENDPOINTS = {
   CHAT_COMPLETIONS: '/pg/chat/completions',
   USER_MODELS: '/api/user/models',
   USER_GROUPS: '/api/user/self/groups',
+  USER_MODEL_CHANNELS: '/api/user/self/model-channels',
 } as const
 
 // Default group — uses 'default' as the safe fallback; auto-group is
@@ -47,6 +48,7 @@ export const DEFAULT_GROUP = 'default' as const
 export const DEFAULT_CONFIG: PlaygroundConfig = {
   model: 'gpt-4o',
   group: DEFAULT_GROUP,
+  channelId: null,
   temperature: 0.7,
   top_p: 1,
   max_tokens: 4096,

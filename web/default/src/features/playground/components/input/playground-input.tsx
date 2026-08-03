@@ -27,7 +27,7 @@ import {
 } from '@/components/ai-elements/prompt-input'
 
 import { getSubmittableInputText } from '../../lib'
-import type { ModelOption, GroupOption } from '../../types'
+import type { ChannelOption, ModelOption, GroupOption } from '../../types'
 import { PlaygroundInputControls } from './playground-input-controls'
 import { PlaygroundInputTools } from './playground-input-tools'
 
@@ -43,6 +43,9 @@ interface PlaygroundInputProps {
   groups: GroupOption[]
   groupValue: string
   onGroupChange: (value: string) => void
+  channels: ChannelOption[]
+  channelValue: number | null
+  onChannelChange: (value: number | null) => void
   hasMessages?: boolean
   onClearMessages?: () => void
 }
@@ -59,6 +62,9 @@ export function PlaygroundInput({
   groups,
   groupValue,
   onGroupChange,
+  channels,
+  channelValue,
+  onChannelChange,
   hasMessages = false,
   onClearMessages,
 }: PlaygroundInputProps) {
@@ -97,11 +103,14 @@ export function PlaygroundInput({
             disabled={disabled}
             groups={groups}
             groupValue={groupValue}
+            channels={channels}
+            channelValue={channelValue}
             isGenerating={isGenerating}
             isModelLoading={isModelLoading}
             models={models}
             modelValue={modelValue}
             onGroupChange={onGroupChange}
+            onChannelChange={onChannelChange}
             onModelChange={onModelChange}
             onStop={onStop}
             text={text}

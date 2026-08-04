@@ -92,24 +92,6 @@ function timestampToSeconds(ms: number): number {
 }
 
 /**
- * Build query parameters from filters
- */
-export function buildQueryParams(
-  params: Record<string, unknown>
-): URLSearchParams {
-  const queryParams = new URLSearchParams()
-
-  Object.entries(params).forEach(([key, value]) => {
-    // Keep 0 as a valid value, only filter out undefined, null, and empty string
-    if (value !== undefined && value !== null && value !== '') {
-      queryParams.append(key, String(value))
-    }
-  })
-
-  return queryParams
-}
-
-/**
  * Build time range parameters with default values
  * Shared logic for all log types
  */
@@ -259,8 +241,15 @@ export function buildApiParams(config: {
 export async function fetchLogsByCategory(
   config: FetchLogsConfig
 ): Promise<GetLogsResponse> {
-  const { logCategory, isAdmin, page, pageSize, searchParams, columnFilters } =
-    config
+  const {
+    logCategory,
+    isAdmin,
+    page,
+    pageSize,
+    searchParams,
+    columnFilters,
+    suppressErrorToast = false,
+  } = config
 
   if (logCategory === 'common') {
     const params = buildApiParams({
@@ -270,7 +259,9 @@ export async function fetchLogsByCategory(
       columnFilters,
       isAdmin,
     })
-    return isAdmin ? await getAllLogs(params) : await getUserLogs(params)
+    return isAdmin
+      ? await getAllLogs(params, suppressErrorToast)
+      : await getUserLogs(params, suppressErrorToast)
   }
 
   // For drawing and task logs
@@ -293,12 +284,24 @@ export async function fetchLogsByCategory(
 
   if (logCategory === 'drawing') {
     return isAdmin
-      ? await getAllMidjourneyLogs(paramsWithFilter as GetMidjourneyLogsParams)
-      : await getUserMidjourneyLogs(paramsWithFilter as GetMidjourneyLogsParams)
+      ? await getAllMidjourneyLogs(
+          paramsWithFilter as GetMidjourneyLogsParams,
+          suppressErrorToast
+        )
+      : await getUserMidjourneyLogs(
+          paramsWithFilter as GetMidjourneyLogsParams,
+          suppressErrorToast
+        )
   }
 
   // task logs
   return isAdmin
-    ? await getAllTaskLogs(paramsWithFilter as GetTaskLogsParams)
-    : await getUserTaskLogs(paramsWithFilter as GetTaskLogsParams)
+    ? await getAllTaskLogs(
+        paramsWithFilter as GetTaskLogsParams,
+        suppressErrorToast
+      )
+    : await getUserTaskLogs(
+        paramsWithFilter as GetTaskLogsParams,
+        suppressErrorToast
+      )
 }

@@ -16,9 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { api } from '@/lib/api'
+import { api, type ApiRequestConfig } from '@/lib/api'
 
-import { buildQueryParams } from './lib/utils'
+import { buildQueryParams } from './lib/query-params'
 import type {
   GetLogsParams,
   GetLogsResponse,
@@ -33,6 +33,11 @@ import type {
 // Generic API Helpers
 // ============================================================================
 
+const suppressErrorToastConfig: ApiRequestConfig = {
+  skipBusinessError: true,
+  skipErrorHandler: true,
+}
+
 function buildApiPath(endpoint: string, isAdmin: boolean): string {
   return isAdmin ? endpoint : `${endpoint}/self`
 }
@@ -40,7 +45,8 @@ function buildApiPath(endpoint: string, isAdmin: boolean): string {
 async function fetchLogs<T>(
   endpoint: string,
   params: T,
-  isAdmin: boolean
+  isAdmin: boolean,
+  suppressErrorToast = false
 ): Promise<GetLogsResponse> {
   const paramRecord = params as unknown as Record<string, unknown>
   const queryParams = buildQueryParams({
@@ -49,20 +55,27 @@ async function fetchLogs<T>(
     ...params,
   })
   const path = buildApiPath(endpoint, isAdmin)
-  const res = await api.get(`${path}?${queryParams}`)
+  const res = await api.get(
+    `${path}?${queryParams}`,
+    suppressErrorToast ? suppressErrorToastConfig : undefined
+  )
   return res.data
 }
 
 async function fetchLogStats<T>(
   endpoint: string,
   params: T,
-  isAdmin: boolean
+  isAdmin: boolean,
+  suppressErrorToast = false
 ): Promise<GetLogStatsResponse> {
   const queryParams = buildQueryParams(
     params as unknown as Record<string, unknown>
   )
   const path = buildApiPath(endpoint, isAdmin)
-  const res = await api.get(`${path}/stat?${queryParams}`)
+  const res = await api.get(
+    `${path}/stat?${queryParams}`,
+    suppressErrorToast ? suppressErrorToastConfig : undefined
+  )
   return res.data
 }
 
@@ -70,19 +83,25 @@ async function fetchLogStats<T>(
 // Common Log APIs
 // ============================================================================
 
-export const getAllLogs = (params: GetLogsParams = {}) =>
-  fetchLogs('/api/log', params, true)
+export const getAllLogs = (
+  params: GetLogsParams = {},
+  suppressErrorToast = false
+) => fetchLogs('/api/log', params, true, suppressErrorToast)
 
 export const getUserLogs = (
-  params: Omit<GetLogsParams, 'username' | 'channel'> = {}
-) => fetchLogs('/api/log', params, false)
+  params: Omit<GetLogsParams, 'username' | 'channel'> = {},
+  suppressErrorToast = false
+) => fetchLogs('/api/log', params, false, suppressErrorToast)
 
-export const getLogStats = (params: GetLogStatsParams = {}) =>
-  fetchLogStats('/api/log', params, true)
+export const getLogStats = (
+  params: GetLogStatsParams = {},
+  suppressErrorToast = false
+) => fetchLogStats('/api/log', params, true, suppressErrorToast)
 
 export const getUserLogStats = (
-  params: Omit<GetLogStatsParams, 'username' | 'channel'> = {}
-) => fetchLogStats('/api/log', params, false)
+  params: Omit<GetLogStatsParams, 'username' | 'channel'> = {},
+  suppressErrorToast = false
+) => fetchLogStats('/api/log', params, false, suppressErrorToast)
 
 export async function getUserInfo(
   userId: number
@@ -95,18 +114,26 @@ export async function getUserInfo(
 // MjProxy (Drawing) Logs API
 // ============================================================================
 
-export const getAllMidjourneyLogs = (params: GetMidjourneyLogsParams) =>
-  fetchLogs('/api/mj', params, true)
+export const getAllMidjourneyLogs = (
+  params: GetMidjourneyLogsParams,
+  suppressErrorToast = false
+) => fetchLogs('/api/mj', params, true, suppressErrorToast)
 
-export const getUserMidjourneyLogs = (params: GetMidjourneyLogsParams) =>
-  fetchLogs('/api/mj', params, false)
+export const getUserMidjourneyLogs = (
+  params: GetMidjourneyLogsParams,
+  suppressErrorToast = false
+) => fetchLogs('/api/mj', params, false, suppressErrorToast)
 
 // ============================================================================
 // Task Logs API
 // ============================================================================
 
-export const getAllTaskLogs = (params: GetTaskLogsParams) =>
-  fetchLogs('/api/task', params, true)
+export const getAllTaskLogs = (
+  params: GetTaskLogsParams,
+  suppressErrorToast = false
+) => fetchLogs('/api/task', params, true, suppressErrorToast)
 
-export const getUserTaskLogs = (params: GetTaskLogsParams) =>
-  fetchLogs('/api/task', params, false)
+export const getUserTaskLogs = (
+  params: GetTaskLogsParams,
+  suppressErrorToast = false
+) => fetchLogs('/api/task', params, false, suppressErrorToast)

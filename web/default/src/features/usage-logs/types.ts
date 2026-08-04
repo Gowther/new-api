@@ -371,6 +371,7 @@ export interface FetchLogsConfig {
   pageSize: number
   searchParams: Record<string, unknown>
   columnFilters: Array<{ id: string; value: unknown }>
+  suppressErrorToast?: boolean
 }
 
 // ============================================================================

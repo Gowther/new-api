@@ -45,6 +45,7 @@ import ParamOverrideEntry from '../../components/table/usage-logs/components/Par
 
 const AUTO_REFRESH_STORAGE_KEY = 'logs-auto-refresh-seconds';
 const AUTO_REFRESH_INTERVALS = [0, 5, 10, 30, 60];
+const SILENT_REQUEST_CONFIG = { skipErrorHandler: true };
 
 function getInitialAutoRefreshSeconds() {
   const stored = Number(localStorage.getItem(AUTO_REFRESH_STORAGE_KEY));
@@ -180,6 +181,7 @@ export const useLogsData = () => {
     getInitialAutoRefreshSeconds,
   );
   const autoRefreshCallbackRef = useRef(null);
+  const autoRefreshInFlightRef = useRef(false);
 
   const setAutoRefreshSeconds = (seconds) => {
     const next = AUTO_REFRESH_INTERVALS.includes(Number(seconds))
@@ -370,7 +372,7 @@ export const useLogsData = () => {
   };
 
   // Statistics functions
-  const getLogSelfStat = async () => {
+  const getLogSelfStat = async (silent = false) => {
     const {
       token_name,
       model_name,
@@ -391,16 +393,16 @@ export const useLogsData = () => {
       group,
     });
     const url = `/api/log/self/stat?${queryString}`;
-    let res = await API.get(url);
+    let res = await API.get(url, silent ? SILENT_REQUEST_CONFIG : undefined);
     const { success, message, data } = res.data;
     if (success) {
       setStat(data);
-    } else {
+    } else if (!silent) {
       showError(message);
     }
   };
 
-  const getLogStat = async () => {
+  const getLogStat = async (silent = false) => {
     const {
       username,
       token_name,
@@ -425,27 +427,34 @@ export const useLogsData = () => {
       group,
     });
     const url = `/api/log/stat?${queryString}`;
-    let res = await API.get(url);
+    let res = await API.get(url, silent ? SILENT_REQUEST_CONFIG : undefined);
     const { success, message, data } = res.data;
     if (success) {
       setStat(data);
-    } else {
+    } else if (!silent) {
       showError(message);
     }
   };
 
-  const handleEyeClick = async () => {
+  const handleEyeClick = async (silent = false) => {
     if (loadingStat) {
       return;
     }
     setLoadingStat(true);
-    if (isAdminUser) {
-      await getLogStat();
-    } else {
-      await getLogSelfStat();
+    try {
+      if (isAdminUser) {
+        await getLogStat(silent);
+      } else {
+        await getLogSelfStat(silent);
+      }
+    } catch (reason) {
+      if (!silent) {
+        showError(reason);
+      }
+    } finally {
+      setShowStat(true);
+      setLoadingStat(false);
     }
-    setShowStat(true);
-    setLoadingStat(false);
   };
 
   // User info function
@@ -871,80 +880,90 @@ export const useLogsData = () => {
   };
 
   // Load logs function
-  const loadLogs = async (startIdx, pageSize, customLogType = null) => {
+  const loadLogs = async (
+    startIdx,
+    pageSize,
+    customLogType = null,
+    silent = false,
+  ) => {
     setLoading(true);
+    try {
+      const {
+        username,
+        token_name,
+        model_name,
+        start_timestamp,
+        end_timestamp,
+        channel,
+        group,
+        request_id,
+        upstream_request_id,
+        logType: formLogType,
+      } = getFormValues();
 
-    const {
-      username,
-      token_name,
-      model_name,
-      start_timestamp,
-      end_timestamp,
-      channel,
-      group,
-      request_id,
-      upstream_request_id,
-      logType: formLogType,
-    } = getFormValues();
+      const currentLogType =
+        customLogType !== null
+          ? customLogType
+          : formLogType !== undefined
+            ? formLogType
+            : logType;
 
-    const currentLogType =
-      customLogType !== null
-        ? customLogType
-        : formLogType !== undefined
-          ? formLogType
-          : logType;
+      let localStartTimestamp = Date.parse(start_timestamp) / 1000;
+      let localEndTimestamp = Date.parse(end_timestamp) / 1000;
+      const queryParams = {
+        p: startIdx,
+        page_size: pageSize,
+        type: currentLogType,
+        token_name,
+        model_name,
+        start_timestamp: localStartTimestamp,
+        end_timestamp: localEndTimestamp,
+        group,
+        request_id,
+        upstream_request_id,
+      };
+      let path = '/api/log/self/';
+      if (isAdminUser) {
+        path = '/api/log/';
+        queryParams.username = username;
+        queryParams.channel = channel;
+      }
+      const url = `${path}?${buildLogQueryString(queryParams)}`;
+      const res = await API.get(
+        url,
+        silent ? SILENT_REQUEST_CONFIG : undefined,
+      );
+      const { success, message, data } = res.data;
+      if (success) {
+        const newPageData = data.items;
+        setActivePage(data.page);
+        setPageSize(data.page_size);
+        setLogCount(data.total);
 
-    let localStartTimestamp = Date.parse(start_timestamp) / 1000;
-    let localEndTimestamp = Date.parse(end_timestamp) / 1000;
-    const queryParams = {
-      p: startIdx,
-      page_size: pageSize,
-      type: currentLogType,
-      token_name,
-      model_name,
-      start_timestamp: localStartTimestamp,
-      end_timestamp: localEndTimestamp,
-      group,
-      request_id,
-      upstream_request_id,
-    };
-    let path = '/api/log/self/';
-    if (isAdminUser) {
-      path = '/api/log/';
-      queryParams.username = username;
-      queryParams.channel = channel;
+        setLogsFormat(newPageData);
+      } else if (!silent) {
+        showError(message);
+      }
+    } catch (reason) {
+      if (!silent) {
+        showError(reason);
+      }
+    } finally {
+      setLoading(false);
     }
-    const url = `${path}?${buildLogQueryString(queryParams)}`;
-    const res = await API.get(url);
-    const { success, message, data } = res.data;
-    if (success) {
-      const newPageData = data.items;
-      setActivePage(data.page);
-      setPageSize(data.page_size);
-      setLogCount(data.total);
-
-      setLogsFormat(newPageData);
-    } else {
-      showError(message);
-    }
-    setLoading(false);
   };
 
   // Page handlers
   const handlePageChange = (page) => {
     setActivePage(page);
-    loadLogs(page, pageSize).then((r) => {});
+    void loadLogs(page, pageSize);
   };
 
   const handlePageSizeChange = async (size) => {
     localStorage.setItem('page-size', size + '');
     setPageSize(size);
     setActivePage(1);
-    loadLogs(activePage, size)
-      .then()
-      .catch((reason) => {
-        showError(reason);
-      });
+    void loadLogs(activePage, size);
   };
 
   // Refresh function
@@ -979,9 +998,7 @@ export const useLogsData = () => {
     setActivePage(1);
     setTimeout(() => {
       handleEyeClick();
-      loadLogs(1, pageSize).catch((reason) => {
-        showError(reason);
-      });
+      void loadLogs(1, pageSize);
     }, 0);
   };
 
@@ -996,12 +1013,19 @@ export const useLogsData = () => {
   };
 
   useEffect(() => {
-    autoRefreshCallbackRef.current = () => {
-      loadLogs(activePage, pageSize).catch((reason) => {
-        showError(reason);
-      });
-      if (showStat) {
-        handleEyeClick();
+    autoRefreshCallbackRef.current = async () => {
+      if (autoRefreshInFlightRef.current) {
+        return;
+      }
+
+      autoRefreshInFlightRef.current = true;
+      try {
+        await loadLogs(activePage, pageSize, null, true);
+        if (showStat) {
+          await handleEyeClick(true);
+        }
+      } finally {
+        autoRefreshInFlightRef.current = false;
       }
     };
   });
@@ -1011,7 +1035,7 @@ export const useLogsData = () => {
       return undefined;
     }
     const timer = setInterval(() => {
-      autoRefreshCallbackRef.current?.();
+      void autoRefreshCallbackRef.current?.();
     }, autoRefreshSeconds * 1000);
     return () => clearInterval(timer);
   }, [autoRefreshSeconds]);
@@ -1021,11 +1045,7 @@ export const useLogsData = () => {
     const localPageSize =
       parseInt(localStorage.getItem('page-size')) || ITEMS_PER_PAGE;
     setPageSize(localPageSize);
-    loadLogs(activePage, localPageSize)
-      .then()
-      .catch((reason) => {
-        showError(reason);
-      });
+    void loadLogs(activePage, localPageSize);
   }, []);
 
   // Initialize statistics when formApi is available

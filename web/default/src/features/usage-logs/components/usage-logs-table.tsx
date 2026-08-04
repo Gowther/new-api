@@ -19,8 +19,8 @@ For commercial licensing, please contact support@quantumnous.com
 import { useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
+import { useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 
 import {
   DataTablePage,
@@ -41,6 +41,7 @@ import { useColumnsByCategory } from '../lib/columns'
 import { parseLogOther } from '../lib/format'
 import { fetchLogsByCategory } from '../lib/utils'
 import type { LogCategory } from '../types'
+import { useUsageLogsAutoRefresh } from '../hooks/use-usage-logs-auto-refresh'
 import { CommonLogsFilterBar } from './common-logs-filter-bar'
 import { TaskLogsFilterBar } from './task-logs-filter-bar'
 import { UsageLogsMobileList } from './usage-logs-mobile-card'
@@ -84,6 +85,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   const isMobile = useMediaQuery('(max-width: 640px)')
   const searchParams = route.useSearch()
   const { autoRefreshSeconds } = useUsageLogsContext()
+  const isAutoRefreshingRef = useRef(false)
 
   const {
     columnFilters,
@@ -123,7 +125,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
     ],
   })
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: [
       'logs',
       logCategory,
@@ -142,10 +144,13 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
         pageSize: pagination.pageSize,
         searchParams,
         columnFilters,
+        suppressErrorToast: isAutoRefreshingRef.current,
       })
 
       if (!result?.success) {
-        toast.error(result?.message || t('Failed to load logs'))
+        if (isAutoRefreshingRef.current) {
+          throw new Error(result?.message)
+        }
         return DEFAULT_LOGS_DATA
       }
 
@@ -157,8 +162,13 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       }
       return undefined
     },
-    refetchInterval: autoRefreshSeconds > 0 ? autoRefreshSeconds * 1000 : false,
   })
+
+  useUsageLogsAutoRefresh(
+    autoRefreshSeconds,
+    refetch,
+    isAutoRefreshingRef
+  )
 
   const logs = data?.items || []
   const columns = useColumnsByCategory(logCategory, isAdmin)

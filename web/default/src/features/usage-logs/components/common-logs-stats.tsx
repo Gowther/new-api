@@ -18,7 +18,6 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
-import { useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Skeleton } from '@/components/ui/skeleton'
@@ -29,7 +28,6 @@ import { cn } from '@/lib/utils'
 import { getLogStats, getUserLogStats } from '../api'
 import { DEFAULT_LOG_STATS } from '../constants'
 import { buildApiParams } from '../lib/utils'
-import { useUsageLogsAutoRefresh } from '../hooks/use-usage-logs-auto-refresh'
 import { useUsageLogsContext } from './usage-logs-provider'
 
 const route = getRouteApi('/_authenticated/usage-logs/$section')
@@ -54,10 +52,9 @@ export function CommonLogsStats() {
   const { t } = useTranslation()
   const isAdmin = useIsAdmin()
   const searchParams = route.useSearch()
-  const { sensitiveVisible, autoRefreshSeconds } = useUsageLogsContext()
-  const isAutoRefreshingRef = useRef(false)
+  const { sensitiveVisible, autoRefreshingRef } = useUsageLogsContext()
 
-  const { data: stats, isLoading, refetch } = useQuery({
+  const { data: stats, isLoading } = useQuery({
     queryKey: ['usage-logs-stats', isAdmin, searchParams],
     queryFn: async () => {
       const params = buildApiParams({
@@ -69,10 +66,10 @@ export function CommonLogsStats() {
       })
 
       const result = isAdmin
-        ? await getLogStats(params, isAutoRefreshingRef.current)
-        : await getUserLogStats(params, isAutoRefreshingRef.current)
+        ? await getLogStats(params, autoRefreshingRef.current)
+        : await getUserLogStats(params, autoRefreshingRef.current)
 
-      if (!result.success && isAutoRefreshingRef.current) {
+      if (!result.success && autoRefreshingRef.current) {
         throw new Error(result.message)
       }
 
@@ -82,12 +79,6 @@ export function CommonLogsStats() {
     },
     placeholderData: (previousData) => previousData,
   })
-
-  useUsageLogsAutoRefresh(
-    autoRefreshSeconds,
-    refetch,
-    isAutoRefreshingRef
-  )
 
   if (isLoading) {
     return (

@@ -341,14 +341,17 @@ export const useLogsData = () => {
   }, [BILLING_DISPLAY_MODE_STORAGE_KEY, billingDisplayMode]);
 
   // 获取表单值的辅助函数，确保所有值都是字符串
-  const getFormValues = () => {
+  const getFormValues = (dateRangeOverride = null) => {
     const defaultFormValues = getDefaultLogFormValues();
     const formValues = formApi ? formApi.getValues() : formInitValues;
 
     let start_timestamp = defaultFormValues.dateRange[0];
     let end_timestamp = defaultFormValues.dateRange[1];
 
-    if (
+    if (Array.isArray(dateRangeOverride) && dateRangeOverride.length === 2) {
+      start_timestamp = dateRangeOverride[0];
+      end_timestamp = dateRangeOverride[1];
+    } else if (
       formValues.dateRange &&
       Array.isArray(formValues.dateRange) &&
       formValues.dateRange.length === 2
@@ -372,7 +375,7 @@ export const useLogsData = () => {
   };
 
   // Statistics functions
-  const getLogSelfStat = async (silent = false) => {
+  const getLogSelfStat = async (silent = false, dateRangeOverride = null) => {
     const {
       token_name,
       model_name,
@@ -380,7 +383,7 @@ export const useLogsData = () => {
       end_timestamp,
       group,
       logType: formLogType,
-    } = getFormValues();
+    } = getFormValues(dateRangeOverride);
     const currentLogType = formLogType !== undefined ? formLogType : logType;
     let localStartTimestamp = Date.parse(start_timestamp) / 1000;
     let localEndTimestamp = Date.parse(end_timestamp) / 1000;
@@ -402,7 +405,7 @@ export const useLogsData = () => {
     }
   };
 
-  const getLogStat = async (silent = false) => {
+  const getLogStat = async (silent = false, dateRangeOverride = null) => {
     const {
       username,
       token_name,
@@ -412,7 +415,7 @@ export const useLogsData = () => {
       channel,
       group,
       logType: formLogType,
-    } = getFormValues();
+    } = getFormValues(dateRangeOverride);
     const currentLogType = formLogType !== undefined ? formLogType : logType;
     let localStartTimestamp = Date.parse(start_timestamp) / 1000;
     let localEndTimestamp = Date.parse(end_timestamp) / 1000;
@@ -436,16 +439,16 @@ export const useLogsData = () => {
     }
   };
 
-  const handleEyeClick = async (silent = false) => {
+  const handleEyeClick = async (silent = false, dateRangeOverride = null) => {
     if (loadingStat) {
       return;
     }
     setLoadingStat(true);
     try {
       if (isAdminUser) {
-        await getLogStat(silent);
+        await getLogStat(silent, dateRangeOverride);
       } else {
-        await getLogSelfStat(silent);
+        await getLogSelfStat(silent, dateRangeOverride);
       }
     } catch (reason) {
       if (!silent) {
@@ -885,6 +888,7 @@ export const useLogsData = () => {
     pageSize,
     customLogType = null,
     silent = false,
+    dateRangeOverride = null,
   ) => {
     setLoading(true);
     try {
@@ -899,7 +903,7 @@ export const useLogsData = () => {
         request_id,
         upstream_request_id,
         logType: formLogType,
-      } = getFormValues();
+      } = getFormValues(dateRangeOverride);
 
       const currentLogType =
         customLogType !== null
@@ -973,6 +977,14 @@ export const useLogsData = () => {
     await loadLogs(1, pageSize);
   };
 
+  const refreshTimeRange = () => {
+    const dateRange = getDefaultLogFormValues().dateRange;
+    if (formApi) {
+      formApi.setValue('dateRange', dateRange);
+    }
+    return dateRange;
+  };
+
   const resetFilters = () => {
     if (!formApi) {
       return;
@@ -1020,9 +1032,10 @@ export const useLogsData = () => {
 
       autoRefreshInFlightRef.current = true;
       try {
-        await loadLogs(activePage, pageSize, null, true);
+        const dateRange = refreshTimeRange();
+        await loadLogs(activePage, pageSize, null, true, dateRange);
         if (showStat) {
-          await handleEyeClick(true);
+          await handleEyeClick(true, dateRange);
         }
       } finally {
         autoRefreshInFlightRef.current = false;

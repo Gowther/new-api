@@ -17,7 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useContext,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 
 import type { ChannelAffinityInfo } from '../types'
 
@@ -50,6 +56,7 @@ interface UsageLogsContextValue {
   setSensitiveVisible: (visible: boolean) => void
   autoRefreshSeconds: number
   setAutoRefreshSeconds: (seconds: number) => void
+  autoRefreshingRef: { current: boolean }
 }
 
 const UsageLogsContext = createContext<UsageLogsContextValue | undefined>(
@@ -66,6 +73,7 @@ export function UsageLogsProvider({ children }: { children: ReactNode }) {
   const [autoRefreshSeconds, setAutoRefreshSecondsState] = useState(
     getInitialAutoRefreshSeconds
   )
+  const autoRefreshingRef = useRef(false)
 
   const setAutoRefreshSeconds = (seconds: number) => {
     const next = AUTO_REFRESH_INTERVALS.includes(
@@ -96,6 +104,7 @@ export function UsageLogsProvider({ children }: { children: ReactNode }) {
         setSensitiveVisible,
         autoRefreshSeconds,
         setAutoRefreshSeconds,
+        autoRefreshingRef,
       }}
     >
       {children}

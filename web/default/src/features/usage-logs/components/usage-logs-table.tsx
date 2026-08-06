@@ -16,10 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
-import { useRef } from 'react'
+import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -37,11 +37,11 @@ import {
   LOG_TYPE_ALL_VALUE,
   LOG_TYPE_ENUM,
 } from '../constants'
+import { useUsageLogsAutoRefresh } from '../hooks/use-usage-logs-auto-refresh'
 import { useColumnsByCategory } from '../lib/columns'
 import { parseLogOther } from '../lib/format'
-import { fetchLogsByCategory } from '../lib/utils'
+import { fetchLogsByCategory, getDefaultTimeRange } from '../lib/utils'
 import type { LogCategory } from '../types'
-import { useUsageLogsAutoRefresh } from '../hooks/use-usage-logs-auto-refresh'
 import { CommonLogsFilterBar } from './common-logs-filter-bar'
 import { TaskLogsFilterBar } from './task-logs-filter-bar'
 import { UsageLogsMobileList } from './usage-logs-mobile-card'
@@ -84,8 +84,9 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   const isAdmin = useIsAdmin()
   const isMobile = useMediaQuery('(max-width: 640px)')
   const searchParams = route.useSearch()
-  const { autoRefreshSeconds } = useUsageLogsContext()
-  const isAutoRefreshingRef = useRef(false)
+  const navigate = route.useNavigate()
+  const queryClient = useQueryClient()
+  const { autoRefreshSeconds, autoRefreshingRef } = useUsageLogsContext()
 
   const {
     columnFilters,
@@ -95,7 +96,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
     ensurePageInRange,
   } = useTableUrlState({
     search: route.useSearch(),
-    navigate: route.useNavigate(),
+    navigate,
     pagination: { defaultPage: 1, defaultPageSize: isMobile ? 20 : 100 },
     globalFilter: { enabled: false },
     columnFilters: [
@@ -125,7 +126,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
     ],
   })
 
-  const { data, isLoading, isFetching, refetch } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: [
       'logs',
       logCategory,
@@ -144,11 +145,11 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
         pageSize: pagination.pageSize,
         searchParams,
         columnFilters,
-        suppressErrorToast: isAutoRefreshingRef.current,
+        suppressErrorToast: autoRefreshingRef.current,
       })
 
       if (!result?.success) {
-        if (isAutoRefreshingRef.current) {
+        if (autoRefreshingRef.current) {
           throw new Error(result?.message)
         }
         return DEFAULT_LOGS_DATA
@@ -164,10 +165,30 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
     },
   })
 
+  const refreshTimeRange = useCallback(async () => {
+    const { start, end } = getDefaultTimeRange()
+
+    await navigate({
+      to: '/usage-logs/$section',
+      params: { section: logCategory },
+      replace: true,
+      search: (previous) => ({
+        ...previous,
+        startTime: start.getTime(),
+        endTime: end.getTime(),
+      }),
+    })
+
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['logs'] }),
+      queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] }),
+    ])
+  }, [logCategory, navigate, queryClient])
+
   useUsageLogsAutoRefresh(
     autoRefreshSeconds,
-    refetch,
-    isAutoRefreshingRef
+    refreshTimeRange,
+    autoRefreshingRef
   )
 
   const logs = data?.items || []

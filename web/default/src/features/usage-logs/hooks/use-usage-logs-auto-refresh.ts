@@ -20,7 +20,7 @@ import { useEffect } from 'react'
 
 export function useUsageLogsAutoRefresh(
   autoRefreshSeconds: number,
-  refetch: () => Promise<unknown>,
+  refresh: () => Promise<unknown>,
   isAutoRefreshingRef: { current: boolean }
 ) {
   useEffect(() => {
@@ -37,7 +37,7 @@ export function useUsageLogsAutoRefresh(
       }
 
       isAutoRefreshingRef.current = true
-      void refetch()
+      void refresh()
         .catch(() => undefined)
         .finally(() => {
           isAutoRefreshingRef.current = false
@@ -45,5 +45,5 @@ export function useUsageLogsAutoRefresh(
     }, autoRefreshSeconds * 1000)
 
     return () => window.clearInterval(timer)
-  }, [autoRefreshSeconds, isAutoRefreshingRef, refetch])
+  }, [autoRefreshSeconds, isAutoRefreshingRef, refresh])
 }

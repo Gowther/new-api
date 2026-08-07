@@ -297,11 +297,14 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		if !autoBan {
 			autoBanInt = 0
 		}
+		priority, _ := common.GetContextKeyType[int64](c, constant.ContextKeyChannelPriority)
+		retryParam.SetPreviousChannelPriority(priority)
 		return &model.Channel{
-			Id:      c.GetInt("channel_id"),
-			Type:    c.GetInt("channel_type"),
-			Name:    c.GetString("channel_name"),
-			AutoBan: &autoBanInt,
+			Id:       c.GetInt("channel_id"),
+			Type:     c.GetInt("channel_type"),
+			Name:     c.GetString("channel_name"),
+			Priority: &priority,
+			AutoBan:  &autoBanInt,
 		}, nil
 	}
 	channel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(retryParam)

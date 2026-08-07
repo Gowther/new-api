@@ -105,10 +105,10 @@ func SyncChannelCache(frequency int) {
 	}
 }
 
-func GetRandomSatisfiedChannel(group string, model string, retry int, requestPath string) (*Channel, error) {
+func GetRandomSatisfiedChannel(group string, model string, retry int, requestPath string, previousPriority *int64) (*Channel, error) {
 	// if memory cache is disabled, get channel directly from database
 	if !common.MemoryCacheEnabled {
-		return GetChannel(group, model, retry, requestPath)
+		return GetChannel(group, model, retry, requestPath, previousPriority)
 	}
 
 	channelSyncLock.RLock()
@@ -129,6 +129,9 @@ func GetRandomSatisfiedChannel(group string, model string, retry int, requestPat
 
 	if len(channels) == 1 {
 		if channel, ok := channelsIDM[channels[0]]; ok {
+			if previousPriority != nil && channel.GetPriority() >= *previousPriority {
+				return nil, nil
+			}
 			return channel, nil
 		}
 		return nil, fmt.Errorf("数据库一致性错误，渠道# %d 不存在，请联系管理员修复", channels[0])
@@ -148,12 +151,27 @@ func GetRandomSatisfiedChannel(group string, model string, retry int, requestPat
 	}
 	sort.Sort(sort.Reverse(sort.IntSlice(sortedUniquePriorities)))
 
-	if retry >= len(uniquePriorities) {
-		retry = len(uniquePriorities) - 1
+	var targetPriority int64
+	if previousPriority != nil {
+		found := false
+		for _, priority := range sortedUniquePriorities {
+			if int64(priority) < *previousPriority {
+				targetPriority = int64(priority)
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, nil
+		}
+	} else {
+		if retry >= len(uniquePriorities) {
+			retry = len(uniquePriorities) - 1
+		}
+		targetPriority = int64(sortedUniquePriorities[retry])
 	}
-	targetPriority := int64(sortedUniquePriorities[retry])
 
-	// get the priority for the given retry number
+	// Select a channel from the resolved priority tier.
 	var sumWeight = 0
 	var targetChannels []*Channel
 	for _, channelId := range channels {

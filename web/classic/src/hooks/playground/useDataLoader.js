@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   API,
@@ -36,6 +36,19 @@ export const useDataLoader = (
   setChannels,
 ) => {
   const { t } = useTranslation();
+  const userId = userState?.user?.id;
+  const latestInputsRef = useRef(inputs);
+  const channelRequestIdRef = useRef(0);
+  const initialChannelSelectionRef = useRef(
+    inputs.channelId === null
+      ? null
+      : {
+          group: inputs.group,
+          model: inputs.model,
+          channelId: inputs.channelId,
+        },
+  );
+  latestInputsRef.current = inputs;
 
   const loadModels = useCallback(async () => {
     try {
@@ -43,13 +56,14 @@ export const useDataLoader = (
       const { success, message, data } = res.data;
 
       if (success) {
+        const currentModel = latestInputsRef.current.model;
         const { modelOptions, selectedModel } = processModelsData(
           data,
-          inputs.model,
+          currentModel,
         );
         setModels(modelOptions);
 
-        if (selectedModel !== inputs.model) {
+        if (selectedModel !== currentModel) {
           handleInputChange('model', selectedModel);
         }
       } else {
@@ -58,7 +72,7 @@ export const useDataLoader = (
     } catch (error) {
       showError(t('加载模型失败'));
     }
-  }, [inputs.model, handleInputChange, setModels, t]);
+  }, [handleInputChange, setModels, t]);
 
   const loadGroups = useCallback(async () => {
     try {
@@ -72,8 +86,9 @@ export const useDataLoader = (
         const groupOptions = processGroupsData(data, userGroup);
         setGroups(groupOptions);
 
+        const currentGroup = latestInputsRef.current.group;
         const hasCurrentGroup = groupOptions.some(
-          (option) => option.value === inputs.group,
+          (option) => option.value === currentGroup,
         );
         if (!hasCurrentGroup) {
           handleInputChange('group', groupOptions[0]?.value || '');
@@ -84,68 +99,102 @@ export const useDataLoader = (
     } catch (error) {
       showError(t('加载分组失败'));
     }
-  }, [userState, inputs.group, handleInputChange, setGroups, t]);
+  }, [userState?.user?.group, handleInputChange, setGroups, t]);
 
-  const loadChannels = useCallback(async () => {
-    setChannels([]);
+  const loadChannels = useCallback(
+    async (group, model) => {
+      const requestGroup = group ?? latestInputsRef.current.group;
+      const requestModel = model ?? latestInputsRef.current.model;
+      const requestId = ++channelRequestIdRef.current;
 
-    if (!inputs.group || !inputs.model) {
-      if (inputs.channelId !== null) {
-        handleInputChange('channelId', null);
+      setChannels([]);
+      handleInputChange('channelId', null);
+      const initialSelection = initialChannelSelectionRef.current;
+      if (
+        initialSelection &&
+        (initialSelection.group !== requestGroup ||
+          initialSelection.model !== requestModel)
+      ) {
+        initialChannelSelectionRef.current = null;
       }
+
+      if (!requestGroup || !requestModel) {
+        return;
+      }
+
+      try {
+        const res = await API.get(API_ENDPOINTS.USER_MODEL_CHANNELS, {
+          params: { group: requestGroup, model: requestModel },
+        });
+        if (requestId !== channelRequestIdRef.current) return;
+
+        const { success, message, data } = res.data;
+
+        if (success) {
+          const channelOptions = Array.isArray(data)
+            ? data.map((channel) => ({
+                label: channel.type_name
+                  ? `${channel.name} (${channel.type_name})`
+                  : channel.name,
+                value: String(channel.id),
+              }))
+            : [];
+          setChannels(channelOptions);
+
+          const initialSelection = initialChannelSelectionRef.current;
+          initialChannelSelectionRef.current = null;
+          if (
+            initialSelection?.group === requestGroup &&
+            initialSelection.model === requestModel &&
+            channelOptions.some(
+              (option) => option.value === String(initialSelection.channelId),
+            )
+          ) {
+            handleInputChange('channelId', initialSelection.channelId);
+          }
+        } else {
+          showError(t(message));
+        }
+      } catch (error) {
+        if (requestId !== channelRequestIdRef.current) return;
+
+        setChannels([]);
+        handleInputChange('channelId', null);
+        showError(t('加载模型失败'));
+      }
+    },
+    [handleInputChange, setChannels, t],
+  );
+
+  useEffect(() => {
+    if (userId !== undefined) {
+      loadModels();
+    }
+  }, [userId, loadModels]);
+
+  useEffect(() => {
+    if (userId !== undefined) {
+      loadGroups();
+    }
+  }, [userId, loadGroups]);
+
+  useEffect(() => {
+    if (userId !== undefined) {
+      loadChannels(inputs.group, inputs.model);
       return;
     }
 
-    try {
-      const res = await API.get(API_ENDPOINTS.USER_MODEL_CHANNELS, {
-        params: { group: inputs.group, model: inputs.model },
-      });
-      const { success, message, data } = res.data;
-
-      if (success) {
-        const channelOptions = Array.isArray(data)
-          ? data.map((channel) => ({
-              label: channel.type_name
-                ? `${channel.name} (${channel.type_name})`
-                : channel.name,
-              value: String(channel.id),
-            }))
-          : [];
-        setChannels(channelOptions);
-
-        if (
-          inputs.channelId !== null &&
-          !channelOptions.some(
-            (option) => option.value === String(inputs.channelId),
-          )
-        ) {
-          handleInputChange('channelId', null);
-        }
-      } else {
-        showError(t(message));
-      }
-    } catch (error) {
-      setChannels([]);
-      handleInputChange('channelId', null);
-      showError(t('加载模型失败'));
-    }
+    channelRequestIdRef.current += 1;
+    setChannels([]);
+    handleInputChange('channelId', null);
   }, [
-    inputs.channelId,
+    userId,
     inputs.group,
     inputs.model,
     handleInputChange,
+    loadChannels,
     setChannels,
-    t,
   ]);
-
-  // 自动加载数据
-  useEffect(() => {
-    if (userState?.user) {
-      loadModels();
-      loadGroups();
-      loadChannels();
-    }
-  }, [userState?.user, loadModels, loadGroups, loadChannels]);
 
   return {
     loadModels,

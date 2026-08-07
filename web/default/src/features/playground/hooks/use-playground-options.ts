@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -58,6 +58,15 @@ export function usePlaygroundOptions({
   updateConfig,
 }: UsePlaygroundOptionsParams) {
   const { t } = useTranslation()
+  const initialChannelSelectionRef = useRef(
+    currentChannelId === null
+      ? null
+      : {
+          group: currentGroup,
+          model: currentModel,
+          channelId: currentChannelId,
+        }
+  )
 
   const {
     data: modelsData,
@@ -151,19 +160,47 @@ export function usePlaygroundOptions({
 
   useEffect(() => {
     setChannels([])
-  }, [currentGroup, currentModel, setChannels])
+    updateConfig('channelId', null)
+
+    const initialSelection = initialChannelSelectionRef.current
+    if (
+      initialSelection &&
+      (initialSelection.group !== currentGroup ||
+        initialSelection.model !== currentModel)
+    ) {
+      initialChannelSelectionRef.current = null
+    }
+  }, [currentGroup, currentModel, setChannels, updateConfig])
 
   useEffect(() => {
     if (!channelsData) return
 
     setChannels(channelsData)
+    const initialSelection = initialChannelSelectionRef.current
+    initialChannelSelectionRef.current = null
+    if (
+      initialSelection?.group === currentGroup &&
+      initialSelection.model === currentModel &&
+      channelsData.some((channel) => channel.id === initialSelection.channelId)
+    ) {
+      updateConfig('channelId', initialSelection.channelId)
+      return
+    }
+
     if (
       channelsData.every((channel) => channel.id !== currentChannelId) &&
       currentChannelId !== null
     ) {
       updateConfig('channelId', null)
     }
-  }, [channelsData, currentChannelId, setChannels, updateConfig])
+  }, [
+    channelsData,
+    currentChannelId,
+    currentGroup,
+    currentModel,
+    setChannels,
+    updateConfig,
+  ])
 
   return {
     isLoadingModels,

@@ -52,6 +52,7 @@ import {
   showError,
   showInfo,
   showSuccess,
+  timestamp2string,
 } from '../../../helpers';
 import EditChannelModal from '../channels/modals/EditChannelModal';
 
@@ -1175,6 +1176,26 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
         const statusMeta =
           CHANNEL_STATUS_META[record.status] ||
           CHANNEL_STATUS_META[CHANNEL_STATUS.UNKNOWN];
+        let autoDisableDetails = '';
+        if (record.status === CHANNEL_STATUS.AUTO_DISABLED) {
+          try {
+            const otherInfo = record.other_info
+              ? JSON.parse(record.other_info)
+              : null;
+            const reason = otherInfo?.status_reason || '';
+            const time = otherInfo?.status_time || 0;
+            autoDisableDetails =
+              (reason ? t('原因：') + reason : '') +
+              (time ? t('，时间：') + timestamp2string(time) : '');
+          } catch {
+            // Keep the status usable when legacy metadata is invalid.
+          }
+        }
+        const statusTag = (
+          <Tag color={statusMeta.color} shape='circle' size='small'>
+            {t(statusMeta.label)}
+          </Tag>
+        );
         return (
           <div className='flex items-center gap-2'>
             <Switch
@@ -1184,9 +1205,11 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
               disabled={updating}
               onChange={(checked) => handleChannelStatusChange(record, checked)}
             />
-            <Tag color={statusMeta.color} shape='circle' size='small'>
-              {t(statusMeta.label)}
-            </Tag>
+            {autoDisableDetails ? (
+              <Tooltip content={autoDisableDetails}>{statusTag}</Tooltip>
+            ) : (
+              statusTag
+            )}
           </div>
         );
       },

@@ -62,6 +62,12 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
   deleteChannel,
   getChannelModelVendorGroups,
   getChannels,
@@ -89,6 +95,7 @@ import {
   ADMIN_PERMISSION_RESOURCES,
   hasPermission,
 } from '@/lib/admin-permissions'
+import { formatTimestampToDate } from '@/lib/format'
 import { getLobeIcon } from '@/lib/lobe-icon'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
@@ -1507,6 +1514,26 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                     const channelRemark = channel.remark?.trim()
                     const isFirstDisabled =
                       !isEnabled && index === enabledChannelCount
+                    let autoDisableReason = ''
+                    let autoDisableTime = ''
+                    if (channel.status === CHANNEL_STATUS.AUTO_DISABLED) {
+                      try {
+                        const otherInfo = channel.other_info
+                          ? JSON.parse(channel.other_info)
+                          : null
+                        if (otherInfo) {
+                          autoDisableReason = otherInfo.status_reason || ''
+                          autoDisableTime = otherInfo.status_time
+                            ? formatTimestampToDate(otherInfo.status_time)
+                            : ''
+                        }
+                      } catch {
+                        /* Keep the status usable when legacy metadata is invalid. */
+                      }
+                    }
+                    const showAutoDisableDetails = Boolean(
+                      autoDisableReason || autoDisableTime
+                    )
 
                     return [
                       ...(isFirstDisabled
@@ -1704,12 +1731,44 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                               }
                               aria-label={t('Status')}
                             />
-                            <StatusBadge
-                              label={t(statusConfig.label)}
-                              variant={statusConfig.variant}
-                              copyable={false}
-                              className='min-w-0'
-                            />
+                            {showAutoDisableDetails ? (
+                              <TooltipProvider delay={100}>
+                                <Tooltip>
+                                  <TooltipTrigger render={<span />}>
+                                    <StatusBadge
+                                      label={t(statusConfig.label)}
+                                      variant={statusConfig.variant}
+                                      copyable={false}
+                                      className='min-w-0'
+                                    />
+                                  </TooltipTrigger>
+                                  <TooltipContent
+                                    side='top'
+                                    className='max-w-xs'
+                                  >
+                                    <div className='space-y-1 text-xs'>
+                                      {autoDisableReason ? (
+                                        <div>
+                                          {t('Reason:')} {autoDisableReason}
+                                        </div>
+                                      ) : null}
+                                      {autoDisableTime ? (
+                                        <div>
+                                          {t('Time:')} {autoDisableTime}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            ) : (
+                              <StatusBadge
+                                label={t(statusConfig.label)}
+                                variant={statusConfig.variant}
+                                copyable={false}
+                                className='min-w-0'
+                              />
+                            )}
                           </div>
                         </TableCell>
                         <TableCell className='w-48'>

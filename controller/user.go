@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
 	"github.com/QuantumNous/new-api/setting"
@@ -686,7 +687,7 @@ func GetUserModelChannels(c *gin.Context) {
 		return
 	}
 
-	channels, err := model.GetEnabledChannelsForGroupsModel(selectedGroups, modelName)
+	channels, err := model.GetEnabledChannelsForGroupsModel(selectedGroups, modelName, relaycommon.NormalizeRequestPath("/pg/chat/completions"))
 	if err != nil {
 		common.ApiError(c, err)
 		return

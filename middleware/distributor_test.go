@@ -6,6 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -39,4 +43,18 @@ func TestGetModelFromJSONBodyRejectsInvalidPlaygroundChannelID(t *testing.T) {
 
 	require.Error(t, err)
 	require.ErrorContains(t, err, "channel_id must be a positive integer")
+}
+
+func TestChannelSupportsPlaygroundPath(t *testing.T) {
+	settings, err := common.Marshal(dto.ChannelOtherSettings{
+		AdvancedCustom: &dto.AdvancedCustomConfig{Routes: []dto.AdvancedCustomRoute{{IncomingPath: "/v1/chat/completions"}}},
+	})
+	require.NoError(t, err)
+	channel := &model.Channel{
+		Type:          constant.ChannelTypeAdvancedCustom,
+		OtherSettings: string(settings),
+	}
+
+	require.True(t, channelSupportsRequestPath(channel, "/pg/chat/completions"))
+	require.False(t, channelSupportsRequestPath(channel, "/pg/responses"))
 }

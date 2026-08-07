@@ -2,10 +2,12 @@ package model
 
 import (
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 )
 
-func GetEnabledChannelsForGroupsModel(groups []string, modelName string) ([]*Channel, error) {
+func GetEnabledChannelsForGroupsModel(groups []string, modelName string, requestPath string) ([]*Channel, error) {
 	if len(groups) == 0 || modelName == "" {
 		return []*Channel{}, nil
 	}
@@ -18,13 +20,32 @@ func GetEnabledChannelsForGroupsModel(groups []string, modelName string) ([]*Cha
 
 	var channels []*Channel
 	err := DB.Table("channels").
-		Select("channels.id, channels.name, channels.type").
+		Select("channels.id, channels.name, channels.type, channels.settings").
 		Joins("JOIN abilities ON abilities.channel_id = channels.id").
 		Where("abilities."+commonGroupCol+" IN ? AND abilities.model IN ? AND abilities.enabled = ? AND channels.status = ?", groups, modelNames, true, common.ChannelStatusEnabled).
 		Distinct().
 		Order("channels.id ASC").
 		Find(&channels).Error
-	return channels, err
+	if err != nil || requestPath == "" {
+		return channels, err
+	}
+
+	filtered := make([]*Channel, 0, len(channels))
+	for _, channel := range channels {
+		if channel.Type != constant.ChannelTypeAdvancedCustom {
+			filtered = append(filtered, channel)
+			continue
+		}
+
+		var settings dto.ChannelOtherSettings
+		if common.UnmarshalJsonStr(channel.OtherSettings, &settings) != nil {
+			continue
+		}
+		if settings.AdvancedCustom != nil && settings.AdvancedCustom.SupportsPath(requestPath) {
+			filtered = append(filtered, channel)
+		}
+	}
+	return filtered, nil
 }
 
 func IsChannelEnabledForGroupModel(group string, modelName string, channelID int) bool {

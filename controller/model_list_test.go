@@ -219,6 +219,14 @@ func TestGetUserModelsFiltersByRequestedGroup(t *testing.T) {
 
 func TestGetUserModelChannelsFiltersByUserGroupModelAndStatus(t *testing.T) {
 	db := setupModelListControllerTestDB(t)
+	supportedSettings, err := common.Marshal(dto.ChannelOtherSettings{
+		AdvancedCustom: &dto.AdvancedCustomConfig{Routes: []dto.AdvancedCustomRoute{{IncomingPath: "/v1/chat/completions"}}},
+	})
+	require.NoError(t, err)
+	unsupportedSettings, err := common.Marshal(dto.ChannelOtherSettings{
+		AdvancedCustom: &dto.AdvancedCustomConfig{Routes: []dto.AdvancedCustomRoute{{IncomingPath: "/v1/responses"}}},
+	})
+	require.NoError(t, err)
 	require.NoError(t, db.Create(&model.User{
 		Id:       1003,
 		Username: "playground-channel-user",
@@ -231,12 +239,16 @@ func TestGetUserModelChannelsFiltersByUserGroupModelAndStatus(t *testing.T) {
 		{Id: 12, Type: constant.ChannelTypeAnthropic, Key: "sk-disabled", Status: common.ChannelStatusManuallyDisabled, Name: "disabled"},
 		{Id: 13, Type: constant.ChannelTypeOpenAI, Key: "sk-other-model", Status: common.ChannelStatusEnabled, Name: "other-model"},
 		{Id: 14, Type: constant.ChannelTypeOpenAI, Key: "sk-vip", Status: common.ChannelStatusEnabled, Name: "vip"},
+		{Id: 15, Type: constant.ChannelTypeAdvancedCustom, Key: "sk-custom-chat", Status: common.ChannelStatusEnabled, Name: "custom-chat", OtherSettings: string(supportedSettings)},
+		{Id: 16, Type: constant.ChannelTypeAdvancedCustom, Key: "sk-custom-responses", Status: common.ChannelStatusEnabled, Name: "custom-responses", OtherSettings: string(unsupportedSettings)},
 	}).Error)
 	require.NoError(t, db.Create(&[]model.Ability{
 		{Group: "default", Model: "zz-playground-channel-model", ChannelId: 11, Enabled: true},
 		{Group: "default", Model: "zz-playground-channel-model", ChannelId: 12, Enabled: true},
 		{Group: "default", Model: "zz-other-model", ChannelId: 13, Enabled: true},
 		{Group: "vip", Model: "zz-playground-channel-model", ChannelId: 14, Enabled: true},
+		{Group: "default", Model: "zz-playground-channel-model", ChannelId: 15, Enabled: true},
+		{Group: "default", Model: "zz-playground-channel-model", ChannelId: 16, Enabled: true},
 	}).Error)
 
 	recorder := httptest.NewRecorder()
@@ -250,10 +262,13 @@ func TestGetUserModelChannelsFiltersByUserGroupModelAndStatus(t *testing.T) {
 	var payload userModelChannelsResponse
 	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &payload))
 	require.True(t, payload.Success)
-	require.Len(t, payload.Data, 1)
+	require.Len(t, payload.Data, 2)
 	require.Equal(t, 11, payload.Data[0].Id)
 	require.Equal(t, "primary", payload.Data[0].Name)
 	require.Equal(t, "OpenAI", payload.Data[0].TypeName)
+	require.Equal(t, 15, payload.Data[1].Id)
+	require.Equal(t, "custom-chat", payload.Data[1].Name)
+	require.Equal(t, "Advanced Custom", payload.Data[1].TypeName)
 
 	unauthorizedRecorder := httptest.NewRecorder()
 	unauthorizedContext, _ := gin.CreateTestContext(unauthorizedRecorder)

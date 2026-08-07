@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 /* eslint-disable react-refresh/only-export-components */
 import { useQueryClient } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
 import {
   AlertTriangle,
@@ -579,7 +580,20 @@ export function useChannelsColumns(
         meta: { mobileHidden: true },
         cell: ({ row }) => {
           const id = row.getValue('id') as number
-          return <TableId value={sensitiveVisible ? id : SENSITIVE_MASK} />
+          if (isTagAggregateRow(row.original) || !sensitiveVisible) {
+            return <TableId value={sensitiveVisible ? id : SENSITIVE_MASK} />
+          }
+
+          return (
+            <Link
+              to='/usage-logs/$section'
+              params={{ section: 'common' }}
+              search={{ channel: String(id) }}
+              className='focus-visible:ring-ring inline-flex rounded-sm underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:outline-none'
+            >
+              <TableId value={id} className='text-primary' />
+            </Link>
+          )
         },
         size: 80,
       },

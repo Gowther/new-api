@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
+import { Link } from 'react-router-dom';
 import {
   Button,
   Dropdown,
@@ -332,6 +333,20 @@ export const getChannelsColumns = ({
       key: COLUMN_KEYS.ID,
       title: t('ID'),
       dataIndex: 'id',
+      render: (text, record) => {
+        if (record.children !== undefined) {
+          return text;
+        }
+
+        return (
+          <Link
+            to={`/console/log?channel=${encodeURIComponent(String(text))}`}
+            className='text-blue-500 underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2'
+          >
+            {text}
+          </Link>
+        );
+      },
     },
     {
       key: COLUMN_KEYS.NAME,

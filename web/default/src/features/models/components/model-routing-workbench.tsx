@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { Analytics02Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Gauge,
@@ -949,11 +951,16 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     setChannelEditorOpen(true)
   }
 
-  const openChannelUsageLogs = (channelId: number) => {
-    const targetUrl = `/usage-logs/common?channel=${encodeURIComponent(
-      String(channelId)
-    )}`
-    window.open(targetUrl, '_blank', 'noopener,noreferrer')
+  const openUsageLogs = (modelName: string, channelId?: number) => {
+    const searchParams = new URLSearchParams({ model: modelName })
+    if (channelId !== undefined) {
+      searchParams.set('channel', String(channelId))
+    }
+    window.open(
+      `/usage-logs/common?${searchParams.toString()}`,
+      '_blank',
+      'noopener,noreferrer'
+    )
   }
 
   const handleChannelEditorOpenChange = (open: boolean) => {
@@ -1376,44 +1383,90 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
             )}
             {!isLoading && filteredModels.length > 0 && (
               <div className='space-y-1 p-2'>
-                {filteredModels.map((model) => (
-                  <button
-                    type='button'
-                    key={model.model_name}
-                    onClick={() => setSelectedModelName(model.model_name)}
-                    className={cn(
-                      'flex w-full min-w-0 items-center justify-between gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors',
-                      selectedModelName === model.model_name
-                        ? 'bg-primary text-primary-foreground'
-                        : 'hover:bg-muted'
-                    )}
-                  >
-                    <span className='flex min-w-0 flex-1 items-center gap-2'>
-                      <span className='bg-muted/40 flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full'>
-                        {model.icon || model.vendor_icon ? (
-                          getLobeIcon(model.icon || model.vendor_icon, 16)
-                        ) : (
-                          <span
-                            className={cn(
-                              'text-[10px] font-semibold',
-                              selectedModelName === model.model_name
-                                ? 'text-primary-foreground'
-                                : 'text-muted-foreground'
-                            )}
-                          >
-                            {getModelInitial(model.model_name)}
-                          </span>
-                        )}
-                      </span>
-                      <span className='min-w-0 flex-1 truncate font-mono'>
-                        {model.model_name}
-                      </span>
-                    </span>
-                    <span className='text-muted-foreground shrink-0 text-xs tabular-nums'>
-                      {model.channelCount}
-                    </span>
-                  </button>
-                ))}
+                {filteredModels.map((model) => {
+                  const isSelected = selectedModelName === model.model_name
+
+                  return (
+                    <div
+                      key={model.model_name}
+                      className={cn(
+                        'flex w-full min-w-0 items-center rounded-md transition-colors',
+                        isSelected
+                          ? 'bg-primary text-primary-foreground'
+                          : 'hover:bg-muted'
+                      )}
+                    >
+                      <button
+                        type='button'
+                        onClick={() => setSelectedModelName(model.model_name)}
+                        className='flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left text-sm'
+                      >
+                        <span className='bg-muted/40 flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full'>
+                          {model.icon || model.vendor_icon ? (
+                            getLobeIcon(model.icon || model.vendor_icon, 16)
+                          ) : (
+                            <span
+                              className={cn(
+                                'text-[10px] font-semibold',
+                                isSelected
+                                  ? 'text-primary-foreground'
+                                  : 'text-muted-foreground'
+                              )}
+                            >
+                              {getModelInitial(model.model_name)}
+                            </span>
+                          )}
+                        </span>
+                        <span className='min-w-0 flex-1 truncate font-mono'>
+                          {model.model_name}
+                        </span>
+                      </button>
+                      <div className='flex shrink-0 items-center gap-1 pr-1'>
+                        <span
+                          className={cn(
+                            'shrink-0 text-xs tabular-nums',
+                            isSelected
+                              ? 'text-primary-foreground/80'
+                              : 'text-muted-foreground'
+                          )}
+                        >
+                          {model.channelCount}
+                        </span>
+                        <TooltipProvider delay={100}>
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <Button
+                                  type='button'
+                                  variant='ghost'
+                                  size='icon-sm'
+                                  className={cn(
+                                    'shrink-0',
+                                    isSelected &&
+                                      'text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground'
+                                  )}
+                                  title={t('Open usage logs')}
+                                  aria-label={`${t('Open usage logs')}: ${model.model_name}`}
+                                  onClick={() =>
+                                    openUsageLogs(model.model_name)
+                                  }
+                                />
+                              }
+                            >
+                              <HugeiconsIcon
+                                icon={Analytics02Icon}
+                                strokeWidth={2}
+                              />
+                            </TooltipTrigger>
+                            <TooltipContent side='top'>
+                              {t('Open usage logs')}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </ScrollArea>
@@ -1456,11 +1509,11 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
               <EmptyState title={t('No channels support this model')} />
             )}
             {!isLoading && selectedModel && channelsForModel.length > 0 && (
-              <Table className='min-w-[58rem] table-fixed'>
+              <Table className='min-w-[62rem] table-fixed'>
                 <TableHeader>
                   <TableRow>
                     <TableHead className='w-80'>{t('Channel')}</TableHead>
-                    <TableHead className='w-24'>{t('Actions')}</TableHead>
+                    <TableHead className='w-32'>{t('Actions')}</TableHead>
                     <TableHead className='w-28'>{t('Type')}</TableHead>
                     <TableHead className='w-24'>{t('Group')}</TableHead>
                     <TableHead className='w-36'>{t('Status')}</TableHead>
@@ -1637,15 +1690,9 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                                 copyable={false}
                                 className='w-9 justify-center'
                               />
-                              <button
-                                type='button'
-                                className='text-muted-foreground hover:text-foreground w-14 truncate text-left font-mono text-xs transition-colors hover:underline'
-                                title={t('Open usage logs')}
-                                aria-label={`${t('Open usage logs')} #${channel.id}`}
-                                onClick={() => openChannelUsageLogs(channel.id)}
-                              >
+                              <span className='text-muted-foreground w-14 truncate font-mono text-xs'>
                                 ID:{channel.id}
-                              </button>
+                              </span>
                               {routeRoleLabelKey ? (
                                 <StatusBadge
                                   label={t(routeRoleLabelKey)}
@@ -1697,8 +1744,39 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className='w-24'>
+                        <TableCell className='w-32'>
                           <div className='flex items-center gap-1'>
+                            <TooltipProvider delay={100}>
+                              <Tooltip>
+                                <TooltipTrigger
+                                  render={
+                                    <Button
+                                      type='button'
+                                      variant='ghost'
+                                      size='icon-sm'
+                                      className='shrink-0'
+                                      title={t('Open usage logs')}
+                                      aria-label={`${t('Open usage logs')}: ${channel.name}`}
+                                      onClick={() => {
+                                        if (!selectedModelName) return
+                                        openUsageLogs(
+                                          selectedModelName,
+                                          channel.id
+                                        )
+                                      }}
+                                    />
+                                  }
+                                >
+                                  <HugeiconsIcon
+                                    icon={Analytics02Icon}
+                                    strokeWidth={2}
+                                  />
+                                </TooltipTrigger>
+                                <TooltipContent side='top'>
+                                  {t('Open usage logs')}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                             <Button
                               type='button'
                               variant='ghost'

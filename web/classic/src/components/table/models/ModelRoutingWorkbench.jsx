@@ -36,6 +36,7 @@ import {
   IconBookmark,
   IconDelete,
   IconEdit,
+  IconHistogram,
   IconPlus,
   IconRefresh,
   IconSave,
@@ -323,11 +324,16 @@ const getModelInitial = (modelName) => {
   return (modelName || '').trim().charAt(0).toUpperCase() || '?';
 };
 
-const openChannelUsageLogs = (channelId) => {
-  const targetUrl = `/console/log?channel=${encodeURIComponent(
-    String(channelId),
-  )}`;
-  window.open(targetUrl, '_blank', 'noopener,noreferrer');
+const openUsageLogs = (modelName, channelId) => {
+  const searchParams = new URLSearchParams({ model: modelName });
+  if (channelId !== undefined) {
+    searchParams.set('channel', String(channelId));
+  }
+  window.open(
+    `/console/log?${searchParams.toString()}`,
+    '_blank',
+    'noopener,noreferrer',
+  );
 };
 
 const channelSupportsModel = (channel, modelNames) => {
@@ -1102,15 +1108,9 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                   {routingRank === undefined ? '—' : `#${routingRank}`}
                 </Tag>
               </span>
-              <button
-                type='button'
-                className='w-14 shrink-0 truncate text-left font-mono text-xs text-[var(--semi-color-text-2)] hover:underline'
-                title={t('打开使用日志')}
-                aria-label={`${t('打开使用日志')} #${record.id}`}
-                onClick={() => openChannelUsageLogs(record.id)}
-              >
+              <span className='w-14 shrink-0 truncate font-mono text-xs text-[var(--semi-color-text-2)]'>
                 ID:{record.id}
-              </button>
+              </span>
               {routeRoleLabel ? (
                 <span className='inline-flex w-11 shrink-0'>
                   <Tag
@@ -1140,10 +1140,21 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     {
       title: t('操作'),
       dataIndex: 'actions',
-      width: 150,
+      width: 190,
       render: (_, record) => {
         return (
           <div className='flex items-center gap-2'>
+            <Tooltip content={t('打开使用日志')}>
+              <Button
+                theme='borderless'
+                type='tertiary'
+                size='small'
+                icon={<IconHistogram />}
+                title={t('打开使用日志')}
+                aria-label={`${t('打开使用日志')}: ${record.name}`}
+                onClick={() => openUsageLogs(selectedModelName, record.id)}
+              />
+            </Tooltip>
             <Button
               type='tertiary'
               size='small'
@@ -1408,9 +1419,25 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                         )}
                         <Text ellipsis>{model.model_name}</Text>
                       </div>
-                      <Tag color='grey' shape='circle' size='small'>
-                        {model.channelCount}
-                      </Tag>
+                      <div className='flex shrink-0 items-center gap-1'>
+                        <Tag color='grey' shape='circle' size='small'>
+                          {model.channelCount}
+                        </Tag>
+                        <Tooltip content={t('打开使用日志')}>
+                          <Button
+                            theme='borderless'
+                            type='tertiary'
+                            size='small'
+                            icon={<IconHistogram />}
+                            title={t('打开使用日志')}
+                            aria-label={`${t('打开使用日志')}: ${model.model_name}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openUsageLogs(model.model_name);
+                            }}
+                          />
+                        </Tooltip>
+                      </div>
                     </div>
                   </List.Item>
                 )}
@@ -1486,7 +1513,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                 }}
                 pagination={false}
                 size='small'
-                scroll={{ x: 980 }}
+                scroll={{ x: 1080 }}
                 onRow={(record) => {
                   const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
                   const isTarget = record.id === targetChannelId;

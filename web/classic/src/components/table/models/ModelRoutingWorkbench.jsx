@@ -85,6 +85,39 @@ const CHANNEL_STATUS_META = {
   [CHANNEL_STATUS.AUTO_DISABLED]: { label: '自动禁用', color: 'orange' },
 };
 
+const renderRoutingChannelStatusTag = (channel, t) => {
+  const statusMeta =
+    CHANNEL_STATUS_META[channel.status] ||
+    CHANNEL_STATUS_META[CHANNEL_STATUS.UNKNOWN];
+  const statusTag = (
+    <Tag color={statusMeta.color} shape='circle' size='small'>
+      {t(statusMeta.label)}
+    </Tag>
+  );
+
+  if (channel.status !== CHANNEL_STATUS.AUTO_DISABLED) {
+    return statusTag;
+  }
+
+  try {
+    const otherInfo = channel.other_info
+      ? JSON.parse(channel.other_info)
+      : null;
+    const reason = otherInfo?.status_reason || '';
+    const time = otherInfo?.status_time || 0;
+    const details =
+      (reason ? t('原因：') + reason : '') +
+      (time ? t('，时间：') + timestamp2string(time) : '');
+    return details ? (
+      <Tooltip content={details}>{statusTag}</Tooltip>
+    ) : (
+      statusTag
+    );
+  } catch {
+    return statusTag;
+  }
+};
+
 const ROUTING_CHANNEL_GROUP = {
   ENABLED: 'enabled',
   DISABLED: 'disabled',
@@ -1047,9 +1080,6 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
           routeRoleIndex >= 0 && routeRoleIndex < ROUTING_ROLE_LABELS.length
             ? ROUTING_ROLE_LABELS[routeRoleIndex]
             : null;
-        const statusMeta =
-          CHANNEL_STATUS_META[record.status] ||
-          CHANNEL_STATUS_META[CHANNEL_STATUS.UNKNOWN];
         const nameNode = (
           <Text
             strong
@@ -1101,11 +1131,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                   {nameNode}
                 </ChannelRemarkTooltip>
               </div>
-              {!isEnabled ? (
-                <Tag color={statusMeta.color} shape='circle' size='small'>
-                  {t(statusMeta.label)}
-                </Tag>
-              ) : null}
+              {!isEnabled ? renderRoutingChannelStatusTag(record, t) : null}
             </div>
           </div>
         );
@@ -1173,29 +1199,6 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
       render: (_, record) => {
         const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
         const updating = Boolean(statusUpdatingIds[record.id]);
-        const statusMeta =
-          CHANNEL_STATUS_META[record.status] ||
-          CHANNEL_STATUS_META[CHANNEL_STATUS.UNKNOWN];
-        let autoDisableDetails = '';
-        if (record.status === CHANNEL_STATUS.AUTO_DISABLED) {
-          try {
-            const otherInfo = record.other_info
-              ? JSON.parse(record.other_info)
-              : null;
-            const reason = otherInfo?.status_reason || '';
-            const time = otherInfo?.status_time || 0;
-            autoDisableDetails =
-              (reason ? t('原因：') + reason : '') +
-              (time ? t('，时间：') + timestamp2string(time) : '');
-          } catch {
-            // Keep the status usable when legacy metadata is invalid.
-          }
-        }
-        const statusTag = (
-          <Tag color={statusMeta.color} shape='circle' size='small'>
-            {t(statusMeta.label)}
-          </Tag>
-        );
         return (
           <div className='flex items-center gap-2'>
             <Switch
@@ -1205,11 +1208,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
               disabled={updating}
               onChange={(checked) => handleChannelStatusChange(record, checked)}
             />
-            {autoDisableDetails ? (
-              <Tooltip content={autoDisableDetails}>{statusTag}</Tooltip>
-            ) : (
-              statusTag
-            )}
+            {renderRoutingChannelStatusTag(record, t)}
           </div>
         );
       },

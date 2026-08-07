@@ -1534,6 +1534,42 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                     const showAutoDisableDetails = Boolean(
                       autoDisableReason || autoDisableTime
                     )
+                    const channelStatusBadge = (
+                      <StatusBadge
+                        label={t(statusConfig.label)}
+                        variant={statusConfig.variant}
+                        copyable={false}
+                        className='min-w-0 shrink-0'
+                      />
+                    )
+                    const channelStatusBadgeWithDetails =
+                      showAutoDisableDetails ? (
+                        <TooltipProvider delay={100}>
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={<span className='min-w-0 shrink-0' />}
+                            >
+                              {channelStatusBadge}
+                            </TooltipTrigger>
+                            <TooltipContent side='top' className='max-w-xs'>
+                              <div className='space-y-1 text-xs'>
+                                {autoDisableReason ? (
+                                  <div>
+                                    {t('Reason:')} {autoDisableReason}
+                                  </div>
+                                ) : null}
+                                {autoDisableTime ? (
+                                  <div>
+                                    {t('Time:')} {autoDisableTime}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        channelStatusBadge
+                      )
 
                     return [
                       ...(isFirstDisabled
@@ -1655,15 +1691,9 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                                   </ChannelRemarkHoverContent>
                                 </HoverCard>
                               </div>
-                              {!isEnabled ? (
-                                <StatusBadge
-                                  label={t(statusConfig.label)}
-                                  variant={statusConfig.variant}
-                                  size='sm'
-                                  copyable={false}
-                                  className='shrink-0'
-                                />
-                              ) : null}
+                              {!isEnabled
+                                ? channelStatusBadgeWithDetails
+                                : null}
                             </div>
                           </div>
                         </TableCell>
@@ -1731,44 +1761,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                               }
                               aria-label={t('Status')}
                             />
-                            {showAutoDisableDetails ? (
-                              <TooltipProvider delay={100}>
-                                <Tooltip>
-                                  <TooltipTrigger render={<span />}>
-                                    <StatusBadge
-                                      label={t(statusConfig.label)}
-                                      variant={statusConfig.variant}
-                                      copyable={false}
-                                      className='min-w-0'
-                                    />
-                                  </TooltipTrigger>
-                                  <TooltipContent
-                                    side='top'
-                                    className='max-w-xs'
-                                  >
-                                    <div className='space-y-1 text-xs'>
-                                      {autoDisableReason ? (
-                                        <div>
-                                          {t('Reason:')} {autoDisableReason}
-                                        </div>
-                                      ) : null}
-                                      {autoDisableTime ? (
-                                        <div>
-                                          {t('Time:')} {autoDisableTime}
-                                        </div>
-                                      ) : null}
-                                    </div>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            ) : (
-                              <StatusBadge
-                                label={t(statusConfig.label)}
-                                variant={statusConfig.variant}
-                                copyable={false}
-                                className='min-w-0'
-                              />
-                            )}
+                            {channelStatusBadgeWithDetails}
                           </div>
                         </TableCell>
                         <TableCell className='w-48'>

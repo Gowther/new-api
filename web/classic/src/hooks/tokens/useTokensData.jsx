@@ -32,8 +32,6 @@ import { useTableCompactMode } from '../common/useTableCompactMode';
 import {
   fetchTokenKey as fetchTokenKeyById,
   fetchTokenKeysBatch,
-  getServerAddress,
-  encodeChannelConnectionString,
 } from '../../helpers/token';
 
 export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
@@ -204,13 +202,6 @@ export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
     await copyText(`sk-${fullKey}`);
   };
 
-  const copyTokenConnectionString = async (record) => {
-    const fullKey = await fetchTokenKey(record);
-    const serverUrl = getServerAddress();
-    const connStr = encodeChannelConnectionString(`sk-${fullKey}`, serverUrl);
-    await copyText(connStr);
-  };
-
   // Open link function for chat integrations
   const onOpenLink = async (type, url, record) => {
     const fullKey = await fetchTokenKey(record);
@@ -306,8 +297,7 @@ export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
   // Search tokens function
   const searchTokens = async (page = 1, size = pageSize) => {
     const normalizedPage = Number.isInteger(page) && page > 0 ? page : 1;
-    const normalizedSize =
-      Number.isInteger(size) && size > 0 ? size : pageSize;
+    const normalizedSize = Number.isInteger(size) && size > 0 ? size : pageSize;
 
     const { searchKeyword, searchToken } = getFormValues();
     if (searchKeyword === '' && searchToken === '') {
@@ -503,7 +493,6 @@ export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
     fetchTokenKey,
     toggleTokenVisibility,
     copyTokenKey,
-    copyTokenConnectionString,
     onOpenLink,
     manageToken,
     searchTokens,

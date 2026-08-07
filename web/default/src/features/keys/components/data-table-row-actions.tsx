@@ -25,7 +25,6 @@ import {
   ExternalLink,
   ArrowRightLeft,
   Copy,
-  Link,
   Loader2,
 } from 'lucide-react'
 import { useCallback, useState } from 'react'
@@ -56,27 +55,6 @@ import { updateApiKeyStatus } from '../api'
 import { API_KEY_STATUS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
 import { apiKeySchema } from '../types'
 import { useApiKeys } from './api-keys-provider'
-
-function getServerAddress(): string {
-  try {
-    const raw = localStorage.getItem('status')
-    if (raw) {
-      const status = JSON.parse(raw)
-      if (status.server_address) return status.server_address as string
-    }
-  } catch {
-    /* empty */
-  }
-  return window.location.origin
-}
-
-function encodeConnectionString(key: string, url: string): string {
-  return JSON.stringify({
-    _type: 'newapi_channel_conn',
-    key,
-    url,
-  })
-}
 
 type DataTableRowActionsProps<TData> = {
   row: Row<TData>
@@ -256,20 +234,6 @@ export function DataTableRowActions<TData>({
           {t('Copy Key')}
           <DropdownMenuShortcut>
             <Copy size={16} />
-          </DropdownMenuShortcut>
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={async () => {
-            const realKey = getCachedRealKey()
-            if (!realKey) return
-            const connStr = encodeConnectionString(realKey, getServerAddress())
-            const ok = await copyToClipboard(connStr)
-            if (ok) toast.success(t('Copied'))
-          }}
-        >
-          {t('Copy Connection Info')}
-          <DropdownMenuShortcut>
-            <Link size={16} />
           </DropdownMenuShortcut>
         </DropdownMenuItem>
         <DropdownMenuSeparator />

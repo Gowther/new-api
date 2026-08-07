@@ -140,10 +140,14 @@ function ErrorIdentityValue({ value, compact, mono, className = '' }) {
 
 function ErrorRouteIdentity({ record, compact, t }) {
   return (
-    <dl className={`grid min-w-0 gap-1.5 ${compact ? 'text-xs' : 'text-sm'}`}>
-      <div className='grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] items-baseline gap-2'>
-        <dt className='text-gray-500'>{t('模型')}</dt>
-        <dd className='min-w-0 font-medium'>
+    <dl
+      className={`grid min-w-0 ${compact ? 'gap-2 rounded border border-solid border-gray-200 bg-gray-50 px-2.5 py-2 text-xs' : 'gap-1.5 text-sm'}`}
+    >
+      <div
+        className={`grid min-w-0 items-baseline gap-2 ${compact ? 'grid-cols-[3.75rem_minmax(0,1fr)]' : 'grid-cols-[5rem_minmax(0,1fr)]'}`}
+      >
+        <dt className='font-medium text-gray-500'>{t('模型')}</dt>
+        <dd className='min-w-0 text-sm font-semibold text-gray-900'>
           <ErrorIdentityValue
             value={record.model_name || '-'}
             compact={compact}
@@ -151,20 +155,24 @@ function ErrorRouteIdentity({ record, compact, t }) {
           />
         </dd>
       </div>
-      <div className='grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] items-baseline gap-2'>
-        <dt className='text-gray-500'>{t('渠道')}</dt>
-        <dd className='flex min-w-0 items-baseline gap-1.5 font-medium'>
+      <div
+        className={`grid min-w-0 items-baseline gap-2 ${compact ? 'grid-cols-[3.75rem_minmax(0,1fr)]' : 'grid-cols-[5rem_minmax(0,1fr)]'}`}
+      >
+        <dt className='font-medium text-gray-500'>{t('渠道')}</dt>
+        <dd className='flex min-w-0 items-baseline gap-1.5 text-sm font-semibold text-gray-900'>
           <ErrorIdentityValue
             value={record.channel_name || t('未知渠道')}
             compact={compact}
           />
-          <span className='shrink-0 font-mono text-xs text-gray-500'>
+          <span className='shrink-0 font-mono text-xs font-medium text-gray-500'>
             #{record.channel || '-'}
           </span>
         </dd>
       </div>
-      <div className='grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] items-baseline gap-2'>
-        <dt className='text-gray-500'>{t('分组')}</dt>
+      <div
+        className={`grid min-w-0 items-baseline gap-2 ${compact ? 'grid-cols-[3.75rem_minmax(0,1fr)]' : 'grid-cols-[5rem_minmax(0,1fr)]'}`}
+      >
+        <dt className='font-medium text-gray-500'>{t('分组')}</dt>
         <dd className='min-w-0 font-medium'>
           <ErrorIdentityValue
             value={record.group || '-'}
@@ -325,6 +333,9 @@ function ErrorClusterList({ items, selectedKey, loading, onSelect, t }) {
                           )}
                           {renderTrend(record.trend, t)}
                         </Space>
+                        <div className='mt-2'>
+                          <ErrorRouteIdentity record={record} compact t={t} />
+                        </div>
                         <Typography.Text
                           strong
                           ellipsis={{ showTooltip: true, rows: 2 }}
@@ -332,9 +343,6 @@ function ErrorClusterList({ items, selectedKey, loading, onSelect, t }) {
                         >
                           {record.error_summary || t('无错误内容')}
                         </Typography.Text>
-                        <div className='mt-2'>
-                          <ErrorRouteIdentity record={record} compact t={t} />
-                        </div>
                       </div>
                       <div className='shrink-0 text-right'>
                         <RouteErrorRateHelp
@@ -511,7 +519,7 @@ function ErrorClusterDetails({
         </Space>
       </div>
 
-      <div className='min-h-0 flex-1 overscroll-contain overflow-y-auto'>
+      <div className='min-h-0 flex-1 overflow-y-auto'>
         <div className='space-y-5 p-4'>
           <div className='grid gap-2 sm:grid-cols-2 xl:grid-cols-5'>
             {[
@@ -820,9 +828,15 @@ export default function ErrorWorkbench() {
   };
 
   return (
-    <div className='mt-[60px] px-2'>
-      <Card>
-        <Space vertical align='start' spacing={18} style={{ width: '100%' }}>
+    <div className='mt-[60px] px-2 xl:h-[calc(100dvh-60px)] xl:overflow-hidden xl:pb-2'>
+      <Card className='xl:h-full xl:[&>.semi-card-body]:h-full xl:[&>.semi-card-body]:overflow-hidden'>
+        <Space
+          vertical
+          align='start'
+          spacing={12}
+          className='xl:min-h-0'
+          style={{ width: '100%', height: '100%' }}
+        >
           <div className='flex w-full flex-col gap-2 md:flex-row md:items-end md:justify-between'>
             <div>
               <Typography.Title heading={4} style={{ margin: 0 }}>
@@ -850,11 +864,11 @@ export default function ErrorWorkbench() {
             </Space>
           </div>
 
-          <div className='grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4'>
+          <div className='grid w-full shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4'>
             {statCards.map(([label, value, hint, description]) => (
               <div
                 key={label}
-                className='rounded border border-solid border-gray-200 bg-gray-50 p-4'
+                className='rounded border border-solid border-gray-200 bg-gray-50 px-4 py-3'
               >
                 <Typography.Text type='tertiary'>
                   <ErrorMetricHelp description={description}>
@@ -871,7 +885,7 @@ export default function ErrorWorkbench() {
             ))}
           </div>
 
-          <div className='flex w-full flex-wrap items-end gap-3'>
+          <div className='flex w-full shrink-0 flex-wrap items-end gap-3'>
             <div style={{ width: 150 }}>
               <Typography.Text type='tertiary' size='small'>
                 {t('时间范围')}
@@ -967,7 +981,7 @@ export default function ErrorWorkbench() {
             </Tag>
           )}
 
-          <div className='grid w-full grid-cols-1 gap-3 xl:h-[clamp(32.5rem,70dvh,48rem)] xl:grid-cols-[minmax(360px,0.85fr)_minmax(0,1.4fr)]'>
+          <div className='grid min-h-[32.5rem] w-full grid-cols-1 gap-3 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(360px,0.85fr)_minmax(0,1.4fr)]'>
             <ErrorClusterList
               items={summary.items || []}
               selectedKey={selectedRecord?.key || null}

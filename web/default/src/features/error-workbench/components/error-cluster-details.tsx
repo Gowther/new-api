@@ -270,7 +270,7 @@ export function ErrorClusterDetails(props: ErrorClusterDetailsProps) {
         </div>
       </div>
 
-      <ScrollArea className='min-h-0 flex-1 overscroll-contain'>
+      <ScrollArea className='min-h-0 flex-1'>
         <div className='space-y-5 p-4'>
           <div className='grid gap-2 sm:grid-cols-2 xl:grid-cols-5'>
             <DetailMetric

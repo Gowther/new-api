@@ -144,7 +144,7 @@ export function ErrorWorkbench() {
   }
 
   return (
-    <SectionPageLayout>
+    <SectionPageLayout fixedContent>
       <SectionPageLayout.Title>
         <span className='flex min-w-0 items-center gap-2'>
           <span className='truncate'>{t('Error Workbench')}</span>
@@ -176,9 +176,9 @@ export function ErrorWorkbench() {
         </Button>
       </SectionPageLayout.Actions>
       <SectionPageLayout.Content>
-        <div className='flex min-h-0 flex-col gap-4'>
-          <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
-            <div className='rounded-lg border px-4 py-3'>
+        <div className='flex h-full min-h-0 flex-col gap-3 overflow-y-auto lg:overflow-hidden'>
+          <div className='grid shrink-0 gap-3 sm:grid-cols-2 xl:grid-cols-4'>
+            <div className='rounded-lg border px-4 py-2.5'>
               <div className='text-muted-foreground text-xs'>
                 <ErrorMetricHelp
                   description={t(
@@ -188,7 +188,7 @@ export function ErrorWorkbench() {
                   {t('Error logs')}
                 </ErrorMetricHelp>
               </div>
-              <div className='mt-1 text-2xl font-semibold tabular-nums'>
+              <div className='mt-1 text-xl font-semibold tabular-nums'>
                 {summary.total_logs.toLocaleString()}
               </div>
               <div className='text-muted-foreground mt-1 text-xs'>
@@ -197,7 +197,7 @@ export function ErrorWorkbench() {
                   : t('All matching logs are summarized')}
               </div>
             </div>
-            <div className='rounded-lg border px-4 py-3'>
+            <div className='rounded-lg border px-4 py-2.5'>
               <div className='text-muted-foreground text-xs'>
                 <ErrorMetricHelp
                   description={t(
@@ -207,14 +207,14 @@ export function ErrorWorkbench() {
                   {t('Fault clusters')}
                 </ErrorMetricHelp>
               </div>
-              <div className='mt-1 text-2xl font-semibold tabular-nums'>
+              <div className='mt-1 text-xl font-semibold tabular-nums'>
                 {summary.items.length.toLocaleString()}
               </div>
               <div className='text-muted-foreground mt-1 text-xs'>
                 {t('Visible clusters')}
               </div>
             </div>
-            <div className='rounded-lg border px-4 py-3'>
+            <div className='rounded-lg border px-4 py-2.5'>
               <div className='text-muted-foreground text-xs'>
                 <ErrorMetricHelp
                   description={t(
@@ -224,14 +224,14 @@ export function ErrorWorkbench() {
                   {t('Affected requests')}
                 </ErrorMetricHelp>
               </div>
-              <div className='mt-1 text-2xl font-semibold tabular-nums'>
+              <div className='mt-1 text-xl font-semibold tabular-nums'>
                 {getVisibleAffectedRequests(summary.items).toLocaleString()}
               </div>
               <div className='text-muted-foreground mt-1 text-xs'>
                 {t('Across visible clusters')}
               </div>
             </div>
-            <div className='rounded-lg border px-4 py-3'>
+            <div className='rounded-lg border px-4 py-2.5'>
               <div className='text-muted-foreground text-xs'>
                 <ErrorMetricHelp
                   description={t(
@@ -241,7 +241,7 @@ export function ErrorWorkbench() {
                   {t('Urgent clusters')}
                 </ErrorMetricHelp>
               </div>
-              <div className='mt-1 text-2xl font-semibold tabular-nums'>
+              <div className='mt-1 text-xl font-semibold tabular-nums'>
                 {getUrgentClusterCount(summary.items).toLocaleString()}
               </div>
               <div className='text-muted-foreground mt-1 text-xs'>
@@ -250,7 +250,7 @@ export function ErrorWorkbench() {
             </div>
           </div>
 
-          <section className='rounded-lg border p-4'>
+          <section className='shrink-0 rounded-lg border p-3'>
             <div className='grid gap-3 md:grid-cols-6'>
               <div className='space-y-1.5'>
                 <Label htmlFor='error-workbench-hours'>{t('Time range')}</Label>
@@ -368,10 +368,15 @@ export function ErrorWorkbench() {
                   {summaryQuery.error.message}
                 </span>
               )}
+              {summary.items.length > 0 && (
+                <span className='text-muted-foreground ml-auto text-xs'>
+                  {t('Last updated')}: {formatTimestampToDate(summary.end_time)}
+                </span>
+              )}
             </div>
           </section>
 
-          <div className='grid min-h-0 gap-4 lg:h-[clamp(32rem,70dvh,48rem)] lg:grid-cols-[minmax(20rem,0.85fr)_minmax(0,1.4fr)]'>
+          <div className='grid min-h-[32rem] gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(20rem,0.85fr)_minmax(0,1.4fr)]'>
             <ErrorClusterList
               items={summary.items}
               selectedKey={selectedRecord?.key ?? null}
@@ -388,12 +393,6 @@ export function ErrorWorkbench() {
               }
             />
           </div>
-
-          {summary.items.length > 0 && (
-            <div className='text-muted-foreground text-xs'>
-              {t('Last updated')}: {formatTimestampToDate(summary.end_time)}
-            </div>
-          )}
         </div>
       </SectionPageLayout.Content>
     </SectionPageLayout>

@@ -88,14 +88,23 @@ export function ErrorRouteIdentity(props: ErrorRouteIdentityProps) {
   return (
     <dl
       className={cn(
-        'grid min-w-0 gap-1.5',
-        compact ? 'text-xs' : 'text-sm',
+        'grid min-w-0',
+        compact
+          ? 'bg-muted/35 gap-2 rounded-md border px-2.5 py-2 text-xs'
+          : 'gap-1.5 text-sm',
         props.className
       )}
     >
-      <div className='grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] items-baseline gap-2'>
-        <dt className='text-muted-foreground'>{t('Model')}</dt>
-        <dd className='min-w-0 font-medium'>
+      <div
+        className={cn(
+          'grid min-w-0 items-baseline gap-2',
+          compact
+            ? 'grid-cols-[3.75rem_minmax(0,1fr)]'
+            : 'grid-cols-[5rem_minmax(0,1fr)]'
+        )}
+      >
+        <dt className='text-muted-foreground font-medium'>{t('Model')}</dt>
+        <dd className='text-foreground min-w-0 text-sm font-semibold'>
           <ErrorIdentityValue
             value={props.modelName || '-'}
             compact={compact}
@@ -103,20 +112,34 @@ export function ErrorRouteIdentity(props: ErrorRouteIdentityProps) {
           />
         </dd>
       </div>
-      <div className='grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] items-baseline gap-2'>
-        <dt className='text-muted-foreground'>{t('Channel')}</dt>
-        <dd className='flex min-w-0 items-baseline gap-1.5 font-medium'>
+      <div
+        className={cn(
+          'grid min-w-0 items-baseline gap-2',
+          compact
+            ? 'grid-cols-[3.75rem_minmax(0,1fr)]'
+            : 'grid-cols-[5rem_minmax(0,1fr)]'
+        )}
+      >
+        <dt className='text-muted-foreground font-medium'>{t('Channel')}</dt>
+        <dd className='text-foreground flex min-w-0 items-baseline gap-1.5 text-sm font-semibold'>
           <ErrorIdentityValue
             value={props.channelName || t('Unknown channel')}
             compact={compact}
           />
-          <span className='text-muted-foreground shrink-0 font-mono text-xs'>
+          <span className='text-muted-foreground shrink-0 font-mono text-xs font-medium'>
             #{props.channelId || '-'}
           </span>
         </dd>
       </div>
-      <div className='grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] items-baseline gap-2'>
-        <dt className='text-muted-foreground'>{t('Group')}</dt>
+      <div
+        className={cn(
+          'grid min-w-0 items-baseline gap-2',
+          compact
+            ? 'grid-cols-[3.75rem_minmax(0,1fr)]'
+            : 'grid-cols-[5rem_minmax(0,1fr)]'
+        )}
+      >
+        <dt className='text-muted-foreground font-medium'>{t('Group')}</dt>
         <dd className='min-w-0 font-medium'>
           <ErrorIdentityValue
             value={props.group || '-'}

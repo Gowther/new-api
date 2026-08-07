@@ -96,7 +96,7 @@ export function ErrorClusterList(props: ErrorClusterListProps) {
           {props.items.length}
         </span>
       </div>
-      <ScrollArea className='min-h-0 flex-1 overscroll-contain'>
+      <ScrollArea className='min-h-0 flex-1'>
         {props.items.length === 0 ? (
           <div className='text-muted-foreground flex min-h-80 items-center justify-center px-6 text-center text-sm'>
             {props.loading ? t('Loading...') : t('No error logs found')}
@@ -154,9 +154,6 @@ export function ErrorClusterList(props: ErrorClusterListProps) {
                         )}
                         <TrendIndicator trend={item.trend} />
                       </div>
-                      <p className='line-clamp-2 text-sm leading-5 font-medium break-all'>
-                        {item.error_summary || t('No error message')}
-                      </p>
                       <ErrorRouteIdentity
                         modelName={item.model_name}
                         group={item.group}
@@ -164,6 +161,9 @@ export function ErrorClusterList(props: ErrorClusterListProps) {
                         channelId={item.channel}
                         compact
                       />
+                      <p className='line-clamp-2 text-sm leading-5 font-medium break-all'>
+                        {item.error_summary || t('No error message')}
+                      </p>
                     </div>
                     <div className='shrink-0 text-right'>
                       <RouteErrorRateHelp

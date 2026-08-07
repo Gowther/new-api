@@ -67,6 +67,8 @@ function getInitialUrlFilters() {
   return {
     channel:
       searchParams.get('channel') || searchParams.get('channel_id') || '',
+    tokenName:
+      searchParams.get('token_name') || searchParams.get('token') || '',
     modelName:
       searchParams.get('model_name') || searchParams.get('model') || '',
     group: searchParams.get('group') || '',
@@ -86,7 +88,7 @@ function getDefaultLogFormValues(initialFilters = {}) {
   const now = new Date();
   return {
     username: '',
-    token_name: '',
+    token_name: initialFilters.tokenName || '',
     model_name: initialFilters.modelName || '',
     channel: initialFilters.channel || '',
     group: initialFilters.group || '',
@@ -113,6 +115,8 @@ function clearInitialSearchParams() {
   [
     'channel',
     'channel_id',
+    'token_name',
+    'token',
     'model_name',
     'model',
     'group',

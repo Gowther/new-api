@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
+import { Link } from 'react-router-dom';
 import {
   Button,
   Dropdown,
@@ -485,6 +486,14 @@ export const getTokensColumns = ({
     {
       title: t('名称'),
       dataIndex: 'name',
+      render: (text) => (
+        <Link
+          to={`/console/log?token_name=${encodeURIComponent(text)}`}
+          className='text-blue-500 underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2'
+        >
+          {text}
+        </Link>
+      ),
     },
     {
       title: t('状态'),

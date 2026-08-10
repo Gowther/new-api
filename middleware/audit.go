@@ -96,6 +96,13 @@ var auditRouteActions = map[string]string{
 	"DELETE /api/log/": "log.clear",
 }
 
+// adminAuditReadOnlyRoutes lists administrative endpoints that use a write
+// method to carry a complex read-only request body. They must not produce
+// operation audit logs merely because they use POST.
+var adminAuditReadOnlyRoutes = map[string]struct{}{
+	"POST /api/channel/model_vendor_groups": {},
+}
+
 // beginAdminAudit 在管理/root 写操作进入 handler 前包装 ResponseWriter，
 // 以便事后解析响应判断业务是否成功。仅对写方法（POST/PUT/PATCH/DELETE）生效；
 // 只读请求返回 nil，调用方据此跳过事后兜底记录。
@@ -106,6 +113,9 @@ var auditRouteActions = map[string]string{
 func beginAdminAudit(c *gin.Context) *auditResponseWriter {
 	method := c.Request.Method
 	if method != "POST" && method != "PUT" && method != "PATCH" && method != "DELETE" {
+		return nil
+	}
+	if _, ok := adminAuditReadOnlyRoutes[method+" "+c.FullPath()]; ok {
 		return nil
 	}
 	writer := &auditResponseWriter{

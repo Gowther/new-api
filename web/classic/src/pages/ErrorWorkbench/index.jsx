@@ -21,7 +21,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
-  Card,
   Empty,
   Input,
   InputNumber,
@@ -284,7 +283,7 @@ function getUrgentClusterCount(items) {
 
 function ErrorClusterList({ items, selectedKey, loading, onSelect, t }) {
   return (
-    <section className='flex h-[520px] min-w-0 flex-col overflow-hidden rounded border border-solid border-gray-200 bg-white xl:h-full'>
+    <section className='flex h-[32rem] min-w-0 flex-col overflow-hidden rounded border border-solid border-gray-200 bg-white lg:h-full'>
       <div className='flex items-center justify-between border-b border-solid border-gray-200 px-3 py-2'>
         <Typography.Text strong>
           <ErrorMetricHelp
@@ -403,7 +402,7 @@ function ErrorClusterDetails({
 }) {
   if (!record) {
     return (
-      <section className='flex h-[520px] items-center justify-center rounded border border-solid border-gray-200 bg-white px-6 text-center xl:h-full'>
+      <section className='flex h-[32rem] items-center justify-center rounded border border-solid border-gray-200 bg-white px-6 text-center lg:h-full'>
         <Typography.Text type='tertiary'>{t('请选择故障簇')}</Typography.Text>
       </section>
     );
@@ -473,7 +472,7 @@ function ErrorClusterDetails({
 
   const currentTestKey = `${record.key}:test:${record.channel}`;
   return (
-    <section className='flex h-[520px] min-w-0 flex-col overflow-hidden rounded border border-solid border-gray-200 bg-white xl:h-full'>
+    <section className='flex h-[32rem] min-w-0 flex-col overflow-hidden rounded border border-solid border-gray-200 bg-white lg:h-full'>
       <div className='flex flex-wrap items-start justify-between gap-3 border-b border-solid border-gray-200 px-4 py-3'>
         <div className='min-w-0'>
           <Space spacing={4} wrap>
@@ -828,177 +827,172 @@ export default function ErrorWorkbench() {
   };
 
   return (
-    <div className='mt-[60px] px-2 xl:h-[calc(100dvh-60px)] xl:overflow-hidden xl:pb-2'>
-      <Card className='xl:h-full xl:[&>.semi-card-body]:h-full xl:[&>.semi-card-body]:overflow-hidden'>
-        <Space
-          vertical
-          align='start'
-          spacing={12}
-          className='xl:min-h-0'
-          style={{ width: '100%', height: '100%' }}
-        >
-          <div className='flex w-full flex-col gap-2 md:flex-row md:items-end md:justify-between'>
-            <div>
-              <Typography.Title heading={4} style={{ margin: 0 }}>
-                {t('错误排障工作台')}
-              </Typography.Title>
-              <Typography.Text type='tertiary'>
-                {t('按稳定错误指纹聚合故障，并提供日志与路由证据。')}
-              </Typography.Text>
-            </div>
-            <Space spacing={8} wrap>
-              <Button
-                icon={<IconExternalOpen />}
-                onClick={() => window.open('/console/log', '_blank')}
-              >
-                {t('打开使用日志')}
-              </Button>
-              <Button
-                icon={<IconExternalOpen />}
-                onClick={() =>
-                  window.open('/console/models?tab=routing', '_blank')
-                }
-              >
-                {t('打开模型路由')}
-              </Button>
-            </Space>
-          </div>
+    <div className='mt-[60px] flex flex-col gap-3 px-2 pb-2 lg:h-[calc(100dvh-60px)] lg:overflow-hidden'>
+      <div className='flex shrink-0 flex-wrap items-center justify-between gap-2'>
+        <div className='min-w-0'>
+          <Typography.Title heading={5} style={{ margin: 0 }}>
+            {t('错误排障工作台')}
+          </Typography.Title>
+          <Typography.Text type='tertiary' size='small'>
+            {t('按稳定错误指纹聚合故障，并提供日志与路由证据。')}
+          </Typography.Text>
+        </div>
+        <Space spacing={8}>
+          <Button
+            size='small'
+            icon={<IconExternalOpen />}
+            onClick={() => window.open('/console/log', '_blank')}
+          >
+            {t('打开使用日志')}
+          </Button>
+          <Button
+            size='small'
+            icon={<IconExternalOpen />}
+            onClick={() => window.open('/console/models?tab=routing', '_blank')}
+          >
+            {t('打开模型路由')}
+          </Button>
+        </Space>
+      </div>
 
-          <div className='grid w-full shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4'>
-            {statCards.map(([label, value, hint, description]) => (
-              <div
-                key={label}
-                className='rounded border border-solid border-gray-200 bg-gray-50 px-4 py-3'
-              >
-                <Typography.Text type='tertiary'>
-                  <ErrorMetricHelp description={description}>
-                    {label}
-                  </ErrorMetricHelp>
-                </Typography.Text>
-                <div className='mt-1 text-2xl font-semibold tabular-nums'>
-                  {value}
-                </div>
-                <Typography.Text type='tertiary' size='small'>
-                  {hint}
-                </Typography.Text>
-              </div>
-            ))}
+      <div className='grid shrink-0 grid-cols-2 gap-2 lg:grid-cols-4'>
+        {statCards.map(([label, value, hint, description]) => (
+          <div
+            key={label}
+            className='min-w-0 rounded border border-solid border-gray-200 bg-gray-50 px-3 py-2'
+          >
+            <Typography.Text type='tertiary' size='small'>
+              <ErrorMetricHelp description={description}>
+                {label}
+              </ErrorMetricHelp>
+            </Typography.Text>
+            <div className='mt-0.5 flex items-baseline justify-between gap-2'>
+              <span className='text-xl font-semibold tabular-nums'>
+                {value}
+              </span>
+              <span className='truncate text-xs text-gray-500'>{hint}</span>
+            </div>
           </div>
+        ))}
+      </div>
 
-          <div className='flex w-full shrink-0 flex-wrap items-end gap-3'>
-            <div style={{ width: 150 }}>
-              <Typography.Text type='tertiary' size='small'>
-                {t('时间范围')}
-              </Typography.Text>
-              <Select
-                value={filters.time_range}
-                style={{ width: '100%' }}
-                onChange={(value) => setFilterValue('time_range', value)}
-              >
-                <Select.Option value='today'>{t('今天')}</Select.Option>
-                <Select.Option value='yesterday'>{t('昨天')}</Select.Option>
-                <Select.Option value='1'>{t('最近 1 小时')}</Select.Option>
-                <Select.Option value='6'>{t('最近 6 小时')}</Select.Option>
-                <Select.Option value='24'>{t('最近 24 小时')}</Select.Option>
-                <Select.Option value='72'>{t('最近 3 天')}</Select.Option>
-                <Select.Option value='168'>{t('最近 7 天')}</Select.Option>
-              </Select>
-            </div>
-            <div style={{ width: 120 }}>
-              <Typography.Text type='tertiary' size='small'>
-                <ErrorMetricHelp
-                  description={t(
-                    'Limit controls how many fault clusters are returned after severity ranking. It does not limit the route attempts used to calculate each route error rate.',
-                  )}
-                >
-                  {t('Fault cluster limit')}
-                </ErrorMetricHelp>
-              </Typography.Text>
-              <InputNumber
-                value={filters.limit}
-                min={1}
-                max={200}
-                style={{ width: '100%' }}
-                onChange={(value) => setFilterValue('limit', value || 50)}
-              />
-            </div>
-            <div style={{ width: 210 }}>
-              <Typography.Text type='tertiary' size='small'>
-                {t('模型')}
-              </Typography.Text>
-              <Input
-                value={filters.model_name}
-                placeholder='gpt-4o'
-                onChange={(value) => setFilterValue('model_name', value)}
-              />
-            </div>
-            <div style={{ width: 140 }}>
-              <Typography.Text type='tertiary' size='small'>
-                {t('渠道 ID')}
-              </Typography.Text>
-              <InputNumber
-                value={filters.channel}
-                min={1}
-                style={{ width: '100%' }}
-                onChange={(value) => setFilterValue('channel', value || '')}
-              />
-            </div>
-            <div style={{ width: 160 }}>
-              <Typography.Text type='tertiary' size='small'>
-                {t('分组')}
-              </Typography.Text>
-              <Input
-                value={filters.group}
-                placeholder='default'
-                onChange={(value) => setFilterValue('group', value)}
-              />
-            </div>
-            <Space spacing={8}>
-              <Button
-                type='primary'
-                icon={<IconRefresh />}
-                loading={loading}
-                onClick={() => fetchSummary()}
-              >
-                {t('刷新')}
-              </Button>
-              <Button
-                onClick={() => {
-                  setFilters(DEFAULT_FILTERS);
-                  setSelectedKey(null);
-                }}
-              >
-                {t('重置')}
-              </Button>
-            </Space>
+      <div className='shrink-0 rounded border border-solid border-gray-200 bg-white p-3'>
+        <div className='grid gap-2 sm:grid-cols-2 md:grid-cols-6'>
+          <div className='min-w-0'>
+            <Typography.Text type='tertiary' size='small'>
+              {t('时间范围')}
+            </Typography.Text>
+            <Select
+              value={filters.time_range}
+              className='mt-1 w-full'
+              onChange={(value) => setFilterValue('time_range', value)}
+            >
+              <Select.Option value='today'>{t('今天')}</Select.Option>
+              <Select.Option value='yesterday'>{t('昨天')}</Select.Option>
+              <Select.Option value='1'>{t('最近 1 小时')}</Select.Option>
+              <Select.Option value='6'>{t('最近 6 小时')}</Select.Option>
+              <Select.Option value='24'>{t('最近 24 小时')}</Select.Option>
+              <Select.Option value='72'>{t('最近 3 天')}</Select.Option>
+              <Select.Option value='168'>{t('最近 7 天')}</Select.Option>
+            </Select>
           </div>
-
+          <div className='min-w-0'>
+            <Typography.Text type='tertiary' size='small'>
+              <ErrorMetricHelp
+                description={t(
+                  'Limit controls how many fault clusters are returned after severity ranking. It does not limit the route attempts used to calculate each route error rate.',
+                )}
+              >
+                {t('Fault cluster limit')}
+              </ErrorMetricHelp>
+            </Typography.Text>
+            <InputNumber
+              value={filters.limit}
+              min={1}
+              max={200}
+              className='mt-1 w-full'
+              onChange={(value) => setFilterValue('limit', value || 50)}
+            />
+          </div>
+          <div className='min-w-0 md:col-span-2'>
+            <Typography.Text type='tertiary' size='small'>
+              {t('模型')}
+            </Typography.Text>
+            <Input
+              value={filters.model_name}
+              placeholder='gpt-4o'
+              className='mt-1 w-full'
+              onChange={(value) => setFilterValue('model_name', value)}
+            />
+          </div>
+          <div className='min-w-0'>
+            <Typography.Text type='tertiary' size='small'>
+              {t('渠道 ID')}
+            </Typography.Text>
+            <InputNumber
+              value={filters.channel}
+              min={1}
+              className='mt-1 w-full'
+              onChange={(value) => setFilterValue('channel', value || '')}
+            />
+          </div>
+          <div className='min-w-0'>
+            <Typography.Text type='tertiary' size='small'>
+              {t('分组')}
+            </Typography.Text>
+            <Input
+              value={filters.group}
+              placeholder='default'
+              className='mt-1 w-full'
+              onChange={(value) => setFilterValue('group', value)}
+            />
+          </div>
+        </div>
+        <div className='mt-3 flex flex-wrap items-center gap-2'>
+          <Button
+            type='primary'
+            size='small'
+            icon={<IconRefresh />}
+            loading={loading}
+            onClick={() => fetchSummary()}
+          >
+            {t('刷新')}
+          </Button>
+          <Button
+            size='small'
+            onClick={() => {
+              setFilters(DEFAULT_FILTERS);
+              setSelectedKey(null);
+            }}
+          >
+            {t('重置')}
+          </Button>
           {summary.truncated && (
-            <Tag color='orange' size='large'>
+            <Tag color='orange'>
               {t(
                 '错误日志较多，本页仅聚合最近扫描到的部分记录。可缩短时间范围或增加筛选条件。',
               )}
             </Tag>
           )}
+        </div>
+      </div>
 
-          <div className='grid min-h-[32.5rem] w-full grid-cols-1 gap-3 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(360px,0.85fr)_minmax(0,1.4fr)]'>
-            <ErrorClusterList
-              items={summary.items || []}
-              selectedKey={selectedRecord?.key || null}
-              loading={loading}
-              onSelect={setSelectedKey}
-              t={t}
-            />
-            <ErrorClusterDetails
-              record={selectedRecord}
-              summary={summary}
-              actionLoading={actionLoading}
-              testChannel={testChannel}
-              t={t}
-            />
-          </div>
-        </Space>
-      </Card>
+      <div className='grid min-h-[32rem] w-full grid-cols-1 gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(20rem,0.85fr)_minmax(0,1.4fr)]'>
+        <ErrorClusterList
+          items={summary.items || []}
+          selectedKey={selectedRecord?.key || null}
+          loading={loading}
+          onSelect={setSelectedKey}
+          t={t}
+        />
+        <ErrorClusterDetails
+          record={selectedRecord}
+          summary={summary}
+          actionLoading={actionLoading}
+          testChannel={testChannel}
+          t={t}
+        />
+      </div>
     </div>
   );
 }

@@ -51,6 +51,7 @@ import {
   DEFAULT_PAGE_SIZE,
   CHANNEL_STATUS,
   CHANNEL_STATUS_OPTIONS,
+  CHANNEL_CATEGORY_OPTIONS,
 } from '../constants'
 import {
   channelsQueryKeys,
@@ -59,7 +60,7 @@ import {
   getChannelTypeIcon,
   getChannelTypeLabel,
 } from '../lib'
-import type { Channel, ChannelSortBy } from '../types'
+import type { Channel, ChannelCategory, ChannelSortBy } from '../types'
 import { ChannelCard } from './channel-card'
 import { useChannelsColumns } from './channels-columns'
 import { useChannels } from './channels-provider'
@@ -132,6 +133,7 @@ export function ChannelsTable() {
       },
       { columnId: 'type', searchKey: 'type', type: 'array' },
       { columnId: 'group', searchKey: 'group', type: 'array' },
+      { columnId: 'category', searchKey: 'category', type: 'array' },
       { columnId: 'model', searchKey: 'model', type: 'string' },
     ],
   })
@@ -161,7 +163,9 @@ export function ChannelsTable() {
       if (!nextValue.trim()) return
 
       handleColumnFiltersChange((previous) =>
-        previous.filter((filter) => filter.id === 'model')
+        previous.filter(
+          (filter) => filter.id === 'model' || filter.id === 'category'
+        )
       )
     },
     [globalFilter, handleColumnFiltersChange, onGlobalFilterChange]
@@ -180,7 +184,9 @@ export function ChannelsTable() {
             typeof nextModelValue === 'string' && nextModelValue.trim() !== ''
 
           return globalFilter?.trim() || hasModelSearch
-            ? next.filter((filter) => filter.id === 'model')
+            ? next.filter(
+                (filter) => filter.id === 'model' || filter.id === 'category'
+              )
             : next
         })
       },
@@ -196,6 +202,11 @@ export function ChannelsTable() {
   )
   const groupFilter =
     (columnFilters.find((f) => f.id === 'group')?.value as string[]) || []
+  const categoryFilter =
+    (columnFilters.find((f) => f.id === 'category')?.value as string[]) || []
+  const category = categoryFilter.find((value) => value !== 'all') as
+    | ChannelCategory
+    | undefined
   const {
     value: modelFilter,
     inputValue: modelFilterInput,
@@ -267,6 +278,7 @@ export function ChannelsTable() {
       keyword: globalFilter,
       channel_id: exactChannelId,
       model: modelFilter,
+      category,
       group:
         !shouldSearch && groupFilter.length > 0 && !groupFilter.includes('all')
           ? groupFilter[0]
@@ -293,6 +305,7 @@ export function ChannelsTable() {
           keyword: globalFilter,
           channel_id: exactChannelId,
           model: modelFilter,
+          category,
           tag_mode: false,
           id_sort: idSort,
           ...sortParams,
@@ -313,6 +326,7 @@ export function ChannelsTable() {
             typeFilter.length > 0 && !typeFilter.includes('all')
               ? Number(typeFilter[0])
               : undefined,
+          category,
           tag_mode: shouldUseTagMode,
           id_sort: idSort,
           ...sortParams,
@@ -481,6 +495,12 @@ export function ChannelsTable() {
             columnId: 'type',
             title: t('Type'),
             options: typeFilterOptions,
+            singleSelect: true,
+          },
+          {
+            columnId: 'category',
+            title: t('Channel Category'),
+            options: [...CHANNEL_CATEGORY_OPTIONS],
             singleSelect: true,
           },
           {

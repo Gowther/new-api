@@ -392,12 +392,20 @@ export type ChannelSortBy =
 
 export type ChannelSortOrder = 'asc' | 'desc'
 
+export type ChannelCategory =
+  | 'welfare'
+  | 'third_party'
+  | 'temporary'
+  | 'self_hosted'
+  | 'official'
+
 export interface GetChannelsParams {
   p?: number
   page_size?: number
   status?: string // 'enabled', 'disabled', or empty for all
   type?: number
   group?: string
+  category?: ChannelCategory
   id_sort?: boolean
   tag_mode?: boolean
   sort_by?: ChannelSortBy
@@ -411,6 +419,7 @@ export interface SearchChannelsParams {
   model?: string
   status?: string
   type?: number
+  category?: ChannelCategory
   id_sort?: boolean
   tag_mode?: boolean
   sort_by?: ChannelSortBy

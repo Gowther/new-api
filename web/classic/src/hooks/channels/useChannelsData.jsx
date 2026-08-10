@@ -142,6 +142,7 @@ export const useChannelsData = () => {
     searchKeyword: channelSearchKeyword,
     searchGroup: '',
     searchModel: '',
+    searchCategory: '',
   };
 
   // Column keys
@@ -340,6 +341,7 @@ export const useChannelsData = () => {
       searchKeyword: String(formValues.searchKeyword ?? channelSearchKeyword),
       searchGroup: formValues.searchGroup || '',
       searchModel: formValues.searchModel || '',
+      searchCategory: formValues.searchCategory || '',
     };
   };
 
@@ -354,7 +356,8 @@ export const useChannelsData = () => {
   ) => {
     if (statusF === undefined) statusF = statusFilter;
 
-    const { searchKeyword, searchGroup, searchModel } = getFormValues();
+    const { searchKeyword, searchGroup, searchModel, searchCategory } =
+      getFormValues();
     if (searchKeyword !== '' || searchGroup !== '' || searchModel !== '') {
       setLoading(true);
       await searchChannels(
@@ -371,11 +374,16 @@ export const useChannelsData = () => {
 
     const reqId = ++requestCounter.current;
     setLoading(true);
-    const typeParam = typeKey !== 'all' ? `&type=${typeKey}` : '';
-    const statusParam = statusF !== 'all' ? `&status=${statusF}` : '';
-    const res = await API.get(
-      `/api/channel/?p=${page}&page_size=${pageSize}&id_sort=${idSort}&tag_mode=${enableTagMode}${typeParam}${statusParam}`,
-    );
+    const params = new URLSearchParams({
+      p: String(page),
+      page_size: String(pageSize),
+      id_sort: String(idSort),
+      tag_mode: String(enableTagMode),
+    });
+    if (typeKey !== 'all') params.set('type', typeKey);
+    if (statusF !== 'all') params.set('status', statusF);
+    if (searchCategory !== '') params.set('category', searchCategory);
+    const res = await API.get(`/api/channel/?${params.toString()}`);
 
     if (res === undefined || reqId !== requestCounter.current) {
       return;
@@ -393,6 +401,7 @@ export const useChannelsData = () => {
       }
       setChannelFormat(items, enableTagMode);
       setChannelCount(total);
+      setActivePage(page);
     } else {
       showError(message);
     }
@@ -408,7 +417,8 @@ export const useChannelsData = () => {
     pageSz = pageSize,
     sortFlag = idSort,
   ) => {
-    const { searchKeyword, searchGroup, searchModel } = getFormValues();
+    const { searchKeyword, searchGroup, searchModel, searchCategory } =
+      getFormValues();
     setSearching(true);
     try {
       const keyword = searchKeyword.trim();
@@ -451,6 +461,9 @@ export const useChannelsData = () => {
         p: String(page),
         page_size: String(pageSz),
       });
+      if (searchCategory !== '') {
+        params.set('category', searchCategory);
+      }
       if (exactChannelID) {
         params.set('channel_id', String(exactChannelID));
       }

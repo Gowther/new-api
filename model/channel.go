@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"net/netip"
+	"net/url"
 	"strings"
 	"sync"
 
@@ -74,6 +76,16 @@ type ChannelSortOptions struct {
 	SortOrder string
 	IDSort    bool
 }
+
+type ChannelCategory string
+
+const (
+	ChannelCategoryWelfare    ChannelCategory = "welfare"
+	ChannelCategoryThirdParty ChannelCategory = "third_party"
+	ChannelCategoryTemporary  ChannelCategory = "temporary"
+	ChannelCategorySelfHosted ChannelCategory = "self_hosted"
+	ChannelCategoryOfficial   ChannelCategory = "official"
+)
 
 var channelSortColumns = map[string]string{
 	"id":            "id",
@@ -159,6 +171,87 @@ func ApplyChannelGroupFilter(query *gorm.DB, group string) *gorm.DB {
 		return query
 	}
 	return query.Where(channelGroupFilterCondition(), channelGroupFilterPattern(group))
+}
+
+func ParseChannelCategory(category string) ChannelCategory {
+	switch ChannelCategory(strings.ToLower(strings.TrimSpace(category))) {
+	case ChannelCategoryWelfare:
+		return ChannelCategoryWelfare
+	case ChannelCategoryThirdParty:
+		return ChannelCategoryThirdParty
+	case ChannelCategoryTemporary:
+		return ChannelCategoryTemporary
+	case ChannelCategorySelfHosted:
+		return ChannelCategorySelfHosted
+	case ChannelCategoryOfficial:
+		return ChannelCategoryOfficial
+	default:
+		return ""
+	}
+}
+
+func (channel *Channel) GetCategory() ChannelCategory {
+	name := strings.TrimSpace(channel.Name)
+	switch {
+	case strings.HasPrefix(name, "公益"):
+		return ChannelCategoryWelfare
+	case strings.HasPrefix(name, "三方"):
+		return ChannelCategoryThirdParty
+	case strings.HasPrefix(name, "临时"):
+		return ChannelCategoryTemporary
+	}
+
+	baseURL := channel.GetBaseURL()
+	if baseURL == "" && channel.Type >= 0 && channel.Type < len(constant.ChannelBaseURLs) {
+		baseURL = constant.ChannelBaseURLs[channel.Type]
+	}
+	baseURL = strings.TrimSpace(baseURL)
+	if baseURL == "" {
+		return ChannelCategoryOfficial
+	}
+	if !strings.Contains(baseURL, "://") {
+		baseURL = "http://" + baseURL
+	}
+	parsedURL, err := url.Parse(baseURL)
+	if err != nil {
+		return ChannelCategoryOfficial
+	}
+	hostname := strings.TrimSuffix(strings.ToLower(parsedURL.Hostname()), ".")
+	if hostname == "" {
+		return ChannelCategoryOfficial
+	}
+	if address, err := netip.ParseAddr(hostname); err == nil {
+		if address.IsPrivate() || address.IsLoopback() || address.IsUnspecified() ||
+			address.IsLinkLocalUnicast() || address.IsLinkLocalMulticast() {
+			return ChannelCategorySelfHosted
+		}
+		return ChannelCategoryOfficial
+	}
+	if !strings.Contains(hostname, ".") || hostname == "localhost" ||
+		strings.HasSuffix(hostname, ".localhost") || strings.HasSuffix(hostname, ".local") ||
+		strings.HasSuffix(hostname, ".internal") || strings.HasSuffix(hostname, ".lan") ||
+		strings.HasSuffix(hostname, ".home.arpa") {
+		return ChannelCategorySelfHosted
+	}
+	return ChannelCategoryOfficial
+}
+
+func GetChannelIDsByCategory(category ChannelCategory) ([]int, error) {
+	if category == "" {
+		return nil, nil
+	}
+
+	var channels []Channel
+	if err := DB.Select("id", "type", "name", "base_url").Find(&channels).Error; err != nil {
+		return nil, err
+	}
+	ids := make([]int, 0)
+	for i := range channels {
+		if channels[i].GetCategory() == category {
+			ids = append(ids, channels[i].Id)
+		}
+	}
+	return ids, nil
 }
 
 // Value implements driver.Valuer interface

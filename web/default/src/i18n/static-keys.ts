@@ -215,6 +215,14 @@ export const STATIC_I18N_KEYS = [
   // Channel Affinity section
   'Channel Affinity',
 
+  // Channel category filter (dynamic option labels)
+  'All Categories',
+  'Welfare Service',
+  'Third-party Key',
+  'Temporary Channel',
+  'Self-hosted Service',
+  'Official Service',
+
   // Models constants
   'Exact Match',
   'Prefix Match',

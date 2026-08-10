@@ -31,6 +31,7 @@ const channelsSearchSchema = z.object({
   status: z.array(z.string()).optional().catch([]),
   type: z.array(z.string()).optional().catch([]),
   group: z.array(z.string()).optional().catch([]),
+  category: z.array(z.string()).optional().catch([]),
   model: z.string().optional().catch(''),
 })
 

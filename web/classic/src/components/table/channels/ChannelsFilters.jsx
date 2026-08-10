@@ -83,7 +83,7 @@ const ChannelsFilters = ({
           layout='horizontal'
           trigger='change'
           stopValidateWithError={false}
-          className='flex flex-col md:flex-row items-center gap-2 w-full'
+          className='flex flex-col md:flex-row md:flex-wrap md:justify-end items-center gap-2 w-full'
         >
           <div className='relative w-full md:w-64'>
             <Form.Input
@@ -103,6 +103,28 @@ const ChannelsFilters = ({
               placeholder={t('模型关键字')}
               showClear
               pure
+            />
+          </div>
+          <div className='w-full md:w-32'>
+            <Form.Select
+              size='small'
+              field='searchCategory'
+              placeholder={t('渠道分类')}
+              optionList={[
+                { label: t('全部分类'), value: '' },
+                { label: t('公益站'), value: 'welfare' },
+                { label: t('三方 Key'), value: 'third_party' },
+                { label: t('临时渠道'), value: 'temporary' },
+                { label: t('自建服务'), value: 'self_hosted' },
+                { label: t('官方服务'), value: 'official' },
+              ]}
+              className='w-full'
+              pure
+              onChange={() => {
+                setTimeout(() => {
+                  searchChannels(enableTagMode);
+                }, 0);
+              }}
             />
           </div>
           <div className='w-full md:w-32'>
@@ -143,10 +165,11 @@ const ChannelsFilters = ({
                   searchKeyword: '',
                   searchGroup: '',
                   searchModel: '',
+                  searchCategory: '',
                 });
                 // 重置后立即查询，使用setTimeout确保表单重置完成
                 setTimeout(() => {
-                  refresh();
+                  refresh(1);
                 }, 100);
               }
             }}

@@ -131,6 +131,15 @@ export const CHANNEL_STATUS_OPTIONS = [
   { value: 'unknown', label: 'Unknown' },
 ] as const
 
+export const CHANNEL_CATEGORY_OPTIONS = [
+  { value: 'all', label: 'All Categories' },
+  { value: 'welfare', label: 'Welfare Service' },
+  { value: 'third_party', label: 'Third-party Key' },
+  { value: 'temporary', label: 'Temporary Channel' },
+  { value: 'self_hosted', label: 'Self-hosted Service' },
+  { value: 'official', label: 'Official Service' },
+] as const
+
 export const CHANNEL_STATUS_CONFIG = {
   [CHANNEL_STATUS.UNKNOWN]: {
     variant: 'neutral' as const,

@@ -55,6 +55,7 @@ import {
   Col,
   Highlight,
   Input,
+  Switch,
   Tooltip,
   Collapse,
   Dropdown,
@@ -326,6 +327,54 @@ function type2secretPrompt(type) {
   }
 }
 
+function supportsOfficialClientPassthrough(type) {
+  return type === 1 || type === 14;
+}
+
+function parseHeaderOverride(value) {
+  if (!value?.trim()) return {};
+
+  try {
+    const parsed = JSON.parse(value);
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function isOfficialClientPassthroughEnabled(values) {
+  if (!supportsOfficialClientPassthrough(values.type)) return false;
+
+  const headerOverride = parseHeaderOverride(values.header_override);
+  return Boolean(
+    headerOverride &&
+    Object.hasOwn(headerOverride, '*') &&
+    values.pass_through_body_enabled &&
+    values.automatic_channel_test_disabled,
+  );
+}
+
+function updateOfficialClientPassthroughHeader(value, enabled) {
+  const headerOverride = parseHeaderOverride(value);
+  if (!headerOverride) return null;
+
+  if (enabled) {
+    headerOverride['*'] = true;
+  } else {
+    delete headerOverride['*'];
+  }
+
+  if (Object.keys(headerOverride).length === 0) return '';
+  return JSON.stringify(headerOverride, null, 2);
+}
+
 const EditChannelModal = (props) => {
   const { t } = useTranslation();
   const channelId = props.editingChannel.id;
@@ -345,6 +394,7 @@ const EditChannelModal = (props) => {
     other: '',
     model_mapping: '',
     param_override: '',
+    header_override: '',
     status_code_mapping: '',
     models: [],
     auto_ban: 1,
@@ -390,6 +440,8 @@ const EditChannelModal = (props) => {
   const [multiKeyMode, setMultiKeyMode] = useState('random');
   const [autoBan, setAutoBan] = useState(true);
   const [inputs, setInputs] = useState(originInputs);
+  const officialClientPassthroughEnabled =
+    isOfficialClientPassthroughEnabled(inputs);
   const [selectedModels, setSelectedModels] = useState([]);
   const [originModelOptions, setOriginModelOptions] = useState([]);
   const [modelOptions, setModelOptions] = useState([]);
@@ -957,6 +1009,24 @@ const EditChannelModal = (props) => {
       }
     }
     //setAutoBan
+  };
+
+  const handleOfficialClientPassthroughChange = (enabled) => {
+    const nextHeaderOverride = updateOfficialClientPassthroughHeader(
+      inputs.header_override,
+      enabled,
+    );
+    if (nextHeaderOverride === null) {
+      showError(t('JSON格式错误'));
+      return;
+    }
+
+    handleChannelSettingsChange('pass_through_body_enabled', enabled);
+    handleChannelOtherSettingsChange(
+      'automatic_channel_test_disabled',
+      enabled,
+    );
+    handleInputChange('header_override', nextHeaderOverride);
   };
 
   const previewModelMappings = async () => {
@@ -3581,9 +3651,37 @@ const EditChannelModal = (props) => {
                         searchPosition='dropdown'
                         onSearch={(value) => setChannelSearchValue(value)}
                         renderOptionItem={renderChannelOption}
-                        onChange={(value) => handleInputChange('type', value)}
+                        onChange={(value) => {
+                          if (
+                            !supportsOfficialClientPassthrough(value) &&
+                            officialClientPassthroughEnabled
+                          ) {
+                            handleOfficialClientPassthroughChange(false);
+                          }
+                          handleInputChange('type', value);
+                        }}
                         disabled={isIonetLocked}
                       />
+
+                      {supportsOfficialClientPassthrough(inputs.type) && (
+                        <Form.Slot label={t('Official client passthrough')}>
+                          <Switch
+                            checked={officialClientPassthroughEnabled}
+                            checkedText={t('开')}
+                            uncheckedText={t('关')}
+                            onChange={handleOfficialClientPassthroughChange}
+                          />
+                          <Text
+                            type='tertiary'
+                            size='small'
+                            style={{ display: 'block', marginTop: 4 }}
+                          >
+                            {t(
+                              'Preserve official Codex or Claude Code request headers and body for client-restricted upstreams',
+                            )}
+                          </Text>
+                        </Form.Slot>
+                      )}
 
                       {inputs.type === 57 && (
                         <Banner

@@ -165,6 +165,9 @@ import {
   findMissingModelsInMapping,
   validateModelMappingJson,
   hasAdvancedSettingsErrors,
+  isOfficialClientPassthroughEnabled,
+  supportsOfficialClientPassthrough,
+  updateOfficialClientPassthroughHeader,
 } from '../../lib'
 import {
   collectInvalidStatusCodeEntries,
@@ -794,6 +797,36 @@ export function ChannelMutateDrawer({
   const currentUpstreamModelUpdateIgnoredModels = form.watch(
     'upstream_model_update_ignored_models'
   )
+  const officialClientPassthroughSupported =
+    supportsOfficialClientPassthrough(currentType)
+  const officialClientPassthroughEnabled = isOfficialClientPassthroughEnabled({
+    type: currentType,
+    header_override: currentHeaderOverride,
+    pass_through_body_enabled: currentPassThroughBodyEnabled,
+    automatic_channel_test_disabled: currentAutomaticChannelTestDisabled,
+  })
+
+  const handleOfficialClientPassthroughChange = (enabled: boolean): void => {
+    const nextHeaderOverride = updateOfficialClientPassthroughHeader(
+      currentHeaderOverride,
+      enabled
+    )
+    if (nextHeaderOverride === null) {
+      toast.error(t(ERROR_MESSAGES.INVALID_JSON))
+      return
+    }
+
+    form.setValue('header_override', nextHeaderOverride, {
+      shouldDirty: true,
+      shouldValidate: true,
+    })
+    form.setValue('pass_through_body_enabled', enabled, {
+      shouldDirty: true,
+    })
+    form.setValue('automatic_channel_test_disabled', enabled, {
+      shouldDirty: true,
+    })
+  }
   const {
     unlocked: doubaoApiEditUnlocked,
     handleClick: handleApiConfigSecretClick,
@@ -2204,6 +2237,16 @@ export function ChannelMutateDrawer({
                                             Number.isInteger(nextType) &&
                                             nextType > 0
                                           ) {
+                                            if (
+                                              !supportsOfficialClientPassthrough(
+                                                nextType
+                                              ) &&
+                                              officialClientPassthroughEnabled
+                                            ) {
+                                              handleOfficialClientPassthroughChange(
+                                                false
+                                              )
+                                            }
                                             field.onChange(nextType)
                                           }
                                         }}
@@ -2319,6 +2362,35 @@ export function ChannelMutateDrawer({
                               </FormItem>
                             )}
                           />
+                        )}
+
+                        {officialClientPassthroughSupported && (
+                          <fieldset
+                            disabled={sensitiveLocked}
+                            className='disabled:opacity-60'
+                          >
+                            <FormItem
+                              className={sideDrawerSwitchItemClassName()}
+                            >
+                              <div className='flex flex-col gap-0.5'>
+                                <FormLabel>
+                                  {t('Official client passthrough')}
+                                </FormLabel>
+                                <FormDescription className='text-xs'>
+                                  {t(
+                                    'Preserve official Codex or Claude Code request headers and body for client-restricted upstreams'
+                                  )}
+                                </FormDescription>
+                              </div>
+                              <Switch
+                                checked={officialClientPassthroughEnabled}
+                                onCheckedChange={
+                                  handleOfficialClientPassthroughChange
+                                }
+                                aria-label={t('Official client passthrough')}
+                              />
+                            </FormItem>
+                          </fieldset>
                         )}
 
                         {currentType === 1 && (

@@ -355,9 +355,8 @@ function isOfficialClientPassthroughEnabled(values) {
   const headerOverride = parseHeaderOverride(values.header_override);
   return Boolean(
     headerOverride &&
-    Object.hasOwn(headerOverride, '*') &&
-    values.pass_through_body_enabled &&
-    values.automatic_channel_test_disabled,
+      Object.hasOwn(headerOverride, '*') &&
+      values.automatic_channel_test_disabled,
   );
 }
 
@@ -1021,7 +1020,6 @@ const EditChannelModal = (props) => {
       return;
     }
 
-    handleChannelSettingsChange('pass_through_body_enabled', enabled);
     handleChannelOtherSettingsChange(
       'automatic_channel_test_disabled',
       enabled,

@@ -53,21 +53,30 @@ describe('official client passthrough preset', () => {
     assert.equal(updateOfficialClientPassthroughHeader('[]', true), null)
   })
 
-  test('is enabled only when every preset setting is active', () => {
+  test('is enabled without requiring request body passthrough', () => {
+    const bodyPassthroughDisabled = {
+      type: 1,
+      header_override: '{"*":true}',
+      automatic_channel_test_disabled: true,
+      pass_through_body_enabled: false,
+    }
+    const bodyPassthroughEnabled = {
+      ...bodyPassthroughDisabled,
+      pass_through_body_enabled: true,
+    }
+
     assert.equal(
-      isOfficialClientPassthroughEnabled({
-        type: 1,
-        header_override: '{"*":true}',
-        pass_through_body_enabled: true,
-        automatic_channel_test_disabled: true,
-      }),
+      isOfficialClientPassthroughEnabled(bodyPassthroughDisabled),
+      true
+    )
+    assert.equal(
+      isOfficialClientPassthroughEnabled(bodyPassthroughEnabled),
       true
     )
     assert.equal(
       isOfficialClientPassthroughEnabled({
         type: 14,
         header_override: '{"*":""}',
-        pass_through_body_enabled: true,
         automatic_channel_test_disabled: false,
       }),
       false
@@ -76,7 +85,6 @@ describe('official client passthrough preset', () => {
       isOfficialClientPassthroughEnabled({
         type: 8,
         header_override: '{"*":true}',
-        pass_through_body_enabled: true,
         automatic_channel_test_disabled: true,
       }),
       false

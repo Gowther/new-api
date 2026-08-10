@@ -20,7 +20,6 @@ For commercial licensing, please contact support@quantumnous.com
 type OfficialClientPassthroughValues = {
   type: number
   header_override?: string
-  pass_through_body_enabled?: boolean
   automatic_channel_test_disabled?: boolean
 }
 
@@ -57,7 +56,6 @@ export function isOfficialClientPassthroughEnabled(
   return Boolean(
     headerOverride &&
     Object.hasOwn(headerOverride, '*') &&
-    values.pass_through_body_enabled &&
     values.automatic_channel_test_disabled
   )
 }

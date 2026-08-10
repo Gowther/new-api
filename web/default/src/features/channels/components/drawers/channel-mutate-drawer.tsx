@@ -802,7 +802,6 @@ export function ChannelMutateDrawer({
   const officialClientPassthroughEnabled = isOfficialClientPassthroughEnabled({
     type: currentType,
     header_override: currentHeaderOverride,
-    pass_through_body_enabled: currentPassThroughBodyEnabled,
     automatic_channel_test_disabled: currentAutomaticChannelTestDisabled,
   })
 
@@ -819,9 +818,6 @@ export function ChannelMutateDrawer({
     form.setValue('header_override', nextHeaderOverride, {
       shouldDirty: true,
       shouldValidate: true,
-    })
-    form.setValue('pass_through_body_enabled', enabled, {
-      shouldDirty: true,
     })
     form.setValue('automatic_channel_test_disabled', enabled, {
       shouldDirty: true,

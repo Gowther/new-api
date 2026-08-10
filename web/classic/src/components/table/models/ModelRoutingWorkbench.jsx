@@ -1233,6 +1233,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
       ),
       dataIndex: 'routing',
       width: 190,
+      fixed: 'right',
       render: (_, record) => {
         const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
         const updating = Boolean(statusUpdatingIds[record.id]);

@@ -1517,7 +1517,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                     <TableHead className='w-28'>{t('Type')}</TableHead>
                     <TableHead className='w-24'>{t('Group')}</TableHead>
                     <TableHead className='w-36'>{t('Status')}</TableHead>
-                    <TableHead className='w-48'>
+                    <TableHead className='bg-background sticky right-0 w-48'>
                       <div className='grid grid-cols-2 gap-2'>
                         <span>{t('Priority')}</span>
                         <span>{t('Weight')}</span>
@@ -1842,8 +1842,29 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                             {channelStatusBadgeWithDetails}
                           </div>
                         </TableCell>
-                        <TableCell className='w-48'>
-                          <div className='grid grid-cols-2 gap-2'>
+                        <TableCell className='sticky right-0 w-48 bg-background p-0'>
+                          {/* Keep the pinned column opaque and in sync with the
+                              row tint so scrolled columns do not show through. */}
+                          <div
+                            className={cn(
+                              'grid grid-cols-2 gap-2 p-2',
+                              channel.status === CHANNEL_STATUS.MANUAL_DISABLED &&
+                                'bg-destructive/5 hover:bg-destructive/10',
+                              channel.status === CHANNEL_STATUS.AUTO_DISABLED &&
+                                'bg-warning/5 hover:bg-warning/10',
+                              !isEnabled &&
+                                channel.status !==
+                                  CHANNEL_STATUS.MANUAL_DISABLED &&
+                                channel.status !==
+                                  CHANNEL_STATUS.AUTO_DISABLED &&
+                                'bg-muted/40 hover:bg-muted/50',
+                              props.targetChannelId === channel.id &&
+                                'bg-warning/10',
+                              channel.status === CHANNEL_STATUS.ENABLED &&
+                                props.targetChannelId !== channel.id &&
+                                'hover:bg-muted/50'
+                            )}
+                          >
                             <Input
                               type='number'
                               min={0}

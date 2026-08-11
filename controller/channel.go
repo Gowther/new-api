@@ -466,7 +466,7 @@ func GetChannel(c *gin.Context) {
 	return
 }
 
-// GetChannelKey 获取渠道密钥（需要通过安全验证中间件）
+// GetChannelKey 获取渠道密钥及 CC Switch 导出元数据（需要通过安全验证中间件）
 // 此函数依赖 SecureVerificationRequired 中间件，确保用户已通过安全验证
 func GetChannelKey(c *gin.Context) {
 	channelId, err := strconv.Atoi(c.Param("id"))
@@ -494,11 +494,26 @@ func GetChannelKey(c *gin.Context) {
 	})
 
 	// 返回渠道密钥
+	baseURL := ""
+	if channel.BaseURL != nil {
+		baseURL = *channel.BaseURL
+	}
+	if baseURL == "" && channel.Type >= 0 && channel.Type < len(constant.ChannelBaseURLs) {
+		baseURL = constant.ChannelBaseURLs[channel.Type]
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "获取成功",
 		"data": map[string]interface{}{
-			"key": channel.Key,
+			"key":           channel.Key,
+			"name":          channel.Name,
+			"type":          channel.Type,
+			"base_url":      baseURL,
+			"models":        channel.Models,
+			"model_mapping": channel.ModelMapping,
+			"test_model":    channel.TestModel,
+			"is_multi_key":  channel.ChannelInfo.IsMultiKey,
 		},
 	})
 }

@@ -37,6 +37,7 @@ import {
   getChannelIcon,
   renderQuotaWithAmount,
   showInfo,
+  isRoot,
 } from '../../../helpers';
 import {
   CHANNEL_OPTIONS,
@@ -327,6 +328,7 @@ export const getChannelsColumns = ({
   setCurrentMultiKeyChannel,
   openUpstreamUpdateModal,
   detectChannelUpstreamUpdates,
+  onOpenCCSwitch,
 }) => {
   return [
     {
@@ -726,6 +728,21 @@ export const getChannelsColumns = ({
               },
             },
           ];
+
+          if (isRoot()) {
+            moreMenuItems.push({
+              node: 'item',
+              name: t('导出到 CC Switch'),
+              type: 'tertiary',
+              onClick: () => {
+                if (record.channel_info?.is_multi_key) {
+                  showInfo(t('多密钥渠道暂不支持导出到 CC Switch'));
+                  return;
+                }
+                onOpenCCSwitch?.(record);
+              },
+            });
+          }
 
           if (upstreamUpdateMeta.supported) {
             moreMenuItems.push({

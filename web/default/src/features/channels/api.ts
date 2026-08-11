@@ -362,7 +362,20 @@ export async function deleteDisabledChannels(): Promise<{
 export async function getChannelKey(
   id: number,
   code?: string
-): Promise<{ success: boolean; message?: string; data?: { key: string } }> {
+): Promise<{
+  success: boolean
+  message?: string
+  data?: {
+    key: string
+    name?: string
+    type?: number
+    base_url?: string
+    models?: string
+    model_mapping?: string | null
+    test_model?: string | null
+    is_multi_key?: boolean
+  }
+}> {
   const payload = code ? { code } : undefined
   const res = await api.post(
     `/api/channel/${id}/key`,

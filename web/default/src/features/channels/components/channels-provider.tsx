@@ -46,6 +46,7 @@ type DialogType =
   | 'edit-tag'
   | 'copy-channel'
   | 'model-priority'
+  | 'cc-switch'
   | null
 
 type UpstreamUpdateState = ReturnType<typeof useChannelUpstreamUpdates>

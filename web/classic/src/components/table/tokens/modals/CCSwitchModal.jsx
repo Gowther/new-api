@@ -28,29 +28,10 @@ import {
 } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
 import { selectFilter } from '../../../../helpers';
-
-const APP_CONFIGS = {
-  claude: {
-    label: 'Claude',
-    defaultName: 'My Claude',
-    modelFields: [
-      { key: 'model', label: '主模型' },
-      { key: 'haikuModel', label: 'Haiku 模型' },
-      { key: 'sonnetModel', label: 'Sonnet 模型' },
-      { key: 'opusModel', label: 'Opus 模型' },
-    ],
-  },
-  codex: {
-    label: 'Codex',
-    defaultName: 'My Codex',
-    modelFields: [{ key: 'model', label: '主模型' }],
-  },
-  gemini: {
-    label: 'Gemini',
-    defaultName: 'My Gemini',
-    modelFields: [{ key: 'model', label: '主模型' }],
-  },
-};
+import {
+  buildCCSwitchURL,
+  CC_SWITCH_APP_CONFIGS,
+} from '../../../../helpers/ccSwitch';
 
 function getServerAddress() {
   try {
@@ -63,23 +44,6 @@ function getServerAddress() {
   return window.location.origin;
 }
 
-function buildCCSwitchURL(app, name, models, apiKey) {
-  const serverAddress = getServerAddress();
-  const endpoint = app === 'codex' ? serverAddress + '/v1' : serverAddress;
-  const params = new URLSearchParams();
-  params.set('resource', 'provider');
-  params.set('app', app);
-  params.set('name', name);
-  params.set('endpoint', endpoint);
-  params.set('apiKey', apiKey);
-  for (const [k, v] of Object.entries(models)) {
-    if (v) params.set(k, v);
-  }
-  params.set('homepage', serverAddress);
-  params.set('enabled', 'true');
-  return `ccswitch://v1/import?${params.toString()}`;
-}
-
 export default function CCSwitchModal({
   visible,
   onClose,
@@ -88,22 +52,22 @@ export default function CCSwitchModal({
 }) {
   const { t } = useTranslation();
   const [app, setApp] = useState('claude');
-  const [name, setName] = useState(APP_CONFIGS.claude.defaultName);
+  const [name, setName] = useState(CC_SWITCH_APP_CONFIGS.claude.defaultName);
   const [models, setModels] = useState({});
 
-  const currentConfig = APP_CONFIGS[app];
+  const currentConfig = CC_SWITCH_APP_CONFIGS[app];
 
   useEffect(() => {
     if (visible) {
       setModels({});
       setApp('claude');
-      setName(APP_CONFIGS.claude.defaultName);
+      setName(CC_SWITCH_APP_CONFIGS.claude.defaultName);
     }
   }, [visible]);
 
   const handleAppChange = (val) => {
     setApp(val);
-    setName(APP_CONFIGS[val].defaultName);
+    setName(CC_SWITCH_APP_CONFIGS[val].defaultName);
     setModels({});
   };
 
@@ -116,7 +80,15 @@ export default function CCSwitchModal({
       Toast.warning(t('请选择主模型'));
       return;
     }
-    const url = buildCCSwitchURL(app, name, models, 'sk-' + tokenKey);
+    const serverAddress = getServerAddress();
+    const url = buildCCSwitchURL({
+      app,
+      name,
+      models,
+      apiKey: 'sk-' + tokenKey,
+      endpoint: serverAddress,
+      homepage: serverAddress,
+    });
     window.open(url, '_blank');
     onClose();
   };
@@ -150,7 +122,7 @@ export default function CCSwitchModal({
             onChange={(e) => handleAppChange(e.target.value)}
             style={{ width: '100%' }}
           >
-            {Object.entries(APP_CONFIGS).map(([key, cfg]) => (
+            {Object.entries(CC_SWITCH_APP_CONFIGS).map(([key, cfg]) => (
               <Radio key={key} value={key}>
                 {cfg.label}
               </Radio>
@@ -170,8 +142,8 @@ export default function CCSwitchModal({
         {currentConfig.modelFields.map((field) => (
           <div key={field.key}>
             <div style={fieldLabelStyle}>
-              {t(field.label)}
-              {field.key === 'model' && (
+              {t(field.labelKey)}
+              {field.required && (
                 <Typography.Text type='danger'> *</Typography.Text>
               )}
             </div>

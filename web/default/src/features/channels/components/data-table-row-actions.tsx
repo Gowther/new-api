@@ -33,9 +33,11 @@ import {
   Trash2,
   RefreshCw,
   Loader2,
+  ArrowRightLeft,
 } from 'lucide-react'
 import { useContext, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Button } from '@/components/ui/button'
@@ -58,6 +60,7 @@ import {
   hasPermission,
 } from '@/lib/admin-permissions'
 import { useAuthStore } from '@/stores/auth-store'
+import { ROLE } from '@/lib/roles'
 
 import { MODEL_FETCHABLE_TYPES } from '../constants'
 import {
@@ -141,6 +144,15 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const handleManageKeys = () => {
     setCurrentRow(channel)
     setOpen('multi-key-manage')
+  }
+
+  const handleExportToCCSwitch = () => {
+    if (isMultiKey) {
+      toast.warning(t('Multi-key channels cannot be exported to CC Switch yet'))
+      return
+    }
+    setCurrentRow(channel)
+    setOpen('cc-switch')
   }
 
   const handleToggleStatus = async (
@@ -349,6 +361,15 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           {!canEditSensitive && (
             <DropdownMenuItem disabled className='text-xs normal-case'>
               {t('No permission to perform this action')}
+            </DropdownMenuItem>
+          )}
+
+          {currentUser?.role === ROLE.SUPER_ADMIN && (
+            <DropdownMenuItem onClick={handleExportToCCSwitch}>
+              {t('Export to CC Switch')}
+              <DropdownMenuShortcut>
+                <ArrowRightLeft size={16} />
+              </DropdownMenuShortcut>
             </DropdownMenuItem>
           )}
 

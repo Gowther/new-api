@@ -35,11 +35,13 @@ import EditTagModal from './modals/EditTagModal';
 import MultiKeyManageModal from './modals/MultiKeyManageModal';
 import ChannelUpstreamUpdateModal from './modals/ChannelUpstreamUpdateModal';
 import ModelPriorityModal from './modals/ModelPriorityModal';
+import ChannelCCSwitchModal from './modals/ChannelCCSwitchModal';
 import { createCardProPagination } from '../../../helpers/utils';
 
 const ChannelsPage = () => {
   const channelsData = useChannelsData();
   const isMobile = useIsMobile();
+  const [ccSwitchChannel, setCCSwitchChannel] = React.useState(null);
 
   return (
     <>
@@ -80,6 +82,11 @@ const ChannelsPage = () => {
         refresh={channelsData.refresh}
         onPrioritiesUpdated={channelsData.syncChannelPriorityUpdates}
       />
+      <ChannelCCSwitchModal
+        visible={Boolean(ccSwitchChannel)}
+        onClose={() => setCCSwitchChannel(null)}
+        channel={ccSwitchChannel}
+      />
 
       {/* Main Content */}
       {channelsData.globalPassThroughEnabled ? (
@@ -114,7 +121,7 @@ const ChannelsPage = () => {
         })}
         t={channelsData.t}
       >
-        <ChannelsTable {...channelsData} />
+        <ChannelsTable {...channelsData} onOpenCCSwitch={setCCSwitchChannel} />
       </CardPro>
     </>
   );

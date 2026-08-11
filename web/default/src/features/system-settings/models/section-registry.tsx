@@ -87,6 +87,12 @@ const MODELS_SECTIONS = [
             settings['monitor_setting.auto_test_channel_minutes'],
           'monitor_setting.channel_test_mode':
             settings['monitor_setting.channel_test_mode'],
+          'monitor_setting.channel_test_prompts':
+            settings['monitor_setting.channel_test_prompts'],
+          'monitor_setting.channel_test_prompt_mode':
+            settings['monitor_setting.channel_test_prompt_mode'],
+          'monitor_setting.channel_test_prompt':
+            settings['monitor_setting.channel_test_prompt'],
         }}
       />
     ),

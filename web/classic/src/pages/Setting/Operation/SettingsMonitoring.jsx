@@ -30,6 +30,35 @@ import {
 import { useTranslation } from 'react-i18next';
 import HttpStatusCodeRulesInput from '../../../components/settings/HttpStatusCodeRulesInput';
 
+const DEFAULT_CHANNEL_TEST_PROMPT =
+  'Explain in one short sentence why caching can reduce latency.';
+
+const normalizeChannelTestPromptText = (value) =>
+  Array.from(
+    new Set(
+      (value || '')
+        .replaceAll('\r\n', '\n')
+        .split('\n')
+        .map((prompt) => prompt.trim())
+        .filter(Boolean),
+    ),
+  );
+
+const parseChannelTestPrompts = (value) => {
+  try {
+    const parsed = JSON.parse(value || '[]');
+    if (Array.isArray(parsed)) {
+      const prompts = normalizeChannelTestPromptText(
+        parsed.filter((prompt) => typeof prompt === 'string').join('\n'),
+      );
+      if (prompts.length > 0) return prompts;
+    }
+  } catch {
+    // Fall through to the upgrade-safe default.
+  }
+  return [DEFAULT_CHANNEL_TEST_PROMPT];
+};
+
 const DEFAULT_INPUTS = {
   ChannelDisableThreshold: '',
   QuotaRemindThreshold: '',
@@ -42,6 +71,9 @@ const DEFAULT_INPUTS = {
   'monitor_setting.auto_test_channel_enabled': false,
   'monitor_setting.auto_test_channel_minutes': 10,
   'monitor_setting.channel_test_mode': 'scheduled_all',
+  'monitor_setting.channel_test_prompts': DEFAULT_CHANNEL_TEST_PROMPT,
+  'monitor_setting.channel_test_prompt_mode': 'fixed',
+  'monitor_setting.channel_test_prompt': DEFAULT_CHANNEL_TEST_PROMPT,
 };
 
 export default function SettingsMonitoring(props) {
@@ -52,6 +84,16 @@ export default function SettingsMonitoring(props) {
   const [inputsRow, setInputsRow] = useState(inputs);
   const channelTestMode =
     inputs['monitor_setting.channel_test_mode'] || 'scheduled_all';
+  const channelTestPromptMode =
+    inputs['monitor_setting.channel_test_prompt_mode'] || 'fixed';
+  const channelTestPrompts = normalizeChannelTestPromptText(
+    inputs['monitor_setting.channel_test_prompts'],
+  );
+  const selectedChannelTestPrompt = channelTestPrompts.includes(
+    inputs['monitor_setting.channel_test_prompt'],
+  )
+    ? inputs['monitor_setting.channel_test_prompt']
+    : channelTestPrompts[0];
   const parsedAutoDisableStatusCodes = parseHttpStatusCodeRules(
     inputs.AutomaticDisableStatusCodes || '',
   );
@@ -78,6 +120,9 @@ export default function SettingsMonitoring(props) {
           : '';
       return showError(`${t('自动重试状态码格式不正确')}${details}`);
     }
+    if (channelTestPrompts.length === 0) {
+      return showError(t('至少需要一条测活提示词'));
+    }
     const requestQueue = updateArray.map((item) => {
       let value = '';
       if (typeof inputs[item.key] === 'boolean') {
@@ -86,6 +131,9 @@ export default function SettingsMonitoring(props) {
         const normalizedMap = {
           AutomaticDisableStatusCodes: parsedAutoDisableStatusCodes.normalized,
           AutomaticRetryStatusCodes: parsedAutoRetryStatusCodes.normalized,
+          'monitor_setting.channel_test_prompts':
+            JSON.stringify(channelTestPrompts),
+          'monitor_setting.channel_test_prompt': selectedChannelTestPrompt,
         };
         value = normalizedMap[item.key] ?? inputs[item.key];
       }
@@ -118,8 +166,19 @@ export default function SettingsMonitoring(props) {
     const currentInputs = { ...DEFAULT_INPUTS };
     for (let key in props.options) {
       if (Object.prototype.hasOwnProperty.call(DEFAULT_INPUTS, key)) {
-        currentInputs[key] = props.options[key];
+        currentInputs[key] =
+          key === 'monitor_setting.channel_test_prompts'
+            ? parseChannelTestPrompts(props.options[key]).join('\n')
+            : props.options[key];
       }
+    }
+    const prompts = normalizeChannelTestPromptText(
+      currentInputs['monitor_setting.channel_test_prompts'],
+    );
+    if (
+      !prompts.includes(currentInputs['monitor_setting.channel_test_prompt'])
+    ) {
+      currentInputs['monitor_setting.channel_test_prompt'] = prompts[0];
     }
     setInputs(currentInputs);
     setInputsRow(structuredClone(currentInputs));
@@ -184,7 +243,9 @@ export default function SettingsMonitoring(props) {
                   suffix={t('分钟')}
                   extraText={
                     channelTestMode === 'passive_recovery'
-                      ? t('系统检查自动禁用渠道是否可恢复的默认频率，渠道可单独覆盖')
+                      ? t(
+                          '系统检查自动禁用渠道是否可恢复的默认频率，渠道可单独覆盖',
+                        )
                       : t('系统测试所有渠道的默认频率，渠道可单独覆盖')
                   }
                   placeholder={''}
@@ -197,6 +258,72 @@ export default function SettingsMonitoring(props) {
                     })
                   }
                 />
+              </Col>
+            </Row>
+            <Row gutter={16}>
+              <Col xs={24} sm={14} md={14} lg={14} xl={14}>
+                <Form.TextArea
+                  label={t('测活提示词列表')}
+                  placeholder={t('一行一条提示词')}
+                  extraText={t(
+                    '仅用于文本生成渠道测活，不会用于普通用户聊天；Chat Completions、Claude、Gemini 和 Responses 测活会使用此列表。',
+                  )}
+                  field={'monitor_setting.channel_test_prompts'}
+                  autosize={{ minRows: 5, maxRows: 12 }}
+                  onChange={(value) => {
+                    const prompts = normalizeChannelTestPromptText(value);
+                    const selected = prompts.includes(
+                      inputs['monitor_setting.channel_test_prompt'],
+                    )
+                      ? inputs['monitor_setting.channel_test_prompt']
+                      : prompts[0] || '';
+                    setInputs({
+                      ...inputs,
+                      'monitor_setting.channel_test_prompts': value,
+                      'monitor_setting.channel_test_prompt': selected,
+                    });
+                  }}
+                />
+              </Col>
+              <Col xs={24} sm={10} md={10} lg={10} xl={10}>
+                <Form.Select
+                  field={'monitor_setting.channel_test_prompt_mode'}
+                  label={t('提示词选择模式')}
+                  optionList={[
+                    { label: t('固定提示词'), value: 'fixed' },
+                    { label: t('随机提示词'), value: 'random' },
+                  ]}
+                  extraText={
+                    channelTestPromptMode === 'random'
+                      ? t('每次测活从列表中随机选择一条')
+                      : t('每次测活都使用指定提示词')
+                  }
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'monitor_setting.channel_test_prompt_mode': value,
+                    })
+                  }
+                />
+                {channelTestPromptMode === 'fixed' && (
+                  <Form.Select
+                    field={'monitor_setting.channel_test_prompt'}
+                    label={t('指定提示词')}
+                    optionList={channelTestPrompts.map((prompt) => ({
+                      label: prompt,
+                      value: prompt,
+                    }))}
+                    value={selectedChannelTestPrompt}
+                    disabled={channelTestPrompts.length === 0}
+                    extraText={t('固定模式下使用的提示词')}
+                    onChange={(value) =>
+                      setInputs({
+                        ...inputs,
+                        'monitor_setting.channel_test_prompt': value,
+                      })
+                    }
+                  />
+                )}
               </Col>
             </Row>
             <Row gutter={16}>

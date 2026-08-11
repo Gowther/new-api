@@ -17,38 +17,47 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func requireTextChannelTestPrompt(t *testing.T, input []byte) {
+func requireTextChannelTestPrompt(t *testing.T, input []byte, expected string) {
 	t.Helper()
 
 	var messages []dto.Message
 	require.NoError(t, common.Unmarshal(input, &messages))
 	require.Len(t, messages, 1)
 	require.Equal(t, "user", messages[0].Role)
-	require.Equal(t, channelTestTextPrompt, messages[0].Content)
+	require.Equal(t, expected, messages[0].Content)
 }
 
-func TestBuildTestRequestUsesDescriptiveTextPrompt(t *testing.T) {
+func TestBuildTestRequestUsesConfiguredTextPrompt(t *testing.T) {
+	monitorSetting := operation_setting.GetMonitorSetting()
+	original := *monitorSetting
+	t.Cleanup(func() { *monitorSetting = original })
+
+	const configuredPrompt = "Return one word that describes a healthy service."
+	monitorSetting.ChannelTestPrompts = []string{operation_setting.DefaultChannelTestPrompt, configuredPrompt}
+	monitorSetting.ChannelTestPromptMode = operation_setting.ChannelTestPromptModeFixed
+	monitorSetting.ChannelTestPrompt = configuredPrompt
+
 	t.Run("chat completions", func(t *testing.T) {
 		request := buildTestRequest("gpt-4o", "", nil, false)
 		chatRequest, ok := request.(*dto.GeneralOpenAIRequest)
 		require.True(t, ok)
 		require.Len(t, chatRequest.Messages, 1)
 		require.Equal(t, "user", chatRequest.Messages[0].Role)
-		require.Equal(t, channelTestTextPrompt, chatRequest.Messages[0].Content)
+		require.Equal(t, configuredPrompt, chatRequest.Messages[0].Content)
 	})
 
 	t.Run("responses", func(t *testing.T) {
 		request := buildTestRequest("gpt-4o", string(constant.EndpointTypeOpenAIResponse), nil, false)
 		responsesRequest, ok := request.(*dto.OpenAIResponsesRequest)
 		require.True(t, ok)
-		requireTextChannelTestPrompt(t, responsesRequest.Input)
+		requireTextChannelTestPrompt(t, responsesRequest.Input, configuredPrompt)
 	})
 
 	t.Run("responses compact", func(t *testing.T) {
 		request := buildTestRequest("gpt-4o", string(constant.EndpointTypeOpenAIResponseCompact), nil, false)
 		compactRequest, ok := request.(*dto.OpenAIResponsesCompactionRequest)
 		require.True(t, ok)
-		requireTextChannelTestPrompt(t, compactRequest.Input)
+		requireTextChannelTestPrompt(t, compactRequest.Input, configuredPrompt)
 	})
 }
 

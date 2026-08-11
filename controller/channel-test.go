@@ -42,21 +42,29 @@ type testResult struct {
 	newAPIError *types.NewAPIError
 }
 
-const channelTestTextPrompt = "Explain in one short sentence why caching can reduce latency."
+const channelTestTextPrompt = operation_setting.DefaultChannelTestPrompt
 
 func buildTextChannelTestMessages() []dto.Message {
+	return buildTextChannelTestMessagesWithPrompt(operation_setting.GetChannelTestPrompt())
+}
+
+func buildTextChannelTestMessagesWithPrompt(prompt string) []dto.Message {
 	return []dto.Message{
 		{
 			Role:    "user",
-			Content: channelTestTextPrompt,
+			Content: prompt,
 		},
 	}
 }
 
 func buildTextChannelTestResponsesInput() json.RawMessage {
-	data, err := common.Marshal(buildTextChannelTestMessages())
+	return buildTextChannelTestResponsesInputWithPrompt(operation_setting.GetChannelTestPrompt())
+}
+
+func buildTextChannelTestResponsesInputWithPrompt(prompt string) json.RawMessage {
+	data, err := common.Marshal(buildTextChannelTestMessagesWithPrompt(prompt))
 	if err != nil {
-		return json.RawMessage(`[{"role":"user","content":"Explain in one short sentence why caching can reduce latency."}]`)
+		return json.RawMessage(`[{"role":"user","content":"Channel test"}]`)
 	}
 	return json.RawMessage(data)
 }
@@ -722,7 +730,8 @@ func detectErrorMessageFromJSONBytes(jsonBytes []byte) string {
 }
 
 func buildTestRequest(model string, endpointType string, channel *model.Channel, isStream bool) dto.Request {
-	testResponsesInput := buildTextChannelTestResponsesInput()
+	testPrompt := operation_setting.GetChannelTestPrompt()
+	testResponsesInput := buildTextChannelTestResponsesInputWithPrompt(testPrompt)
 
 	// 根据端点类型构建不同的测试请求
 	if endpointType != "" {
@@ -771,7 +780,7 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 			req := &dto.GeneralOpenAIRequest{
 				Model:     model,
 				Stream:    lo.ToPtr(isStream),
-				Messages:  buildTextChannelTestMessages(),
+				Messages:  buildTextChannelTestMessagesWithPrompt(testPrompt),
 				MaxTokens: lo.ToPtr(maxTokens),
 			}
 			if isStream {
@@ -823,7 +832,7 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 	testRequest := &dto.GeneralOpenAIRequest{
 		Model:    model,
 		Stream:   lo.ToPtr(isStream),
-		Messages: buildTextChannelTestMessages(),
+		Messages: buildTextChannelTestMessagesWithPrompt(testPrompt),
 	}
 	if isStream {
 		testRequest.StreamOptions = &dto.StreamOptions{IncludeUsage: true}

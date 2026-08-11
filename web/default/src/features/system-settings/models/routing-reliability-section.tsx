@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
+import i18next from 'i18next'
 import { useMemo, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
@@ -65,6 +66,42 @@ const numericString = z.string().refine((value) => {
 
 const channelTestModes = ['scheduled_all', 'passive_recovery'] as const
 type ChannelTestMode = (typeof channelTestModes)[number]
+const channelTestPromptModes = ['fixed', 'random'] as const
+type ChannelTestPromptMode = (typeof channelTestPromptModes)[number]
+const defaultChannelTestPrompt =
+  'Explain in one short sentence why caching can reduce latency.'
+
+function normalizeChannelTestPromptLines(value: string) {
+  return Array.from(
+    new Set(
+      normalizeLineEndings(value)
+        .split('\n')
+        .map((prompt) => prompt.trim())
+        .filter(Boolean)
+    )
+  )
+}
+
+function parseChannelTestPrompts(value?: string) {
+  try {
+    const parsed: unknown = JSON.parse(value ?? '[]')
+    if (Array.isArray(parsed)) {
+      const prompts = parsed.filter(
+        (prompt): prompt is string => typeof prompt === 'string'
+      )
+      const normalized = normalizeChannelTestPromptLines(prompts.join('\n'))
+      if (normalized.length > 0) return normalized
+    }
+  } catch {
+    // Fall through to the upgrade-safe default.
+  }
+  return [defaultChannelTestPrompt]
+}
+
+function resolveChannelTestPrompt(prompts: string[], selected?: string) {
+  if (selected && prompts.includes(selected)) return selected
+  return prompts[0] ?? defaultChannelTestPrompt
+}
 
 const routingReliabilitySchema = z
   .object({
@@ -82,6 +119,9 @@ const routingReliabilitySchema = z
         .int()
         .min(1, 'Interval must be at least 1 minute'),
       channel_test_mode: z.enum(channelTestModes),
+      channel_test_prompts: z.string(),
+      channel_test_prompt_mode: z.enum(channelTestPromptModes),
+      channel_test_prompt: z.string(),
     }),
   })
   .superRefine((values, ctx) => {
@@ -110,6 +150,18 @@ const routingReliabilitySchema = z
         )}`,
       })
     }
+
+    if (
+      normalizeChannelTestPromptLines(
+        values.monitor_setting.channel_test_prompts
+      ).length === 0
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['monitor_setting', 'channel_test_prompts'],
+        message: i18next.t('At least one test prompt is required'),
+      })
+    }
   })
 
 type RoutingReliabilityFormValues = z.output<typeof routingReliabilitySchema>
@@ -127,6 +179,9 @@ type RoutingReliabilitySectionProps = {
     'monitor_setting.auto_test_channel_enabled': boolean
     'monitor_setting.auto_test_channel_minutes': number
     'monitor_setting.channel_test_mode': ChannelTestMode
+    'monitor_setting.channel_test_prompts': string
+    'monitor_setting.channel_test_prompt_mode': ChannelTestPromptMode
+    'monitor_setting.channel_test_prompt': string
   }
 }
 
@@ -145,82 +200,128 @@ type NormalizedRoutingReliabilityValues = {
   'monitor_setting.auto_test_channel_enabled': boolean
   'monitor_setting.auto_test_channel_minutes': number
   'monitor_setting.channel_test_mode': ChannelTestMode
+  'monitor_setting.channel_test_prompts': string
+  'monitor_setting.channel_test_prompt_mode': ChannelTestPromptMode
+  'monitor_setting.channel_test_prompt': string
 }
 
 function normalizeChannelTestMode(value?: string): ChannelTestMode {
   return value === 'passive_recovery' ? 'passive_recovery' : 'scheduled_all'
 }
 
+function normalizeChannelTestPromptMode(value?: string): ChannelTestPromptMode {
+  return value === 'random' ? 'random' : 'fixed'
+}
+
 const buildFormDefaults = (
   defaults: RoutingReliabilitySectionProps['defaultValues']
-): RoutingReliabilityFormInput => ({
-  RetryTimes: defaults.RetryTimes ?? 0,
-  ChannelDisableThreshold: defaults.ChannelDisableThreshold ?? '',
-  AutomaticDisableChannelEnabled: defaults.AutomaticDisableChannelEnabled,
-  AutomaticEnableChannelEnabled: defaults.AutomaticEnableChannelEnabled,
-  AutomaticDisableKeywords: normalizeLineEndings(
-    defaults.AutomaticDisableKeywords ?? ''
-  ),
-  AutomaticDisableStatusCodes: defaults.AutomaticDisableStatusCodes ?? '',
-  AutomaticRetryStatusCodes: defaults.AutomaticRetryStatusCodes ?? '',
-  monitor_setting: {
-    auto_test_channel_enabled:
-      defaults['monitor_setting.auto_test_channel_enabled'],
-    auto_test_channel_minutes:
-      defaults['monitor_setting.auto_test_channel_minutes'],
-    channel_test_mode: normalizeChannelTestMode(
-      defaults['monitor_setting.channel_test_mode']
+): RoutingReliabilityFormInput => {
+  const prompts = parseChannelTestPrompts(
+    defaults['monitor_setting.channel_test_prompts']
+  )
+  return {
+    RetryTimes: defaults.RetryTimes ?? 0,
+    ChannelDisableThreshold: defaults.ChannelDisableThreshold ?? '',
+    AutomaticDisableChannelEnabled: defaults.AutomaticDisableChannelEnabled,
+    AutomaticEnableChannelEnabled: defaults.AutomaticEnableChannelEnabled,
+    AutomaticDisableKeywords: normalizeLineEndings(
+      defaults.AutomaticDisableKeywords ?? ''
     ),
-  },
-})
+    AutomaticDisableStatusCodes: defaults.AutomaticDisableStatusCodes ?? '',
+    AutomaticRetryStatusCodes: defaults.AutomaticRetryStatusCodes ?? '',
+    monitor_setting: {
+      auto_test_channel_enabled:
+        defaults['monitor_setting.auto_test_channel_enabled'],
+      auto_test_channel_minutes:
+        defaults['monitor_setting.auto_test_channel_minutes'],
+      channel_test_mode: normalizeChannelTestMode(
+        defaults['monitor_setting.channel_test_mode']
+      ),
+      channel_test_prompts: prompts.join('\n'),
+      channel_test_prompt_mode: normalizeChannelTestPromptMode(
+        defaults['monitor_setting.channel_test_prompt_mode']
+      ),
+      channel_test_prompt: resolveChannelTestPrompt(
+        prompts,
+        defaults['monitor_setting.channel_test_prompt']
+      ),
+    },
+  }
+}
 
 const normalizeDefaults = (
   defaults: RoutingReliabilitySectionProps['defaultValues']
-): NormalizedRoutingReliabilityValues => ({
-  RetryTimes: defaults.RetryTimes ?? 0,
-  ChannelDisableThreshold: (defaults.ChannelDisableThreshold ?? '').trim(),
-  AutomaticDisableChannelEnabled: defaults.AutomaticDisableChannelEnabled,
-  AutomaticEnableChannelEnabled: defaults.AutomaticEnableChannelEnabled,
-  AutomaticDisableKeywords: normalizeLineEndings(
-    defaults.AutomaticDisableKeywords ?? ''
-  ),
-  AutomaticDisableStatusCodes: parseHttpStatusCodeRules(
-    defaults.AutomaticDisableStatusCodes ?? ''
-  ).normalized,
-  AutomaticRetryStatusCodes: parseHttpStatusCodeRules(
-    defaults.AutomaticRetryStatusCodes ?? ''
-  ).normalized,
-  'monitor_setting.auto_test_channel_enabled':
-    defaults['monitor_setting.auto_test_channel_enabled'],
-  'monitor_setting.auto_test_channel_minutes':
-    defaults['monitor_setting.auto_test_channel_minutes'],
-  'monitor_setting.channel_test_mode': normalizeChannelTestMode(
-    defaults['monitor_setting.channel_test_mode']
-  ),
-})
+): NormalizedRoutingReliabilityValues => {
+  const prompts = parseChannelTestPrompts(
+    defaults['monitor_setting.channel_test_prompts']
+  )
+  return {
+    RetryTimes: defaults.RetryTimes ?? 0,
+    ChannelDisableThreshold: (defaults.ChannelDisableThreshold ?? '').trim(),
+    AutomaticDisableChannelEnabled: defaults.AutomaticDisableChannelEnabled,
+    AutomaticEnableChannelEnabled: defaults.AutomaticEnableChannelEnabled,
+    AutomaticDisableKeywords: normalizeLineEndings(
+      defaults.AutomaticDisableKeywords ?? ''
+    ),
+    AutomaticDisableStatusCodes: parseHttpStatusCodeRules(
+      defaults.AutomaticDisableStatusCodes ?? ''
+    ).normalized,
+    AutomaticRetryStatusCodes: parseHttpStatusCodeRules(
+      defaults.AutomaticRetryStatusCodes ?? ''
+    ).normalized,
+    'monitor_setting.auto_test_channel_enabled':
+      defaults['monitor_setting.auto_test_channel_enabled'],
+    'monitor_setting.auto_test_channel_minutes':
+      defaults['monitor_setting.auto_test_channel_minutes'],
+    'monitor_setting.channel_test_mode': normalizeChannelTestMode(
+      defaults['monitor_setting.channel_test_mode']
+    ),
+    'monitor_setting.channel_test_prompts': JSON.stringify(prompts),
+    'monitor_setting.channel_test_prompt_mode': normalizeChannelTestPromptMode(
+      defaults['monitor_setting.channel_test_prompt_mode']
+    ),
+    'monitor_setting.channel_test_prompt': resolveChannelTestPrompt(
+      prompts,
+      defaults['monitor_setting.channel_test_prompt']
+    ),
+  }
+}
 
 const normalizeFormValues = (
   values: RoutingReliabilityFormValues
-): NormalizedRoutingReliabilityValues => ({
-  RetryTimes: values.RetryTimes,
-  ChannelDisableThreshold: values.ChannelDisableThreshold.trim(),
-  AutomaticDisableChannelEnabled: values.AutomaticDisableChannelEnabled,
-  AutomaticEnableChannelEnabled: values.AutomaticEnableChannelEnabled,
-  AutomaticDisableKeywords: normalizeLineEndings(
-    values.AutomaticDisableKeywords
-  ),
-  AutomaticDisableStatusCodes: parseHttpStatusCodeRules(
-    values.AutomaticDisableStatusCodes
-  ).normalized,
-  AutomaticRetryStatusCodes: parseHttpStatusCodeRules(
-    values.AutomaticRetryStatusCodes
-  ).normalized,
-  'monitor_setting.auto_test_channel_enabled':
-    values.monitor_setting.auto_test_channel_enabled,
-  'monitor_setting.auto_test_channel_minutes':
-    values.monitor_setting.auto_test_channel_minutes,
-  'monitor_setting.channel_test_mode': values.monitor_setting.channel_test_mode,
-})
+): NormalizedRoutingReliabilityValues => {
+  const prompts = normalizeChannelTestPromptLines(
+    values.monitor_setting.channel_test_prompts
+  )
+  return {
+    RetryTimes: values.RetryTimes,
+    ChannelDisableThreshold: values.ChannelDisableThreshold.trim(),
+    AutomaticDisableChannelEnabled: values.AutomaticDisableChannelEnabled,
+    AutomaticEnableChannelEnabled: values.AutomaticEnableChannelEnabled,
+    AutomaticDisableKeywords: normalizeLineEndings(
+      values.AutomaticDisableKeywords
+    ),
+    AutomaticDisableStatusCodes: parseHttpStatusCodeRules(
+      values.AutomaticDisableStatusCodes
+    ).normalized,
+    AutomaticRetryStatusCodes: parseHttpStatusCodeRules(
+      values.AutomaticRetryStatusCodes
+    ).normalized,
+    'monitor_setting.auto_test_channel_enabled':
+      values.monitor_setting.auto_test_channel_enabled,
+    'monitor_setting.auto_test_channel_minutes':
+      values.monitor_setting.auto_test_channel_minutes,
+    'monitor_setting.channel_test_mode':
+      values.monitor_setting.channel_test_mode,
+    'monitor_setting.channel_test_prompts': JSON.stringify(prompts),
+    'monitor_setting.channel_test_prompt_mode':
+      values.monitor_setting.channel_test_prompt_mode,
+    'monitor_setting.channel_test_prompt': resolveChannelTestPrompt(
+      prompts,
+      values.monitor_setting.channel_test_prompt
+    ),
+  }
+}
 
 export function RoutingReliabilitySection({
   defaultValues,
@@ -250,6 +351,16 @@ export function RoutingReliabilitySection({
   const autoDisableStatusCodes = form.watch('AutomaticDisableStatusCodes')
   const autoRetryStatusCodes = form.watch('AutomaticRetryStatusCodes')
   const channelTestMode = form.watch('monitor_setting.channel_test_mode')
+  const channelTestPromptMode = form.watch(
+    'monitor_setting.channel_test_prompt_mode'
+  )
+  const channelTestPromptText = form.watch(
+    'monitor_setting.channel_test_prompts'
+  )
+  const channelTestPrompts = useMemo(
+    () => normalizeChannelTestPromptLines(channelTestPromptText),
+    [channelTestPromptText]
+  )
   const autoDisableParsed = useMemo(
     () => parseHttpStatusCodeRules(autoDisableStatusCodes),
     [autoDisableStatusCodes]
@@ -477,6 +588,129 @@ export function RoutingReliabilitySection({
                   </SettingsSwitchItem>
                 )}
               />
+            </div>
+
+            <div className='flex min-w-0 flex-col gap-4 pt-2'>
+              <div className='flex flex-col gap-1'>
+                <h5 className='text-sm font-medium'>{t('Test prompts')}</h5>
+                <p className='text-muted-foreground text-sm'>
+                  {t(
+                    'Used only for text-generation channel tests, not regular user chats.'
+                  )}
+                </p>
+              </div>
+              <div className='grid min-w-0 gap-6 lg:grid-cols-2'>
+                <FormField
+                  control={form.control}
+                  name='monitor_setting.channel_test_prompts'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Prompt list')}</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          rows={6}
+                          placeholder={t('One prompt per line')}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        {t(
+                          'Chat Completions, Claude, Gemini, and Responses channel tests use this list.'
+                        )}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className='flex min-w-0 flex-col gap-6'>
+                  <FormField
+                    control={form.control}
+                    name='monitor_setting.channel_test_prompt_mode'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Prompt selection mode')}</FormLabel>
+                        <Select
+                          items={[
+                            { value: 'fixed', label: t('Fixed prompt') },
+                            { value: 'random', label: t('Random prompt') },
+                          ]}
+                          value={field.value}
+                          onValueChange={field.onChange}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent alignItemWithTrigger={false}>
+                            <SelectGroup>
+                              <SelectItem value='fixed'>
+                                {t('Fixed prompt')}
+                              </SelectItem>
+                              <SelectItem value='random'>
+                                {t('Random prompt')}
+                              </SelectItem>
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          {channelTestPromptMode === 'random'
+                            ? t('Choose one configured prompt for each test.')
+                            : t('Always use the selected prompt.')}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {channelTestPromptMode === 'fixed' && (
+                    <FormField
+                      control={form.control}
+                      name='monitor_setting.channel_test_prompt'
+                      render={({ field }) => {
+                        const selectedPrompt = resolveChannelTestPrompt(
+                          channelTestPrompts,
+                          field.value
+                        )
+                        return (
+                          <FormItem>
+                            <FormLabel>{t('Fixed prompt')}</FormLabel>
+                            <Select
+                              items={channelTestPrompts.map((prompt) => ({
+                                value: prompt,
+                                label: prompt,
+                              }))}
+                              value={selectedPrompt}
+                              onValueChange={field.onChange}
+                              disabled={channelTestPrompts.length === 0}
+                            >
+                              <FormControl>
+                                <SelectTrigger className='min-w-0'>
+                                  <SelectValue />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent alignItemWithTrigger={false}>
+                                <SelectGroup>
+                                  {channelTestPrompts.map((prompt) => (
+                                    <SelectItem key={prompt} value={prompt}>
+                                      {prompt}
+                                    </SelectItem>
+                                  ))}
+                                </SelectGroup>
+                              </SelectContent>
+                            </Select>
+                            <FormDescription>
+                              {t('Select the prompt used in fixed mode.')}
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )
+                      }}
+                    />
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 

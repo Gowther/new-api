@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -25,6 +27,15 @@ func TestShouldRetryKeepsSpecificChannelPinned(t *testing.T) {
 	specificContext, _ := gin.CreateTestContext(httptest.NewRecorder())
 	specificContext.Set("specific_channel_id", "11")
 	require.False(t, shouldRetry(specificContext, channelErr, 1))
+}
+
+func TestShouldRetryKeepsTemporaryRoutingTargetPinned(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	channelErr := types.NewError(errors.New("channel failed"), types.ErrorCodeChannelInvalidKey)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	common.SetContextKey(ctx, constant.ContextKeyModelRoutingOverride, true)
+
+	require.False(t, shouldRetry(ctx, channelErr, 1))
 }
 
 func TestGetChannelSeedsPreviousPriorityFromInitialSelection(t *testing.T) {

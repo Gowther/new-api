@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/cachex"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/types"
@@ -548,6 +550,9 @@ func ApplyChannelAffinityOverrideTemplate(c *gin.Context, paramOverride map[stri
 }
 
 func GetPreferredChannelByAffinity(c *gin.Context, modelName string, usingGroup string) (int, bool) {
+	if modelRoutingOverrideApplies(c, modelName) {
+		return 0, false
+	}
 	setting := operation_setting.GetChannelAffinitySetting()
 	if setting == nil || !setting.Enabled {
 		return 0, false
@@ -621,6 +626,18 @@ func GetPreferredChannelByAffinity(c *gin.Context, modelName string, usingGroup 
 		return 0, false
 	}
 	return 0, false
+}
+
+func modelRoutingOverrideApplies(c *gin.Context, modelName string) bool {
+	_, found, err := model.GetModelRoutingOverrideTarget(modelName)
+	if err != nil {
+		common.SysError("failed to resolve model routing override: " + err.Error())
+		return true
+	}
+	if found && c != nil {
+		common.SetContextKey(c, constant.ContextKeyModelRoutingOverride, true)
+	}
+	return found
 }
 
 func ShouldSkipRetryAfterChannelAffinityFailure(c *gin.Context) bool {
@@ -711,14 +728,17 @@ func AppendChannelAffinityAdminInfo(c *gin.Context, adminInfo map[string]interfa
 }
 
 func RecordChannelAffinity(c *gin.Context, channelID int) {
-	if channelID <= 0 {
+	if c == nil || channelID <= 0 {
+		return
+	}
+	if common.GetContextKeyBool(c, constant.ContextKeyModelRoutingOverride) {
 		return
 	}
 	setting := operation_setting.GetChannelAffinitySetting()
 	if setting == nil || !setting.Enabled {
 		return
 	}
-	if setting.SwitchOnSuccess && c != nil {
+	if setting.SwitchOnSuccess {
 		if successChannelID := c.GetInt("channel_id"); successChannelID > 0 {
 			channelID = successChannelID
 		}

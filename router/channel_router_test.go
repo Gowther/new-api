@@ -35,6 +35,30 @@ func TestChannelQuickMappingPreviewRouteUsesChannelWritePermission(t *testing.T)
 	assertChannelRoutePermission(t, http.MethodPost, "/quick_mapping/preview", authz.ChannelWrite, controller.PreviewChannelQuickMappings)
 }
 
+func TestModelRoutingOverrideRoutesUseChannelPermissions(t *testing.T) {
+	assertChannelRoutePermission(
+		t,
+		http.MethodGet,
+		"/model_routing_override",
+		authz.ChannelRead,
+		controller.GetModelRoutingOverride,
+	)
+	assertChannelRoutePermission(
+		t,
+		http.MethodPut,
+		"/model_routing_override",
+		authz.ChannelWrite,
+		controller.SetModelRoutingOverride,
+	)
+	assertChannelRoutePermission(
+		t,
+		http.MethodDelete,
+		"/model_routing_override",
+		authz.ChannelWrite,
+		controller.DeleteModelRoutingOverride,
+	)
+}
+
 func TestChannelStatusRoutesRegisterWithoutConflict(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()

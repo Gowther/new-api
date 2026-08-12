@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Analytics02Icon } from '@hugeicons/core-free-icons'
+import { Analytics02Icon, LockIcon, UndoIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -70,9 +70,13 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import {
+  type ModelRoutingOverride,
   deleteChannel,
+  deleteModelRoutingOverride,
   getChannelModelVendorGroups,
   getChannels,
+  getModelRoutingOverride,
+  setModelRoutingOverride,
   updateChannel,
   updateChannelStatus,
 } from '@/features/channels/api'
@@ -596,6 +600,11 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     ADMIN_PERMISSION_RESOURCES.CHANNEL,
     ADMIN_PERMISSION_ACTIONS.SENSITIVE_WRITE
   )
+  const canEditRouting = hasPermission(
+    currentUser,
+    ADMIN_PERMISSION_RESOURCES.CHANNEL,
+    ADMIN_PERMISSION_ACTIONS.WRITE
+  )
   const [providerSearch, setProviderSearch] = useState('')
   const [modelSearch, setModelSearch] = useState('')
   const [showAllModels, setShowAllModels] = useState(() =>
@@ -620,6 +629,12 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     Record<number, boolean>
   >({})
   const [isSaving, setIsSaving] = useState(false)
+  const [routingOverrideCandidate, setRoutingOverrideCandidate] =
+    useState<Channel | null>(null)
+  const [isUpdatingRoutingOverride, setIsUpdatingRoutingOverride] =
+    useState(false)
+  const [restoreRoutingOverrideOpen, setRestoreRoutingOverrideOpen] =
+    useState(false)
   const [providerDefaultSelections, setProviderDefaultSelections] =
     useState<StoredProviderDefaultSelections>(() =>
       readStoredProviderDefaultSelections()
@@ -635,6 +650,21 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     queryKey: ['model-routing', 'channels'],
     queryFn: fetchAllChannels,
     staleTime: 30 * 1000,
+  })
+
+  const routingOverrideQuery = useQuery({
+    queryKey: ['model-routing', 'override', selectedModelName],
+    queryFn: async () => {
+      const response = await getModelRoutingOverride(selectedModelName ?? '')
+      if (!response.success) {
+        throw new Error(
+          response.message || t('Failed to load temporary routing mode')
+        )
+      }
+      return response.data ?? null
+    },
+    enabled: Boolean(selectedModelName),
+    staleTime: 10 * 1000,
   })
 
   const pricingModels = pricingQuery.data?.models ?? EMPTY_PRICING_MODELS
@@ -795,8 +825,15 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
   }, [channelsForModel])
   const enabledChannelCount = routingRanks.size
   const disabledChannelCount = channelsForModel.length - enabledChannelCount
+  const routingOverride: ModelRoutingOverride | null =
+    routingOverrideQuery.data ?? null
+  const isRoutingOverrideTarget = (channelId: number) =>
+    routingOverride?.channel_id === channelId
 
-  const isLoading = pricingQuery.isLoading || channelsQuery.isLoading
+  const isLoading =
+    pricingQuery.isLoading ||
+    channelsQuery.isLoading ||
+    (Boolean(selectedModelName) && routingOverrideQuery.isLoading)
   const isFetching = pricingQuery.isFetching || channelsQuery.isFetching
   const changedCount = getChangedCount(routingChanges)
   let createChannelButtonTitle: string | undefined
@@ -906,8 +943,15 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
   ])
 
   const refreshRoutingData = useCallback(async () => {
-    await Promise.all([pricingQuery.refetch(), channelsQuery.refetch()])
-  }, [channelsQuery, pricingQuery])
+    const overrideRefresh = selectedModelName
+      ? routingOverrideQuery.refetch()
+      : Promise.resolve()
+    await Promise.all([
+      pricingQuery.refetch(),
+      channelsQuery.refetch(),
+      overrideRefresh,
+    ])
+  }, [channelsQuery, pricingQuery, routingOverrideQuery, selectedModelName])
 
   const handleProviderSelect = (providerKey: string) => {
     setSelectedProviderKey(providerKey)
@@ -974,6 +1018,70 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
   const handleDeleteDialogOpenChange = (open: boolean) => {
     if (open || isDeletingChannel) return
     setDeletingChannel(null)
+  }
+
+  const handleRoutingOverrideDialogOpenChange = (open: boolean) => {
+    if (open || isUpdatingRoutingOverride) return
+    setRoutingOverrideCandidate(null)
+  }
+
+  const handleConfirmRoutingOverride = async () => {
+    if (!selectedModelName || !routingOverrideCandidate) return
+
+    setIsUpdatingRoutingOverride(true)
+    try {
+      const response = await setModelRoutingOverride(
+        selectedModelName,
+        routingOverrideCandidate.id
+      )
+      if (!response.success) {
+        throw new Error(
+          response.message || t('Failed to update temporary routing mode')
+        )
+      }
+      queryClient.setQueryData(
+        ['model-routing', 'override', selectedModelName],
+        response.data ?? null
+      )
+      setRoutingOverrideCandidate(null)
+      toast.success(t('Temporary single-channel mode enabled'))
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t('Failed to update temporary routing mode')
+      )
+    } finally {
+      setIsUpdatingRoutingOverride(false)
+    }
+  }
+
+  const handleRestoreRoutingOverride = async () => {
+    if (!selectedModelName) return
+
+    setIsUpdatingRoutingOverride(true)
+    try {
+      const response = await deleteModelRoutingOverride(selectedModelName)
+      if (!response.success) {
+        throw new Error(
+          response.message || t('Failed to update temporary routing mode')
+        )
+      }
+      queryClient.setQueryData(
+        ['model-routing', 'override', selectedModelName],
+        null
+      )
+      setRestoreRoutingOverrideOpen(false)
+      toast.success(t('Normal routing restored'))
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t('Failed to update temporary routing mode')
+      )
+    } finally {
+      setIsUpdatingRoutingOverride(false)
+    }
   }
 
   const handleRoutingFieldChange = (
@@ -1486,19 +1594,63 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                 </div>
               ) : null}
             </div>
-            <Button
-              type='button'
-              variant='outline'
-              size='sm'
-              onClick={openChannelCreator}
-              disabled={!selectedModel || !canEditSensitive}
-              title={createChannelButtonTitle}
-              aria-label={t('Create Channel')}
-            >
-              <Plus className='size-4' />
-              <span className='max-sm:hidden'>{t('Create Channel')}</span>
-            </Button>
+            <div className='flex shrink-0 items-center gap-2'>
+              {routingOverride ? (
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  onClick={() => setRestoreRoutingOverrideOpen(true)}
+                  disabled={!canEditRouting || isUpdatingRoutingOverride}
+                >
+                  <HugeiconsIcon icon={UndoIcon} data-icon='inline-start' />
+                  <span className='max-sm:hidden'>
+                    {t('Restore normal routing')}
+                  </span>
+                </Button>
+              ) : null}
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                onClick={openChannelCreator}
+                disabled={!selectedModel || !canEditSensitive}
+                title={createChannelButtonTitle}
+                aria-label={t('Create Channel')}
+              >
+                <Plus data-icon='inline-start' />
+                <span className='max-sm:hidden'>{t('Create Channel')}</span>
+              </Button>
+            </div>
           </div>
+
+          {routingOverride ? (
+            <div className='bg-muted/30 border-b px-3 py-2 text-sm'>
+              <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
+                <StatusBadge
+                  label={t('Temporary single-channel mode')}
+                  variant='warning'
+                  size='sm'
+                  copyable={false}
+                />
+                <span className='min-w-0 truncate font-medium'>
+                  {routingOverride.channel_name ||
+                    `#${routingOverride.channel_id}`}
+                </span>
+                <span className='text-muted-foreground font-mono text-xs'>
+                  ID:{routingOverride.channel_id}
+                </span>
+                <span className='text-muted-foreground text-xs'>
+                  {t('Covered groups')}: {routingOverride.groups.join(', ')}
+                </span>
+              </div>
+              <div className='text-muted-foreground mt-1 text-xs'>
+                {t(
+                  'Automatic requests for this model use only this channel. Requests that explicitly specify a channel are unaffected.'
+                )}
+              </div>
+            </div>
+          ) : null}
 
           <div className='min-h-0 flex-1 overflow-auto'>
             {isLoading && <LoadingState />}
@@ -1509,11 +1661,11 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
               <EmptyState title={t('No channels support this model')} />
             )}
             {!isLoading && selectedModel && channelsForModel.length > 0 && (
-              <Table className='min-w-[62rem] table-fixed'>
+              <Table className='min-w-[64rem] table-fixed'>
                 <TableHeader>
                   <TableRow>
                     <TableHead className='w-80'>{t('Channel')}</TableHead>
-                    <TableHead className='w-32'>{t('Actions')}</TableHead>
+                    <TableHead className='w-40'>{t('Actions')}</TableHead>
                     <TableHead className='w-28'>{t('Type')}</TableHead>
                     <TableHead className='w-24'>{t('Group')}</TableHead>
                     <TableHead className='w-36'>{t('Status')}</TableHead>
@@ -1744,7 +1896,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className='w-32'>
+                        <TableCell className='w-40'>
                           <div className='flex items-center gap-1'>
                             <TooltipProvider delay={100}>
                               <Tooltip>
@@ -1774,6 +1926,47 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                                 </TooltipTrigger>
                                 <TooltipContent side='top'>
                                   {t('Open usage logs')}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            <TooltipProvider delay={100}>
+                              <Tooltip>
+                                <TooltipTrigger
+                                  render={
+                                    <Button
+                                      type='button'
+                                      variant='ghost'
+                                      size='icon-sm'
+                                      className={cn(
+                                        'shrink-0',
+                                        isRoutingOverrideTarget(channel.id) &&
+                                          'text-warning'
+                                      )}
+                                      title={t(
+                                        'Use only this channel temporarily'
+                                      )}
+                                      aria-label={`${t('Use only this channel temporarily')}: ${channel.name}`}
+                                      disabled={
+                                        !canEditRouting ||
+                                        !isEnabled ||
+                                        isRoutingOverrideTarget(channel.id) ||
+                                        isUpdatingRoutingOverride
+                                      }
+                                      onClick={() =>
+                                        setRoutingOverrideCandidate(channel)
+                                      }
+                                    />
+                                  }
+                                >
+                                  <HugeiconsIcon
+                                    icon={LockIcon}
+                                    strokeWidth={2}
+                                  />
+                                </TooltipTrigger>
+                                <TooltipContent side='top'>
+                                  {isRoutingOverrideTarget(channel.id)
+                                    ? t('Temporary routing target')
+                                    : t('Use only this channel temporarily')}
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
@@ -1842,13 +2035,14 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                             {channelStatusBadgeWithDetails}
                           </div>
                         </TableCell>
-                        <TableCell className='sticky right-0 w-48 bg-background p-0'>
+                        <TableCell className='bg-background sticky right-0 w-48 p-0'>
                           {/* Keep the pinned column opaque and in sync with the
                               row tint so scrolled columns do not show through. */}
                           <div
                             className={cn(
                               'grid grid-cols-2 gap-2 p-2',
-                              channel.status === CHANNEL_STATUS.MANUAL_DISABLED &&
+                              channel.status ===
+                                CHANNEL_STATUS.MANUAL_DISABLED &&
                                 'bg-destructive/5 hover:bg-destructive/10',
                               channel.status === CHANNEL_STATUS.AUTO_DISABLED &&
                                 'bg-warning/5 hover:bg-warning/10',
@@ -1921,6 +2115,35 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
           onOpenChange={handleChannelEditorOpenChange}
         />
       </ChannelsProvider>
+      <ConfirmDialog
+        open={routingOverrideCandidate !== null}
+        onOpenChange={handleRoutingOverrideDialogOpenChange}
+        title={t('Enable temporary single-channel mode?')}
+        desc={t(
+          'Automatic requests for model "{{model}}" will use only channel "{{channel}}" in every group supported by that channel. Explicit channel selection is unaffected.',
+          {
+            model: selectedModelName ?? '',
+            channel: routingOverrideCandidate?.name ?? '',
+          }
+        )}
+        confirmText={t('Enable temporary mode')}
+        isLoading={isUpdatingRoutingOverride}
+        handleConfirm={handleConfirmRoutingOverride}
+      />
+      <ConfirmDialog
+        open={restoreRoutingOverrideOpen}
+        onOpenChange={(open) => {
+          if (!isUpdatingRoutingOverride) setRestoreRoutingOverrideOpen(open)
+        }}
+        title={t('Restore normal routing?')}
+        desc={t(
+          'The temporary routing rule for model "{{model}}" will be removed. Existing channel statuses, priorities, weights, and affinity data will remain unchanged.',
+          { model: selectedModelName ?? '' }
+        )}
+        confirmText={t('Restore normal routing')}
+        isLoading={isUpdatingRoutingOverride}
+        handleConfirm={handleRestoreRoutingOverride}
+      />
       <ConfirmDialog
         open={deletingChannel !== null}
         onOpenChange={handleDeleteDialogOpenChange}

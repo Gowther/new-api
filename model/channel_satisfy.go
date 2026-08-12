@@ -48,6 +48,16 @@ func GetEnabledChannelsForGroupsModel(groups []string, modelName string, request
 	return filtered, nil
 }
 
+func ChannelSupportsRequestPath(channel *Channel, requestPath string) bool {
+	if channel == nil {
+		return false
+	}
+	if requestPath == "" || channel.Type != constant.ChannelTypeAdvancedCustom {
+		return true
+	}
+	return channel.GetOtherSettings().AdvancedCustom != nil && channel.GetOtherSettings().AdvancedCustom.SupportsPath(requestPath)
+}
+
 func IsChannelEnabledForGroupModel(group string, modelName string, channelID int) bool {
 	if group == "" || modelName == "" || channelID <= 0 {
 		return false

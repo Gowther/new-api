@@ -332,6 +332,9 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
 		return false
 	}
+	if common.GetContextKeyBool(c, constant.ContextKeyModelRoutingOverride) {
+		return false
+	}
 	if _, ok := c.Get("specific_channel_id"); ok {
 		return false
 	}
@@ -621,6 +624,9 @@ func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError,
 		return false
 	}
 	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
+		return false
+	}
+	if common.GetContextKeyBool(c, constant.ContextKeyModelRoutingOverride) {
 		return false
 	}
 	if retryTimes <= 0 {

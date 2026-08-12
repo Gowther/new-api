@@ -37,10 +37,12 @@ import {
   IconDelete,
   IconEdit,
   IconHistogram,
+  IconLock,
   IconPlus,
   IconRefresh,
   IconSave,
   IconSearch,
+  IconUndo,
 } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
 
@@ -513,6 +515,18 @@ const fetchAllChannels = async () => {
   };
 };
 
+const fetchModelRoutingOverride = async (modelName) => {
+  if (!modelName) return null;
+  const res = await API.get('/api/channel/model_routing_override', {
+    params: { model: modelName },
+  });
+  const { success, message, data } = res.data || {};
+  if (!success) {
+    throw new Error(message || '加载临时路由模式失败');
+  }
+  return data || null;
+};
+
 const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
@@ -533,6 +547,9 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   const [showEditChannel, setShowEditChannel] = useState(false);
   const [deletingChannelId, setDeletingChannelId] = useState(null);
   const [testingChannelIds, setTestingChannelIds] = useState({});
+  const [routingOverride, setRoutingOverride] = useState(null);
+  const [routingOverrideLoading, setRoutingOverrideLoading] = useState(false);
+  const [routingOverrideUpdating, setRoutingOverrideUpdating] = useState(false);
   const [providerDefaultSelections, setProviderDefaultSelections] = useState(
     () => readStoredProviderDefaultSelections(),
   );
@@ -564,6 +581,30 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   useEffect(() => {
     loadRoutingData();
   }, [loadRoutingData]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRoutingOverride(null);
+    if (!selectedModelName) return undefined;
+
+    setRoutingOverrideLoading(true);
+    fetchModelRoutingOverride(selectedModelName)
+      .then((override) => {
+        if (!cancelled) setRoutingOverride(override);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          showError(error.message || t('加载临时路由模式失败'));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setRoutingOverrideLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedModelName, t]);
 
   const enabledChannelCountsByModel = useMemo(() => {
     const counts = new Map();
@@ -803,6 +844,20 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     writeStoredShowAllModels(checked);
   };
 
+  const refreshRoutingData = async () => {
+    await loadRoutingData();
+    if (!selectedModelName) return;
+
+    setRoutingOverrideLoading(true);
+    try {
+      setRoutingOverride(await fetchModelRoutingOverride(selectedModelName));
+    } catch (error) {
+      showError(error.message || t('加载临时路由模式失败'));
+    } finally {
+      setRoutingOverrideLoading(false);
+    }
+  };
+
   const handleSetDefaultModel = () => {
     if (!selectedRoutingSelection) return;
     const nextProviderDefaults = {
@@ -899,6 +954,73 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
         return next;
       });
     }
+  };
+
+  const handleEnableRoutingOverride = (channel) => {
+    if (!selectedModelName || channel.status !== CHANNEL_STATUS.ENABLED) return;
+
+    Modal.confirm({
+      title: t('开启临时单渠道模式？'),
+      content: t(
+        '模型“{{model}}”的自动请求将在该渠道支持的所有分组中仅使用渠道“{{channel}}”。显式指定渠道的请求不受影响。',
+        { model: selectedModelName, channel: channel.name },
+      ),
+      okText: t('开启临时模式'),
+      cancelText: t('取消'),
+      onOk: async () => {
+        setRoutingOverrideUpdating(true);
+        try {
+          const res = await API.put('/api/channel/model_routing_override', {
+            model: selectedModelName,
+            channel_id: channel.id,
+          });
+          const { success, message, data } = res.data || {};
+          if (!success) {
+            throw new Error(message || t('更新临时路由模式失败'));
+          }
+          setRoutingOverride(data || null);
+          showSuccess(t('已开启临时单渠道模式'));
+        } catch (error) {
+          showError(error.message || t('更新临时路由模式失败'));
+          throw error;
+        } finally {
+          setRoutingOverrideUpdating(false);
+        }
+      },
+    });
+  };
+
+  const handleRestoreRoutingOverride = () => {
+    if (!selectedModelName || !routingOverride) return;
+
+    Modal.confirm({
+      title: t('恢复正常路由？'),
+      content: t(
+        '将移除模型“{{model}}”的临时路由规则。现有渠道状态、优先级、权重和亲和性数据不会改变。',
+        { model: selectedModelName },
+      ),
+      okText: t('恢复正常路由'),
+      cancelText: t('取消'),
+      onOk: async () => {
+        setRoutingOverrideUpdating(true);
+        try {
+          const res = await API.delete('/api/channel/model_routing_override', {
+            params: { model: selectedModelName },
+          });
+          const { success, message } = res.data || {};
+          if (!success) {
+            throw new Error(message || t('更新临时路由模式失败'));
+          }
+          setRoutingOverride(null);
+          showSuccess(t('已恢复正常路由'));
+        } catch (error) {
+          showError(error.message || t('更新临时路由模式失败'));
+          throw error;
+        } finally {
+          setRoutingOverrideUpdating(false);
+        }
+      },
+    });
   };
 
   const handleDeleteChannel = (channel) => {
@@ -1140,8 +1262,10 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     {
       title: t('操作'),
       dataIndex: 'actions',
-      width: 190,
+      width: 225,
       render: (_, record) => {
+        const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
+        const isOverrideTarget = routingOverride?.channel_id === record.id;
         return (
           <div className='flex items-center gap-2'>
             <Tooltip content={t('打开使用日志')}>
@@ -1153,6 +1277,23 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                 title={t('打开使用日志')}
                 aria-label={`${t('打开使用日志')}: ${record.name}`}
                 onClick={() => openUsageLogs(selectedModelName, record.id)}
+              />
+            </Tooltip>
+            <Tooltip
+              content={
+                isOverrideTarget ? t('当前临时路由目标') : t('临时只使用此渠道')
+              }
+            >
+              <Button
+                theme={isOverrideTarget ? 'solid' : 'borderless'}
+                type={isOverrideTarget ? 'warning' : 'tertiary'}
+                size='small'
+                icon={<IconLock />}
+                aria-label={`${t('临时只使用此渠道')}: ${record.name}`}
+                disabled={
+                  !isEnabled || isOverrideTarget || routingOverrideUpdating
+                }
+                onClick={() => handleEnableRoutingOverride(record)}
               />
             </Tooltip>
             <Button
@@ -1274,7 +1415,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
         <div className='flex items-center gap-2'>
           <Button
             icon={<IconRefresh />}
-            onClick={loadRoutingData}
+            onClick={refreshRoutingData}
             disabled={loading || saving}
           >
             {t('刷新')}
@@ -1464,20 +1605,60 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                   </div>
                 ) : null}
               </div>
-              <Button
-                theme='light'
-                type='primary'
-                size='small'
-                icon={<IconPlus />}
-                disabled={!selectedModel}
-                onClick={openChannelCreator}
-              >
-                {t('添加渠道')}
-              </Button>
+              <div className='flex shrink-0 items-center gap-2'>
+                {routingOverride ? (
+                  <Button
+                    theme='light'
+                    type='warning'
+                    size='small'
+                    icon={<IconUndo />}
+                    loading={routingOverrideUpdating}
+                    onClick={handleRestoreRoutingOverride}
+                  >
+                    {t('恢复正常路由')}
+                  </Button>
+                ) : null}
+                <Button
+                  theme='light'
+                  type='primary'
+                  size='small'
+                  icon={<IconPlus />}
+                  disabled={!selectedModel}
+                  onClick={openChannelCreator}
+                >
+                  {t('添加渠道')}
+                </Button>
+              </div>
             </div>
           </div>
+          {routingOverride ? (
+            <div className='border-b border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)] px-3 py-2'>
+              <div className='flex flex-wrap items-center gap-2'>
+                <Tag color='orange' shape='circle' size='small'>
+                  {t('临时单渠道模式')}
+                </Tag>
+                <Text strong ellipsis>
+                  {routingOverride.channel_name ||
+                    `#${routingOverride.channel_id}`}
+                </Text>
+                <Text type='tertiary' size='small'>
+                  ID:{routingOverride.channel_id}
+                </Text>
+                <Text type='tertiary' size='small'>
+                  {t('覆盖分组')}: {routingOverride.groups.join(', ')}
+                </Text>
+              </div>
+              <div className='mt-1'>
+                <Text type='tertiary' size='small'>
+                  {t(
+                    '该模型的自动请求仅使用此渠道；显式指定渠道的请求不受影响。',
+                  )}
+                </Text>
+              </div>
+            </div>
+          ) : null}
           <div className='min-h-0 flex-1 overflow-auto p-2'>
-            {loading ? (
+            {loading || routingOverrideLoading ? (
               <div className='flex h-64 items-center justify-center'>
                 <Spin />
               </div>
@@ -1514,7 +1695,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                 }}
                 pagination={false}
                 size='small'
-                scroll={{ x: 1080 }}
+                scroll={{ x: 1120 }}
                 onRow={(record) => {
                   const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
                   const isTarget = record.id === targetChannelId;

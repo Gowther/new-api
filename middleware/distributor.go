@@ -216,14 +216,7 @@ func Distribute() func(c *gin.Context) {
 // Only Advanced Custom (type 58) channels are path-checked; all other channel types
 // always pass. A type-58 channel is usable only when one of its routes matches.
 func channelSupportsRequestPath(channel *model.Channel, requestPath string) bool {
-	if channel == nil {
-		return false
-	}
-	if channel.Type != constant.ChannelTypeAdvancedCustom {
-		return true
-	}
-	config := channel.GetOtherSettings().AdvancedCustom
-	return config != nil && config.SupportsPath(relaycommon.NormalizeRequestPath(requestPath))
+	return model.ChannelSupportsRequestPath(channel, relaycommon.NormalizeRequestPath(requestPath))
 }
 
 // getModelFromRequest 从请求中读取模型信息

@@ -83,6 +83,10 @@ func main() {
 	if common.MemoryCacheEnabled {
 		common.SysLog("memory cache enabled")
 		common.SysLog(fmt.Sprintf("sync frequency: %d seconds", common.SyncFrequency))
+		if err := model.InitModelRoutingOverrideCache(); err != nil {
+			common.FatalLog(fmt.Sprintf("InitModelRoutingOverrideCache failed: %s", err.Error()))
+		}
+		go model.SyncModelRoutingOverrideCache(common.SyncFrequency)
 
 		// Add panic recovery and retry for InitChannelCache
 		func() {

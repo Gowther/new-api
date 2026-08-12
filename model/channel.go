@@ -553,7 +553,11 @@ func BatchInsertChannels(channels []Channel) error {
 			}
 		}
 	}
-	return tx.Commit().Error
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+	InitChannelCache()
+	return nil
 }
 
 func BatchDeleteChannels(ids []int) error {

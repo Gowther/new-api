@@ -36,6 +36,9 @@ const ChannelsTable = (channelsData) => {
     channelCount,
     enableBatchDelete,
     compactMode,
+    routingOverride,
+    routingOverrideLoading,
+    routingOverrideUpdating,
     visibleColumns,
     setSelectedChannels,
     handlePageChange,
@@ -64,6 +67,7 @@ const ChannelsTable = (channelsData) => {
     openUpstreamUpdateModal,
     detectChannelUpstreamUpdates,
     onOpenCCSwitch,
+    toggleRoutingOverride,
   } = channelsData;
 
   // Get all columns
@@ -92,6 +96,10 @@ const ChannelsTable = (channelsData) => {
       openUpstreamUpdateModal,
       detectChannelUpstreamUpdates,
       onOpenCCSwitch,
+      routingOverride,
+      routingOverrideLoading,
+      routingOverrideUpdating,
+      toggleRoutingOverride,
     });
   }, [
     t,
@@ -117,6 +125,10 @@ const ChannelsTable = (channelsData) => {
     openUpstreamUpdateModal,
     detectChannelUpstreamUpdates,
     onOpenCCSwitch,
+    routingOverride,
+    routingOverrideLoading,
+    routingOverrideUpdating,
+    toggleRoutingOverride,
   ]);
 
   // Filter columns based on visibility settings

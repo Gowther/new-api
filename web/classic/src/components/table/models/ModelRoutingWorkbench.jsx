@@ -515,10 +515,9 @@ const fetchAllChannels = async () => {
   };
 };
 
-const fetchModelRoutingOverride = async (modelName) => {
-  if (!modelName) return null;
+const fetchModelRoutingOverride = async () => {
   const res = await API.get('/api/channel/model_routing_override', {
-    params: { model: modelName },
+    params: {},
   });
   const { success, message, data } = res.data || {};
   if (!success) {
@@ -585,10 +584,8 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   useEffect(() => {
     let cancelled = false;
     setRoutingOverride(null);
-    if (!selectedModelName) return undefined;
-
     setRoutingOverrideLoading(true);
-    fetchModelRoutingOverride(selectedModelName)
+    fetchModelRoutingOverride()
       .then((override) => {
         if (!cancelled) setRoutingOverride(override);
       })
@@ -604,7 +601,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     return () => {
       cancelled = true;
     };
-  }, [selectedModelName, t]);
+  }, [t]);
 
   const enabledChannelCountsByModel = useMemo(() => {
     const counts = new Map();
@@ -846,11 +843,9 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
 
   const refreshRoutingData = async () => {
     await loadRoutingData();
-    if (!selectedModelName) return;
-
     setRoutingOverrideLoading(true);
     try {
-      setRoutingOverride(await fetchModelRoutingOverride(selectedModelName));
+      setRoutingOverride(await fetchModelRoutingOverride());
     } catch (error) {
       showError(error.message || t('加载临时路由模式失败'));
     } finally {
@@ -944,6 +939,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
           item.id === channel.id ? { ...item, status } : item,
         ),
       );
+      setRoutingOverride(await fetchModelRoutingOverride());
       showSuccess(checked ? t('已启用') : t('已禁用'));
     } catch (error) {
       showError(error.message || t('更新失败'));
@@ -957,21 +953,35 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   };
 
   const handleEnableRoutingOverride = (channel) => {
-    if (!selectedModelName || channel.status !== CHANNEL_STATUS.ENABLED) return;
+    if (channel.status !== CHANNEL_STATUS.ENABLED) return;
+
+    const isSwitch = Boolean(routingOverride);
+    const currentTargetName = routingOverride
+      ? routingOverride.channel_name || `#${routingOverride.channel_id}`
+      : '';
+    const modelCount = splitCsv(channel.models).length;
 
     Modal.confirm({
-      title: t('开启临时单渠道模式？'),
-      content: t(
-        '模型“{{model}}”的自动请求将在该渠道支持的所有分组中仅使用渠道“{{channel}}”。显式指定渠道的请求不受影响。',
-        { model: selectedModelName, channel: channel.name },
-      ),
-      okText: t('开启临时模式'),
+      title: isSwitch ? t('切换临时单渠道模式？') : t('开启临时单渠道模式？'),
+      content: isSwitch
+        ? t(
+            '临时路由将从“{{from}}”切换到“{{to}}”。新渠道覆盖 {{count}} 个模型；不支持的模型恢复正常路由。显式指定渠道的请求不受影响。',
+            {
+              from: currentTargetName,
+              to: channel.name,
+              count: modelCount,
+            },
+          )
+        : t(
+            '渠道“{{channel}}”上的 {{count}} 个模型将临时仅使用该渠道；该渠道不支持的模型恢复正常路由。显式指定渠道的请求不受影响。',
+            { channel: channel.name, count: modelCount },
+          ),
+      okText: isSwitch ? t('切换临时模式') : t('开启临时模式'),
       cancelText: t('取消'),
       onOk: async () => {
         setRoutingOverrideUpdating(true);
         try {
           const res = await API.put('/api/channel/model_routing_override', {
-            model: selectedModelName,
             channel_id: channel.id,
           });
           const { success, message, data } = res.data || {};
@@ -979,7 +989,9 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
             throw new Error(message || t('更新临时路由模式失败'));
           }
           setRoutingOverride(data || null);
-          showSuccess(t('已开启临时单渠道模式'));
+          showSuccess(
+            isSwitch ? t('已切换临时单渠道模式') : t('已开启临时单渠道模式'),
+          );
         } catch (error) {
           showError(error.message || t('更新临时路由模式失败'));
           throw error;
@@ -991,22 +1003,23 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   };
 
   const handleRestoreRoutingOverride = () => {
-    if (!selectedModelName || !routingOverride) return;
+    if (!routingOverride) return;
 
     Modal.confirm({
       title: t('恢复正常路由？'),
       content: t(
-        '将移除模型“{{model}}”的临时路由规则。现有渠道状态、优先级、权重和亲和性数据不会改变。',
-        { model: selectedModelName },
+        '临时路由目标“{{channel}}”及其模型规则将被移除。现有渠道状态、优先级、权重和亲和性数据不会改变。',
+        {
+          channel:
+            routingOverride.channel_name || `#${routingOverride.channel_id}`,
+        },
       ),
       okText: t('恢复正常路由'),
       cancelText: t('取消'),
       onOk: async () => {
         setRoutingOverrideUpdating(true);
         try {
-          const res = await API.delete('/api/channel/model_routing_override', {
-            params: { model: selectedModelName },
-          });
+          const res = await API.delete('/api/channel/model_routing_override');
           const { success, message } = res.data || {};
           if (!success) {
             throw new Error(message || t('更新临时路由模式失败'));
@@ -1053,6 +1066,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
             delete next[channel.id];
             return next;
           });
+          setRoutingOverride(await fetchModelRoutingOverride());
           showSuccess(t('删除成功'));
         } catch (error) {
           showError(error.message || t('删除失败'));
@@ -1281,7 +1295,11 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
             </Tooltip>
             <Tooltip
               content={
-                isOverrideTarget ? t('当前临时路由目标') : t('临时只使用此渠道')
+                isOverrideTarget
+                  ? t('当前临时路由目标')
+                  : routingOverride
+                    ? t('切换临时单渠道模式')
+                    : t('临时单渠道模式')
               }
             >
               <Button
@@ -1289,7 +1307,13 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                 type={isOverrideTarget ? 'warning' : 'tertiary'}
                 size='small'
                 icon={<IconLock />}
-                aria-label={`${t('临时只使用此渠道')}: ${record.name}`}
+                aria-label={`${
+                  isOverrideTarget
+                    ? t('当前临时路由目标')
+                    : routingOverride
+                      ? t('切换临时单渠道模式')
+                      : t('临时单渠道模式')
+                }: ${record.name}`}
                 disabled={
                   !isEnabled || isOverrideTarget || routingOverrideUpdating
                 }
@@ -1645,13 +1669,18 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                   ID:{routingOverride.channel_id}
                 </Text>
                 <Text type='tertiary' size='small'>
+                  {t('{{count}} 个覆盖模型', {
+                    count: routingOverride.model_count,
+                  })}
+                </Text>
+                <Text type='tertiary' size='small'>
                   {t('覆盖分组')}: {routingOverride.groups.join(', ')}
                 </Text>
               </div>
               <div className='mt-1'>
                 <Text type='tertiary' size='small'>
                   {t(
-                    '该模型的自动请求仅使用此渠道；显式指定渠道的请求不受影响。',
+                    '所有覆盖模型的自动请求仅使用此渠道；显式指定渠道的请求不受影响。',
                   )}
                 </Text>
               </div>
@@ -1735,7 +1764,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
         </section>
       </div>
       <EditChannelModal
-        refresh={loadRoutingData}
+        refresh={refreshRoutingData}
         visible={showEditChannel}
         handleClose={closeChannelEditor}
         editingChannel={editingChannel}

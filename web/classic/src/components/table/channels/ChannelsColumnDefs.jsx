@@ -329,6 +329,10 @@ export const getChannelsColumns = ({
   openUpstreamUpdateModal,
   detectChannelUpstreamUpdates,
   onOpenCCSwitch,
+  routingOverride,
+  routingOverrideLoading,
+  routingOverrideUpdating,
+  toggleRoutingOverride,
 }) => {
   return [
     {
@@ -684,7 +688,23 @@ export const getChannelsColumns = ({
       render: (text, record, index) => {
         if (record.children === undefined) {
           const upstreamUpdateMeta = getUpstreamUpdateMeta(record);
+          const isRoutingOverrideTarget =
+            routingOverride?.channel_id === record.id;
+          const temporaryRoutingMenuName = isRoutingOverrideTarget
+            ? t('恢复正常路由')
+            : routingOverride
+              ? t('切换临时单渠道模式')
+              : t('临时单渠道模式');
           const moreMenuItems = [
+            {
+              node: 'item',
+              name: temporaryRoutingMenuName,
+              disabled:
+                routingOverrideLoading ||
+                routingOverrideUpdating ||
+                (!isRoutingOverrideTarget && record.status !== 1),
+              onClick: () => toggleRoutingOverride?.(record),
+            },
             {
               node: 'item',
               name: t('删除'),

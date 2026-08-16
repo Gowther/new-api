@@ -82,7 +82,9 @@ export type CodexCredentialRefreshResponse = {
 }
 
 export type ModelRoutingOverride = {
-  model: string
+  model?: string
+  models: string[]
+  model_count: number
   channel_id: number
   channel_name: string
   groups: string[]
@@ -160,33 +162,34 @@ export async function getChannelModelVendorGroups(
 }
 
 export async function getModelRoutingOverride(
-  model: string
+  model?: string
 ): Promise<ModelRoutingOverrideResponse> {
   const res = await api.get(
     '/api/channel/model_routing_override',
-    channelActionConfig({ params: { model } })
+    channelActionConfig(model ? { params: { model } } : {})
   )
   return res.data
 }
 
 export async function setModelRoutingOverride(
-  model: string,
   channelId: number
 ): Promise<ModelRoutingOverrideResponse> {
   const res = await api.put(
     '/api/channel/model_routing_override',
-    { model, channel_id: channelId },
+    { channel_id: channelId },
     channelActionConfig()
   )
   return res.data
 }
 
-export async function deleteModelRoutingOverride(
-  model: string
-): Promise<{ success: boolean; message?: string; data?: number }> {
+export async function deleteModelRoutingOverride(): Promise<{
+  success: boolean
+  message?: string
+  data?: number
+}> {
   const res = await api.delete(
     '/api/channel/model_routing_override',
-    channelActionConfig({ params: { model } })
+    channelActionConfig()
   )
   return res.data
 }

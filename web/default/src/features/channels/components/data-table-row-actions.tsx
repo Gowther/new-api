@@ -34,6 +34,8 @@ import {
   RefreshCw,
   Loader2,
   ArrowRightLeft,
+  LockKeyhole,
+  Undo2,
 } from 'lucide-react'
 import { useContext, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -59,9 +61,10 @@ import {
   ADMIN_PERMISSION_RESOURCES,
   hasPermission,
 } from '@/lib/admin-permissions'
-import { useAuthStore } from '@/stores/auth-store'
 import { ROLE } from '@/lib/roles'
+import { useAuthStore } from '@/stores/auth-store'
 
+import { deleteModelRoutingOverride, setModelRoutingOverride } from '../api'
 import { MODEL_FETCHABLE_TYPES } from '../constants'
 import {
   channelsQueryKeys,
@@ -84,12 +87,22 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const { t } = useTranslation()
   const layout = useContext(ChannelRowActionsLayoutContext)
   const channel = row.original
-  const { setOpen, setCurrentRow, upstream } = useChannels()
+  const {
+    setOpen,
+    setCurrentRow,
+    upstream,
+    routingOverride,
+    routingOverrideLoading,
+  } = useChannels()
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((s) => s.auth.user)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
+  const [temporaryRoutingConfirmOpen, setTemporaryRoutingConfirmOpen] =
+    useState(false)
+  const [isUpdatingTemporaryRouting, setIsUpdatingTemporaryRouting] =
+    useState(false)
 
   const isEnabled = isChannelEnabled(channel)
   const isMultiKey = isMultiKeyChannel(channel)
@@ -98,6 +111,18 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
     ADMIN_PERMISSION_RESOURCES.CHANNEL,
     ADMIN_PERMISSION_ACTIONS.SENSITIVE_WRITE
   )
+  const canEditRouting = hasPermission(
+    currentUser,
+    ADMIN_PERMISSION_RESOURCES.CHANNEL,
+    ADMIN_PERMISSION_ACTIONS.WRITE
+  )
+  const isTemporaryRoutingTarget = routingOverride?.channel_id === channel.id
+  const channelModelCount = new Set(
+    channel.models
+      .split(',')
+      .map((modelName) => modelName.trim())
+      .filter(Boolean)
+  ).size
 
   const handleEdit = () => {
     setCurrentRow(channel)
@@ -162,8 +187,49 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
     setIsTogglingStatus(true)
     try {
       await handleToggleChannelStatus(channel.id, channel.status, queryClient)
+      await queryClient.invalidateQueries({
+        queryKey: channelsQueryKeys.routingOverride(),
+      })
     } finally {
       setIsTogglingStatus(false)
+    }
+  }
+
+  const handleTemporaryRoutingConfirm = async () => {
+    if (!canEditRouting) return
+    setIsUpdatingTemporaryRouting(true)
+    try {
+      if (isTemporaryRoutingTarget) {
+        const response = await deleteModelRoutingOverride()
+        if (!response.success) {
+          throw new Error(
+            response.message || t('Failed to update temporary routing mode')
+          )
+        }
+        queryClient.setQueryData(channelsQueryKeys.routingOverride(), null)
+        toast.success(t('Normal routing restored'))
+      } else {
+        const response = await setModelRoutingOverride(channel.id)
+        if (!response.success) {
+          throw new Error(
+            response.message || t('Failed to update temporary routing mode')
+          )
+        }
+        queryClient.setQueryData(
+          channelsQueryKeys.routingOverride(),
+          response.data ?? null
+        )
+        toast.success(t('Temporary single-channel mode enabled'))
+      }
+      setTemporaryRoutingConfirmOpen(false)
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t('Failed to update temporary routing mode')
+      )
+    } finally {
+      setIsUpdatingTemporaryRouting(false)
     }
   }
 
@@ -172,6 +238,39 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
     statusIcon = <Loader2 className='size-4 animate-spin' />
   } else if (isEnabled) {
     statusIcon = <PowerOff className='size-4' />
+  }
+
+  let temporaryRoutingLabel = t('Use this channel temporarily for all models')
+  let temporaryRoutingIcon = <LockKeyhole />
+  let temporaryRoutingTitle = t('Enable temporary single-channel mode?')
+  let temporaryRoutingDescription = t(
+    'Automatic requests for the {{count}} model(s) on channel "{{channel}}" will use only this channel in its supported groups. Explicit channel selection is unaffected.',
+    { count: channelModelCount, channel: channel.name }
+  )
+  let temporaryRoutingConfirmText = t('Enable temporary mode')
+
+  if (isTemporaryRoutingTarget) {
+    temporaryRoutingLabel = t('Restore normal routing')
+    temporaryRoutingIcon = <Undo2 />
+    temporaryRoutingTitle = t('Restore normal routing?')
+    temporaryRoutingDescription = t(
+      'The temporary routing rule for channel "{{channel}}" and its models will be removed. Existing channel statuses, priorities, weights, and affinity data will remain unchanged.',
+      { channel: channel.name }
+    )
+    temporaryRoutingConfirmText = t('Restore normal routing')
+  } else if (routingOverride) {
+    temporaryRoutingLabel = t('Switch temporary mode to this channel')
+    temporaryRoutingIcon = <ArrowRightLeft />
+    temporaryRoutingTitle = t('Switch temporary single-channel mode?')
+    temporaryRoutingDescription = t(
+      'Temporary routing will switch from "{{from}}" to "{{to}}". The new channel covers {{count}} model(s); models it does not support return to normal routing. Explicit channel selection is unaffected.',
+      {
+        from: routingOverride.channel_name || `#${routingOverride.channel_id}`,
+        to: channel.name,
+        count: channelModelCount,
+      }
+    )
+    temporaryRoutingConfirmText = t('Switch temporary mode')
   }
 
   return (
@@ -346,6 +445,22 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             </DropdownMenuItem>
           )}
 
+          <DropdownMenuItem
+            disabled={
+              !canEditRouting ||
+              routingOverrideLoading ||
+              isUpdatingTemporaryRouting ||
+              (!isTemporaryRoutingTarget && !isEnabled)
+            }
+            onSelect={(event) => {
+              event.preventDefault()
+              setTemporaryRoutingConfirmOpen(true)
+            }}
+          >
+            {temporaryRoutingLabel}
+            <DropdownMenuShortcut>{temporaryRoutingIcon}</DropdownMenuShortcut>
+          </DropdownMenuItem>
+
           <DropdownMenuSeparator />
 
           {/* Copy Channel */}
@@ -417,11 +532,27 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         )}
         confirmText={t('Delete')}
         destructive
-        handleConfirm={() => {
+        handleConfirm={async () => {
           if (!canEditSensitive) return
-          handleDeleteChannel(channel.id, queryClient)
+          await handleDeleteChannel(channel.id, queryClient)
+          await queryClient.invalidateQueries({
+            queryKey: channelsQueryKeys.routingOverride(),
+          })
           setDeleteConfirmOpen(false)
         }}
+      />
+      <ConfirmDialog
+        open={temporaryRoutingConfirmOpen}
+        onOpenChange={(open) => {
+          if (!isUpdatingTemporaryRouting) {
+            setTemporaryRoutingConfirmOpen(open)
+          }
+        }}
+        title={temporaryRoutingTitle}
+        desc={temporaryRoutingDescription}
+        confirmText={temporaryRoutingConfirmText}
+        isLoading={isUpdatingTemporaryRouting}
+        handleConfirm={handleTemporaryRoutingConfirm}
       />
     </div>
   )

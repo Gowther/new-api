@@ -1805,6 +1805,9 @@ func ManageMultiKeys(c *gin.Context) {
 			common.ApiError(c, err)
 			return
 		}
+		if _, clearErr := model.DeleteModelRoutingOverridesByChannelIDs([]int{channel.Id}); clearErr != nil {
+			common.SysLog(fmt.Sprintf("failed to clear temporary routing mode: channel_id=%d, error=%v", channel.Id, clearErr))
+		}
 
 		model.InitChannelCache()
 		c.JSON(http.StatusOK, gin.H{
@@ -1917,6 +1920,9 @@ func ManageMultiKeys(c *gin.Context) {
 		if err != nil {
 			common.ApiError(c, err)
 			return
+		}
+		if _, clearErr := model.DeleteModelRoutingOverridesByChannelIDs([]int{channel.Id}); clearErr != nil {
+			common.SysLog(fmt.Sprintf("failed to clear temporary routing mode: channel_id=%d, error=%v", channel.Id, clearErr))
 		}
 
 		model.InitChannelCache()

@@ -41,6 +41,25 @@ import { parseUpstreamUpdateMeta } from './upstreamUpdateUtils';
 import { Modal, Button } from '@douyinfe/semi-ui';
 import { openCodexUsageModal } from '../../components/table/channels/modals/CodexUsageModal';
 
+const fetchModelRoutingOverride = async () => {
+  const res = await API.get('/api/channel/model_routing_override', {
+    params: {},
+  });
+  const { success, message, data } = res?.data || {};
+  if (!success) {
+    throw new Error(message || '加载临时路由模式失败');
+  }
+  return data || null;
+};
+
+const getChannelModelCount = (channel) =>
+  new Set(
+    String(channel?.models || '')
+      .split(',')
+      .map((model) => model.trim())
+      .filter(Boolean),
+  ).size;
+
 export const useChannelsData = () => {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
@@ -104,6 +123,20 @@ export const useChannelsData = () => {
   const [isStreamTest, setIsStreamTest] = useState(false);
   const [globalPassThroughEnabled, setGlobalPassThroughEnabled] =
     useState(false);
+  const [routingOverride, setRoutingOverride] = useState(null);
+  const [routingOverrideLoading, setRoutingOverrideLoading] = useState(false);
+  const [routingOverrideUpdating, setRoutingOverrideUpdating] = useState(false);
+
+  const refreshModelRoutingOverrideState = async () => {
+    setRoutingOverrideLoading(true);
+    try {
+      setRoutingOverride(await fetchModelRoutingOverride());
+    } catch (error) {
+      showError(error.message || t('加载临时路由模式失败'));
+    } finally {
+      setRoutingOverrideLoading(false);
+    }
+  };
 
   const fetchGlobalPassThroughEnabled = async () => {
     try {
@@ -191,6 +224,7 @@ export const useChannelsData = () => {
       .finally(() => {
         setLoading(false);
       });
+    refreshModelRoutingOverrideState();
     fetchGroups().then();
     loadChannelModels().then();
     fetchGlobalPassThroughEnabled().then();
@@ -496,18 +530,19 @@ export const useChannelsData = () => {
   // Refresh
   const refresh = async (page = activePage) => {
     const { searchKeyword, searchGroup, searchModel } = getFormValues();
-    if (searchKeyword === '' && searchGroup === '' && searchModel === '') {
-      await loadChannels(page, pageSize, idSort, enableTagMode);
-    } else {
-      await searchChannels(
-        enableTagMode,
-        activeTypeKey,
-        statusFilter,
-        page,
-        pageSize,
-        idSort,
-      );
-    }
+    const channelRefresh =
+      searchKeyword === '' && searchGroup === '' && searchModel === ''
+        ? loadChannels(page, pageSize, idSort, enableTagMode)
+        : searchChannels(
+            enableTagMode,
+            activeTypeKey,
+            statusFilter,
+            page,
+            pageSize,
+            idSort,
+          );
+
+    await Promise.all([channelRefresh, refreshModelRoutingOverrideState()]);
   };
 
   const upstreamUpdates = useChannelUpstreamUpdates({ t, refresh });
@@ -554,9 +589,85 @@ export const useChannelsData = () => {
         record.status = channel.status;
       }
       setChannels(newChannels);
+      if (action === 'delete' || action === 'disable') {
+        await refreshModelRoutingOverrideState();
+      }
     } else {
       showError(message);
     }
+  };
+
+  const toggleRoutingOverride = (channel) => {
+    if (!channel || channel.children !== undefined) return;
+
+    const isCurrentTarget = routingOverride?.channel_id === channel.id;
+    if (!isCurrentTarget && channel.status !== 1) return;
+
+    const channelModelCount = getChannelModelCount(channel);
+    const currentTargetName = routingOverride
+      ? routingOverride.channel_name || `#${routingOverride.channel_id}`
+      : '';
+    const isSwitch = Boolean(routingOverride) && !isCurrentTarget;
+    const title = isCurrentTarget
+      ? t('恢复正常路由？')
+      : isSwitch
+        ? t('切换临时单渠道模式？')
+        : t('开启临时单渠道模式？');
+    const content = isCurrentTarget
+      ? t(
+          '临时路由目标“{{channel}}”及其模型规则将被移除。现有渠道状态、优先级、权重和亲和性数据不会改变。',
+          { channel: currentTargetName },
+        )
+      : isSwitch
+        ? t(
+            '临时路由将从“{{from}}”切换到“{{to}}”。新渠道覆盖 {{count}} 个模型；不支持的模型恢复正常路由。显式指定渠道的请求不受影响。',
+            {
+              from: currentTargetName,
+              to: channel.name,
+              count: channelModelCount,
+            },
+          )
+        : t(
+            '渠道“{{channel}}”上的 {{count}} 个模型将临时仅使用该渠道；该渠道不支持的模型恢复正常路由。显式指定渠道的请求不受影响。',
+            { channel: channel.name, count: channelModelCount },
+          );
+
+    Modal.confirm({
+      title,
+      content,
+      okText: isCurrentTarget
+        ? t('恢复正常路由')
+        : isSwitch
+          ? t('切换临时模式')
+          : t('开启临时模式'),
+      cancelText: t('取消'),
+      onOk: async () => {
+        setRoutingOverrideUpdating(true);
+        try {
+          const res = isCurrentTarget
+            ? await API.delete('/api/channel/model_routing_override')
+            : await API.put('/api/channel/model_routing_override', {
+                channel_id: channel.id,
+              });
+          const { success, message, data } = res?.data || {};
+          if (!success) {
+            throw new Error(message || t('更新临时路由模式失败'));
+          }
+          setRoutingOverride(isCurrentTarget ? null : data || null);
+          showSuccess(
+            isCurrentTarget
+              ? t('已恢复正常路由')
+              : isSwitch
+                ? t('已切换临时单渠道模式')
+                : t('已开启临时单渠道模式'),
+          );
+        } catch (error) {
+          showError(error.message || t('更新临时路由模式失败'));
+        } finally {
+          setRoutingOverrideUpdating(false);
+        }
+      },
+    });
   };
 
   // Tag management
@@ -584,6 +695,9 @@ export const useChannelsData = () => {
         }
       }
       setChannels(newChannels);
+      if (action === 'disable' || action === 'delete') {
+        await refreshModelRoutingOverrideState();
+      }
     } else {
       showError(message);
     }
@@ -1301,6 +1415,9 @@ export const useChannelsData = () => {
     statusFilter,
     compactMode,
     globalPassThroughEnabled,
+    routingOverride,
+    routingOverrideLoading,
+    routingOverrideUpdating,
 
     // UI states
     showEdit,
@@ -1378,6 +1495,7 @@ export const useChannelsData = () => {
     refresh,
     manageChannel,
     manageTag,
+    toggleRoutingOverride,
     handlePageChange,
     handlePageSizeChange,
     copySelectedChannel,

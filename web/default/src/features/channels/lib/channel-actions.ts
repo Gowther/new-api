@@ -50,6 +50,8 @@ import type { ChannelTestResponse, CopyChannelParams } from '../types'
 export const channelsQueryKeys = {
   all: ['channels'] as const,
   lists: () => [...channelsQueryKeys.all, 'list'] as const,
+  routingOverride: () =>
+    [...channelsQueryKeys.lists(), 'routing-override'] as const,
   list: (params: Record<string, unknown>) =>
     [...channelsQueryKeys.lists(), params] as const,
   details: () => [...channelsQueryKeys.all, 'detail'] as const,
@@ -462,7 +464,9 @@ export async function handleBatchEnable(
       toast.error(response.message || i18next.t('Failed to enable channels'))
     } else if (failCount > 0) {
       toast.error(
-        i18next.t('{{count}} channel(s) failed to enable', { count: failCount })
+        i18next.t('{{count}} channel(s) failed to enable', {
+          count: failCount,
+        })
       )
     }
   } catch {

@@ -10,7 +10,8 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestModelRoutingOverrideLifecycle(t *testing.T) {
+func setupModelRoutingOverrideTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
 	originalDB := DB
 	originalMemoryCacheEnabled := common.MemoryCacheEnabled
 	originalMainDatabaseType := common.MainDatabaseType()
@@ -26,130 +27,198 @@ func TestModelRoutingOverrideLifecycle(t *testing.T) {
 	common.MemoryCacheEnabled = false
 	common.SetDatabaseTypes(common.DatabaseTypeSQLite, originalLogDatabaseType)
 	initCol()
+	require.NoError(t, db.AutoMigrate(&Channel{}, &Ability{}, &ModelRoutingOverride{}))
+
 	t.Cleanup(func() {
 		DB = originalDB
 		common.MemoryCacheEnabled = originalMemoryCacheEnabled
 		common.SetDatabaseTypes(originalMainDatabaseType, originalLogDatabaseType)
 		initCol()
-		if originalMemoryCacheEnabled {
-			require.NoError(t, InitModelRoutingOverrideCache())
+		if originalMemoryCacheEnabled && originalDB != nil {
+			_ = InitModelRoutingOverrideCache()
 		}
-		require.NoError(t, sqlDB.Close())
+		_ = sqlDB.Close()
 	})
+	return db
+}
 
-	require.NoError(t, db.AutoMigrate(&Channel{}, &Ability{}, &ModelRoutingOverride{}))
-	t.Cleanup(func() {
-		_, err := DeleteModelRoutingOverride("gpt-5.5")
-		require.NoError(t, err)
-	})
+func createRoutingTestChannel(t *testing.T, db *gorm.DB, id int, models string, groups string) Channel {
+	t.Helper()
 	channel := Channel{
-		Id:     41,
-		Name:   "temporary target",
-		Key:    "key-41",
+		Id:     id,
+		Name:   "routing channel",
+		Key:    "key",
 		Status: common.ChannelStatusEnabled,
-		Models: "gpt-5.5",
-		Group:  "default,premium",
+		Models: models,
+		Group:  groups,
 	}
 	require.NoError(t, db.Create(&channel).Error)
 	require.NoError(t, channel.UpdateAbilities(nil))
+	return channel
+}
 
-	overrides, err := SetModelRoutingOverride("gpt-5.5", channel.Id)
+func TestModelRoutingOverrideLifecycle(t *testing.T) {
+	db := setupModelRoutingOverrideTestDB(t)
+	channelA := createRoutingTestChannel(t, db, 41, "model-a,shared-model", "default,premium")
+	channelB := createRoutingTestChannel(t, db, 42, "shared-model,model-b", "default")
+
+	overrides, err := SetChannelModelRoutingOverride(channelA.Id)
 	require.NoError(t, err)
-	require.Len(t, overrides, 2)
-	assert.Equal(t, "default", overrides[0].Group)
-	assert.Equal(t, "premium", overrides[1].Group)
+	assert.Len(t, overrides, 4)
+	for _, override := range overrides {
+		assert.Equal(t, channelA.Id, override.ChannelId)
+	}
 
-	channelID, found, err := GetModelRoutingOverrideTarget("gpt-5.5")
+	for _, modelName := range []string{"model-a", "shared-model"} {
+		channelID, found, err := GetModelRoutingOverrideTarget(modelName)
+		require.NoError(t, err)
+		assert.True(t, found)
+		assert.Equal(t, channelA.Id, channelID)
+	}
+
+	// A channel status/ability outage does not silently leave temporary mode.
+	require.NoError(t, UpdateAbilityStatus(channelA.Id, false))
+	channelID, found, err := GetModelRoutingOverrideTarget("model-a")
 	require.NoError(t, err)
-	require.True(t, found)
-	assert.Equal(t, channel.Id, channelID)
+	assert.True(t, found)
+	assert.Equal(t, channelA.Id, channelID)
 
-	require.NoError(t, UpdateAbilityStatus(channel.Id, false))
-	channelID, found, err = GetModelRoutingOverrideTarget("gpt-5.5")
+	// Switching channels is atomic: old rules disappear, and only B's enabled
+	// model/group abilities are covered.
+	overrides, err = SetChannelModelRoutingOverride(channelB.Id)
 	require.NoError(t, err)
-	require.True(t, found)
-	assert.Equal(t, channel.Id, channelID, "a disabled target must leave the override in place so routing cannot fall back")
+	assert.Len(t, overrides, 2)
+	_, found, err = GetModelRoutingOverrideTarget("model-a")
+	require.NoError(t, err)
+	assert.False(t, found)
+	channelID, found, err = GetModelRoutingOverrideTarget("shared-model")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, channelB.Id, channelID)
+	channelID, found, err = GetModelRoutingOverrideTarget("model-b")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, channelB.Id, channelID)
 
-	deleted, err := DeleteModelRoutingOverride("gpt-5.5")
+	deleted, err := DeleteAllModelRoutingOverrides()
 	require.NoError(t, err)
 	assert.EqualValues(t, 2, deleted)
-	_, found, err = GetModelRoutingOverrideTarget("gpt-5.5")
+	_, found, err = GetModelRoutingOverrideTarget("shared-model")
+	require.NoError(t, err)
+	assert.False(t, found)
+}
+
+func TestModelRoutingOverrideSupportsNormalizedAbilities(t *testing.T) {
+	db := setupModelRoutingOverrideTestDB(t)
+	wildcardChannel := createRoutingTestChannel(t, db, 43, "gpt-4-gizmo-*", "default")
+
+	overrides, err := SetChannelModelRoutingOverride(wildcardChannel.Id)
+	require.NoError(t, err)
+	require.Len(t, overrides, 1)
+	assert.Equal(t, "gpt-4-gizmo-*", overrides[0].Model)
+
+	for _, modelName := range []string{"gpt-4-gizmo-alpha", "gpt-4-gizmo-beta"} {
+		channelID, found, err := GetModelRoutingOverrideTarget(modelName)
+		require.NoError(t, err)
+		assert.True(t, found)
+		assert.Equal(t, wildcardChannel.Id, channelID)
+	}
+
+	common.MemoryCacheEnabled = true
+	require.NoError(t, InitModelRoutingOverrideCache())
+	channelID, found, err := GetModelRoutingOverrideTarget("gpt-4-gizmo-alpha")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, wildcardChannel.Id, channelID)
+}
+
+func TestSetChannelModelRoutingOverrideRejectsUnsupportedOrDisabledChannel(t *testing.T) {
+	db := setupModelRoutingOverrideTestDB(t)
+	channel := Channel{Id: 52, Name: "candidate", Key: "key", Status: common.ChannelStatusEnabled}
+	require.NoError(t, db.Create(&channel).Error)
+	_, err := SetChannelModelRoutingOverride(channel.Id)
+	require.ErrorContains(t, err, "does not have any enabled model ability")
+
+	disabled := createRoutingTestChannel(t, db, 53, "gpt-4.1", "default")
+	require.NoError(t, db.Model(&Channel{}).Where("id = ?", disabled.Id).Update("status", common.ChannelStatusManuallyDisabled).Error)
+	_, err = SetChannelModelRoutingOverride(disabled.Id)
+	require.ErrorContains(t, err, "target channel is disabled")
+}
+
+func TestModelRoutingOverrideCleanupLifecycle(t *testing.T) {
+	db := setupModelRoutingOverrideTestDB(t)
+	channel := createRoutingTestChannel(t, db, 61, "cleanup-model", "default")
+	_, err := SetChannelModelRoutingOverride(channel.Id)
+	require.NoError(t, err)
+
+	assert.True(t, UpdateChannelStatus(channel.Id, "", common.ChannelStatusAutoDisabled, "automatic failure"))
+	_, found, err := GetModelRoutingOverrideTarget("cleanup-model")
+	require.NoError(t, err)
+	assert.True(t, found, "automatic disable must preserve temporary mode")
+
+	assert.True(t, UpdateChannelStatus(channel.Id, "", common.ChannelStatusManuallyDisabled, "manual operation"))
+	_, found, err = GetModelRoutingOverrideTarget("cleanup-model")
 	require.NoError(t, err)
 	assert.False(t, found)
 
-	wildcardChannel := Channel{
-		Id:     42,
-		Name:   "wildcard target",
-		Key:    "key-42",
-		Status: common.ChannelStatusEnabled,
-		Models: "gpt-4-gizmo-*",
-		Group:  "default",
-	}
-	require.NoError(t, db.Create(&wildcardChannel).Error)
-	require.NoError(t, wildcardChannel.UpdateAbilities(nil))
+	channel = createRoutingTestChannel(t, db, 62, "edit-model", "default")
+	_, err = SetChannelModelRoutingOverride(channel.Id)
+	require.NoError(t, err)
+	updated, err := GetChannelById(channel.Id, true)
+	require.NoError(t, err)
+	updated.Models = "edited-model"
+	require.NoError(t, updated.Update())
+	_, found, err = GetModelRoutingOverrideTarget("edit-model")
+	require.NoError(t, err)
+	assert.False(t, found)
 
-	overrides, err = SetModelRoutingOverride("gpt-4-gizmo-alpha", wildcardChannel.Id)
+	channel = createRoutingTestChannel(t, db, 63, "delete-model", "default")
+	_, err = SetChannelModelRoutingOverride(channel.Id)
 	require.NoError(t, err)
-	require.Len(t, overrides, 1)
-	assert.Equal(t, "gpt-4-gizmo-alpha", overrides[0].Model)
-	common.MemoryCacheEnabled = true
-	require.NoError(t, InitModelRoutingOverrideCache())
-
-	channelID, found, err = GetModelRoutingOverrideTarget("gpt-4-gizmo-alpha")
+	require.NoError(t, channel.Delete())
+	_, found, err = GetModelRoutingOverrideTarget("delete-model")
 	require.NoError(t, err)
-	require.True(t, found)
-	assert.Equal(t, wildcardChannel.Id, channelID)
-
-	_, found, err = GetModelRoutingOverrideTarget("gpt-4-gizmo-beta")
-	require.NoError(t, err)
-	assert.False(t, found, "a rule for one concrete model must not affect the whole normalized model family")
-
-	deleted, err = DeleteModelRoutingOverride("gpt-4-gizmo-beta")
-	require.NoError(t, err)
-	assert.Zero(t, deleted)
-	_, found, err = GetModelRoutingOverrideTarget("gpt-4-gizmo-alpha")
-	require.NoError(t, err)
-	assert.True(t, found)
-
-	deleted, err = DeleteModelRoutingOverride("gpt-4-gizmo-alpha")
-	require.NoError(t, err)
-	assert.EqualValues(t, 1, deleted)
+	assert.False(t, found)
 }
 
-func TestSetModelRoutingOverrideRejectsUnsupportedOrDisabledChannel(t *testing.T) {
-	originalDB := DB
-	originalMemoryCacheEnabled := common.MemoryCacheEnabled
-	originalMainDatabaseType := common.MainDatabaseType()
-	originalLogDatabaseType := common.LogDatabaseType()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	sqlDB.SetMaxOpenConns(1)
-	DB = db
-	common.MemoryCacheEnabled = false
-	common.SetDatabaseTypes(common.DatabaseTypeSQLite, originalLogDatabaseType)
-	initCol()
-	t.Cleanup(func() {
-		DB = originalDB
-		common.MemoryCacheEnabled = originalMemoryCacheEnabled
-		common.SetDatabaseTypes(originalMainDatabaseType, originalLogDatabaseType)
-		initCol()
-		require.NoError(t, sqlDB.Close())
-	})
-	require.NoError(t, db.AutoMigrate(&Channel{}, &Ability{}, &ModelRoutingOverride{}))
-	t.Cleanup(func() {
-		_, err := DeleteModelRoutingOverride("gpt-4.1")
-		require.NoError(t, err)
-	})
-
-	channel := Channel{Id: 52, Name: "candidate", Key: "key-52", Status: common.ChannelStatusEnabled, Models: "gpt-4.1", Group: "default"}
+func TestFailedManualDisablePreservesModelRoutingOverride(t *testing.T) {
+	db := setupModelRoutingOverrideTestDB(t)
+	channel := Channel{
+		Id:     64,
+		Name:   "multi-key routing channel",
+		Key:    "first-key\nsecond-key",
+		Status: common.ChannelStatusEnabled,
+		Models: "multi-key-model",
+		Group:  "default",
+		ChannelInfo: ChannelInfo{
+			IsMultiKey:   true,
+			MultiKeySize: 2,
+		},
+	}
 	require.NoError(t, db.Create(&channel).Error)
 	require.NoError(t, channel.UpdateAbilities(nil))
+	_, err := SetChannelModelRoutingOverride(channel.Id)
+	require.NoError(t, err)
 
-	_, err = SetModelRoutingOverride("gpt-5.5", channel.Id)
-	require.ErrorContains(t, err, "does not support model")
+	assert.False(t, UpdateChannelStatus(channel.Id, "missing-key", common.ChannelStatusManuallyDisabled, "manual operation"))
+	channelID, found, err := GetModelRoutingOverrideTarget("multi-key-model")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, channel.Id, channelID)
+}
+
+func TestRepeatedManualDisableClearsStaleModelRoutingOverride(t *testing.T) {
+	db := setupModelRoutingOverrideTestDB(t)
+	channel := createRoutingTestChannel(t, db, 65, "stale-model", "default")
 	require.NoError(t, db.Model(&Channel{}).Where("id = ?", channel.Id).Update("status", common.ChannelStatusManuallyDisabled).Error)
-	_, err = SetModelRoutingOverride("gpt-4.1", channel.Id)
-	require.ErrorContains(t, err, "target channel is disabled")
+	require.NoError(t, db.Create(&ModelRoutingOverride{
+		Model:     "stale-model",
+		Group:     "default",
+		ChannelId: channel.Id,
+	}).Error)
+
+	assert.False(t, UpdateChannelStatus(channel.Id, "", common.ChannelStatusManuallyDisabled, "manual operation"))
+	_, found, err := GetModelRoutingOverrideTarget("stale-model")
+	require.NoError(t, err)
+	assert.False(t, found)
 }

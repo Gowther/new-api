@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 /* eslint-disable react-refresh/only-export-components */
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import React, {
   createContext,
   useContext,
@@ -26,6 +26,7 @@ import React, {
   useMemo,
 } from 'react'
 
+import { getModelRoutingOverride, type ModelRoutingOverride } from '../api'
 import { useChannelUpstreamUpdates } from '../hooks/use-channel-upstream-updates'
 import { channelsQueryKeys } from '../lib'
 import type { Channel } from '../types'
@@ -66,6 +67,8 @@ type ChannelsContextType = {
   setBatchMode: (enabled: boolean) => void
   sensitiveVisible: boolean
   setSensitiveVisible: (visible: boolean) => void
+  routingOverride: ModelRoutingOverride | null
+  routingOverrideLoading: boolean
   upstream: UpstreamUpdateState
 }
 
@@ -95,6 +98,19 @@ export function ChannelsProvider({ children }: { children: React.ReactNode }) {
   const [sensitiveVisible, setSensitiveVisible] = useState(true)
 
   const queryClient = useQueryClient()
+  const routingOverrideQuery = useQuery({
+    queryKey: channelsQueryKeys.routingOverride(),
+    queryFn: async () => {
+      const response = await getModelRoutingOverride()
+      if (!response.success) {
+        throw new Error(
+          response.message || 'Failed to load temporary routing mode'
+        )
+      }
+      return response.data ?? null
+    },
+    staleTime: 10 * 1000,
+  })
   const refreshChannels = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: channelsQueryKeys.all })
   }, [queryClient])
@@ -119,6 +135,8 @@ export function ChannelsProvider({ children }: { children: React.ReactNode }) {
       setBatchMode,
       sensitiveVisible,
       setSensitiveVisible,
+      routingOverride: routingOverrideQuery.data ?? null,
+      routingOverrideLoading: routingOverrideQuery.isLoading,
       upstream,
     }),
     [
@@ -129,6 +147,8 @@ export function ChannelsProvider({ children }: { children: React.ReactNode }) {
       idSort,
       batchMode,
       sensitiveVisible,
+      routingOverrideQuery.data,
+      routingOverrideQuery.isLoading,
       upstream,
     ]
   )

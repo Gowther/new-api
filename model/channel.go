@@ -564,15 +564,22 @@ func BatchDeleteChannels(ids []int) error {
 	if len(ids) == 0 {
 		return nil
 	}
-	return DB.Transaction(func(tx *gorm.DB) error {
+	err := DB.Transaction(func(tx *gorm.DB) error {
 		_, err := deleteChannelsByIDs(tx, ids)
 		return err
 	})
+	if err != nil {
+		return err
+	}
+	return refreshModelRoutingOverrideCache()
 }
 
 func deleteChannelsByIDs(tx *gorm.DB, ids []int) (int64, error) {
 	var deleted int64
 	for _, chunk := range lo.Chunk(ids, 200) {
+		if _, err := deleteModelRoutingOverridesByChannelIDs(tx, chunk); err != nil {
+			return 0, err
+		}
 		if err := tx.Where("channel_id IN ?", chunk).Delete(&Ability{}).Error; err != nil {
 			return 0, err
 		}
@@ -635,16 +642,17 @@ func (channel *Channel) Insert() error {
 }
 
 func (channel *Channel) Update() error {
+	originChannel, err := GetChannelById(channel.Id, true)
+	if err != nil {
+		return err
+	}
 	// If this is a multi-key channel, recalculate MultiKeySize based on the current key list to avoid inconsistency after editing keys
 	if channel.ChannelInfo.IsMultiKey {
 		var keyStr string
 		if channel.Key != "" {
 			keyStr = channel.Key
 		} else {
-			// If key is not provided, read the existing key from the database
-			if existing, err := GetChannelById(channel.Id, true); err == nil {
-				keyStr = existing.Key
-			}
+			keyStr = originChannel.Key
 		}
 		// Parse the key list (supports newline separation or JSON array)
 		keys := []string{}
@@ -673,14 +681,18 @@ func (channel *Channel) Update() error {
 			}
 		}
 	}
-	var err error
-	err = DB.Model(channel).Updates(channel).Error
-	if err != nil {
+	if err := DB.Model(channel).Updates(channel).Error; err != nil {
 		return err
 	}
-	DB.Model(channel).First(channel, "id = ?", channel.Id)
-	err = channel.UpdateAbilities(nil)
-	return err
+	if err := DB.Model(channel).First(channel, "id = ?", channel.Id).Error; err != nil {
+		return err
+	}
+	if channel.Models != originChannel.Models || channel.Group != originChannel.Group {
+		if _, err := DeleteModelRoutingOverridesByChannelIDs([]int{channel.Id}); err != nil {
+			return err
+		}
+	}
+	return channel.UpdateAbilities(nil)
 }
 
 func UpdateChannelRoutingFields(id int, priority *int64, weight *uint) (*Channel, error) {
@@ -735,12 +747,19 @@ func (channel *Channel) UpdateBalance(balance float64) {
 }
 
 func (channel *Channel) Delete() error {
-	return DB.Transaction(func(tx *gorm.DB) error {
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		if _, err := deleteModelRoutingOverridesByChannelIDs(tx, []int{channel.Id}); err != nil {
+			return err
+		}
 		if err := tx.Where("channel_id = ?", channel.Id).Delete(&Ability{}).Error; err != nil {
 			return err
 		}
 		return tx.Delete(channel).Error
 	})
+	if err != nil {
+		return err
+	}
+	return refreshModelRoutingOverrideCache()
 }
 
 var channelStatusLock sync.Mutex
@@ -865,12 +884,32 @@ func hasEnabledMultiKey(keys []string, statusList map[int]int) bool {
 }
 
 func UpdateChannelStatus(channelId int, usingKey string, status int, reason string) bool {
-	return updateChannelStatus(channelId, usingKey, nil, status, reason)
+	changed := updateChannelStatus(channelId, usingKey, nil, status, reason)
+	shouldClearOverride := changed
+	if !shouldClearOverride && status == common.ChannelStatusManuallyDisabled {
+		// A repeated disable is a no-op, but it must still repair a stale
+		// temporary rule. Failed multi-key updates do not clear the rule while
+		// the channel itself remains enabled.
+		channel, err := GetChannelById(channelId, false)
+		shouldClearOverride = err == nil && channel.Status == common.ChannelStatusManuallyDisabled
+	}
+	if shouldClearOverride && status == common.ChannelStatusManuallyDisabled {
+		if _, err := DeleteModelRoutingOverridesByChannelIDs([]int{channelId}); err != nil {
+			common.SysLog(fmt.Sprintf("failed to clear temporary routing mode: channel_id=%d, error=%v", channelId, err))
+		}
+	}
+	return changed
 }
 
 // UpdateChannelStatusByKeyIndex updates one multi-key entry by stable key index.
 func UpdateChannelStatusByKeyIndex(channelId int, keyIndex int, status int, reason string) bool {
-	return updateChannelStatus(channelId, "", &keyIndex, status, reason)
+	changed := updateChannelStatus(channelId, "", &keyIndex, status, reason)
+	if changed && status == common.ChannelStatusManuallyDisabled {
+		if _, err := DeleteModelRoutingOverridesByChannelIDs([]int{channelId}); err != nil {
+			common.SysLog(fmt.Sprintf("failed to clear temporary routing mode: channel_id=%d, error=%v", channelId, err))
+		}
+	}
+	return changed
 }
 
 func updateChannelStatus(channelId int, usingKey string, keyIndex *int, status int, reason string) bool {
@@ -974,11 +1013,18 @@ func EnableChannelByTag(tag string) error {
 }
 
 func DisableChannelByTag(tag string) error {
+	var channelIDs []int
+	if err := DB.Model(&Channel{}).Where("tag = ?", tag).Pluck("id", &channelIDs).Error; err != nil {
+		return err
+	}
 	err := DB.Model(&Channel{}).Where("tag = ?", tag).Update("status", common.ChannelStatusManuallyDisabled).Error
 	if err != nil {
 		return err
 	}
-	err = UpdateAbilityStatusByTag(tag, false)
+	if err := UpdateAbilityStatusByTag(tag, false); err != nil {
+		return err
+	}
+	_, err = DeleteModelRoutingOverridesByChannelIDs(channelIDs)
 	return err
 }
 
@@ -1014,6 +1060,12 @@ func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *
 	if headerOverride != nil {
 		updateData.HeaderOverride = headerOverride
 	}
+	var affectedChannelIDs []int
+	if shouldReCreateAbilities {
+		if err := DB.Model(&Channel{}).Where("tag = ?", tag).Pluck("id", &affectedChannelIDs).Error; err != nil {
+			return err
+		}
+	}
 
 	err := DB.Model(&Channel{}).Where("tag = ?", tag).Updates(updateData).Error
 	if err != nil {
@@ -1028,6 +1080,9 @@ func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *
 					common.SysLog(fmt.Sprintf("failed to update abilities: channel_id=%d, tag=%s, error=%v", channel.Id, channel.GetTag(), err))
 				}
 			}
+		}
+		if _, err := DeleteModelRoutingOverridesByChannelIDs(affectedChannelIDs); err != nil {
+			return err
 		}
 	} else {
 		err := UpdateAbilityByTag(tag, newTag, priority, weight)
@@ -1072,6 +1127,9 @@ func deleteChannelsByStatuses(statuses ...int64) (int64, error) {
 		deleted, err = deleteChannelsByIDs(tx, ids)
 		return err
 	})
+	if err == nil {
+		err = refreshModelRoutingOverrideCache()
+	}
 	return deleted, err
 }
 

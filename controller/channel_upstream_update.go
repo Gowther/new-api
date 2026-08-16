@@ -350,7 +350,14 @@ func updateChannelUpstreamModelSettings(channel *model.Channel, settings dto.Cha
 	if updateModels {
 		updates["models"] = channel.Models
 	}
-	return model.DB.Model(&model.Channel{}).Where("id = ?", channel.Id).Updates(updates).Error
+	if err := model.DB.Model(&model.Channel{}).Where("id = ?", channel.Id).Updates(updates).Error; err != nil {
+		return err
+	}
+	if updateModels {
+		_, err := model.DeleteModelRoutingOverridesByChannelIDs([]int{channel.Id})
+		return err
+	}
+	return nil
 }
 
 func checkAndPersistChannelUpstreamModelUpdates(

@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
@@ -124,6 +125,30 @@ func TestCollectPendingUpstreamModelChangesFromModels_WithIgnoredRegexPatterns(t
 
 	require.Equal(t, []string{"claude-3-5-sonnet"}, pendingAddModels)
 	require.Equal(t, []string{}, pendingRemoveModels)
+}
+
+func TestUpdateChannelUpstreamModelSettingsClearsTemporaryRoutingOnModelChange(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, db.AutoMigrate(&model.ModelRoutingOverride{}))
+
+	channel := &model.Channel{
+		Id:     81,
+		Name:   "upstream routing channel",
+		Key:    "key",
+		Status: common.ChannelStatusEnabled,
+		Models: "old-model",
+		Group:  "default",
+	}
+	require.NoError(t, db.Create(channel).Error)
+	require.NoError(t, channel.UpdateAbilities(nil))
+	_, err := model.SetChannelModelRoutingOverride(channel.Id)
+	require.NoError(t, err)
+
+	channel.Models = "new-model"
+	require.NoError(t, updateChannelUpstreamModelSettings(channel, channel.GetOtherSettings(), true))
+	_, found, err := model.GetModelRoutingOverrideTarget("old-model")
+	require.NoError(t, err)
+	require.False(t, found)
 }
 
 func TestBuildUpstreamModelUpdateTaskNotificationContent_OmitOverflowDetails(t *testing.T) {

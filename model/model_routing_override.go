@@ -17,7 +17,10 @@ type ModelRoutingOverride struct {
 	Model     string `json:"model" gorm:"type:varchar(255);primaryKey;autoIncrement:false"`
 	Group     string `json:"group" gorm:"type:varchar(64);primaryKey;autoIncrement:false"`
 	ChannelId int    `json:"channel_id" gorm:"index"`
+	Scope     string `json:"-" gorm:"type:varchar(16)"`
 }
+
+const modelRoutingOverrideScopeChannel = "channel"
 
 var modelRoutingOverrideCache = map[string]map[string]int{}
 var modelRoutingOverrideCacheLock sync.RWMutex
@@ -157,27 +160,21 @@ func sortModelRoutingOverrides(overrides []ModelRoutingOverride) {
 	})
 }
 
-// SetChannelModelRoutingOverride atomically replaces every temporary routing
-// rule with the enabled model/group abilities of channelID.
-func SetChannelModelRoutingOverride(channelID int) ([]ModelRoutingOverride, error) {
-	if channelID <= 0 {
-		return nil, errors.New("invalid channel id")
-	}
-
-	channel, err := GetChannelById(channelID, false)
-	if err != nil {
-		return nil, err
-	}
-	if channel.Status != common.ChannelStatusEnabled {
-		return nil, errors.New("the target channel is disabled")
+func buildChannelModelRoutingOverrides(channelID int, enabledOnly bool) ([]ModelRoutingOverride, error) {
+	query := DB.Where("channel_id = ?", channelID)
+	if enabledOnly {
+		query = query.Where("enabled = ?", true)
 	}
 
 	var abilities []Ability
-	if err := DB.Where("channel_id = ? AND enabled = ?", channelID, true).Find(&abilities).Error; err != nil {
+	if err := query.Find(&abilities).Error; err != nil {
 		return nil, err
 	}
 	if len(abilities) == 0 {
-		return nil, fmt.Errorf("channel %d does not have any enabled model ability", channelID)
+		if enabledOnly {
+			return nil, fmt.Errorf("channel %d does not have any enabled model ability", channelID)
+		}
+		return nil, fmt.Errorf("channel %d does not have any model ability", channelID)
 	}
 
 	abilitySet := make(map[string]struct{}, len(abilities))
@@ -197,18 +194,133 @@ func SetChannelModelRoutingOverride(channelID int) ([]ModelRoutingOverride, erro
 			Model:     modelName,
 			Group:     group,
 			ChannelId: channelID,
+			Scope:     modelRoutingOverrideScopeChannel,
 		})
 	}
 	if len(overrides) == 0 {
-		return nil, fmt.Errorf("channel %d does not have any valid enabled model ability", channelID)
+		return nil, fmt.Errorf("channel %d does not have any valid model ability", channelID)
 	}
 	sortModelRoutingOverrides(overrides)
+	return overrides, nil
+}
 
-	err = DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&ModelRoutingOverride{}).Error; err != nil {
+func replaceAllModelRoutingOverrides(tx *gorm.DB, overrides []ModelRoutingOverride) error {
+	if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&ModelRoutingOverride{}).Error; err != nil {
+		return err
+	}
+	if len(overrides) == 0 {
+		return nil
+	}
+	return tx.Create(&overrides).Error
+}
+
+// migrateLegacyModelRoutingOverrides upgrades the old model-scoped rows once.
+// A single unambiguous target is expanded to the channel's current abilities;
+// ambiguous multi-channel data is cleared instead of silently choosing a target.
+func migrateLegacyModelRoutingOverrides() error {
+	if DB == nil || !DB.Migrator().HasTable(&ModelRoutingOverride{}) ||
+		!DB.Migrator().HasColumn(&ModelRoutingOverride{}, "scope") {
+		return nil
+	}
+
+	legacyQuery := DB.Model(&ModelRoutingOverride{}).Where("scope = ? OR scope IS NULL", "")
+	var legacyCount int64
+	if err := legacyQuery.Count(&legacyCount).Error; err != nil {
+		return err
+	}
+	if legacyCount == 0 {
+		return nil
+	}
+
+	var existing []ModelRoutingOverride
+	if err := DB.Find(&existing).Error; err != nil {
+		return err
+	}
+	targetChannelIDs := make(map[int]struct{})
+	for _, override := range existing {
+		targetChannelIDs[override.ChannelId] = struct{}{}
+	}
+	if len(targetChannelIDs) != 1 {
+		if err := DB.Transaction(func(tx *gorm.DB) error {
+			return replaceAllModelRoutingOverrides(tx, nil)
+		}); err != nil {
 			return err
 		}
-		return tx.Create(&overrides).Error
+		common.SysLog(fmt.Sprintf(
+			"cleared %d legacy model routing overrides with ambiguous channel targets",
+			len(existing),
+		))
+		return nil
+	}
+
+	targetChannelID := 0
+	for channelID := range targetChannelIDs {
+		targetChannelID = channelID
+	}
+	channel, err := GetChannelById(targetChannelID, false)
+	if errors.Is(err, gorm.ErrRecordNotFound) ||
+		(err == nil && channel.Status == common.ChannelStatusManuallyDisabled) {
+		if err := DB.Transaction(func(tx *gorm.DB) error {
+			return replaceAllModelRoutingOverrides(tx, nil)
+		}); err != nil {
+			return err
+		}
+		common.SysLog(fmt.Sprintf(
+			"cleared %d legacy model routing overrides for unavailable channel %d",
+			len(existing), targetChannelID,
+		))
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	enabledOnly := channel.Status != common.ChannelStatusAutoDisabled
+	normalized, err := buildChannelModelRoutingOverrides(targetChannelID, enabledOnly)
+	if err != nil {
+		if err := legacyQuery.Update("scope", modelRoutingOverrideScopeChannel).Error; err != nil {
+			return err
+		}
+		common.SysLog(fmt.Sprintf(
+			"preserved %d legacy model routing overrides for channel %d without expansion: %v",
+			len(existing), targetChannelID, err,
+		))
+		return nil
+	}
+	if err := DB.Transaction(func(tx *gorm.DB) error {
+		return replaceAllModelRoutingOverrides(tx, normalized)
+	}); err != nil {
+		return err
+	}
+	common.SysLog(fmt.Sprintf(
+		"migrated %d legacy model routing overrides to %d channel-wide rules for channel %d",
+		len(existing), len(normalized), targetChannelID,
+	))
+	return nil
+}
+
+// SetChannelModelRoutingOverride atomically replaces every temporary routing
+// rule with the enabled model/group abilities of channelID.
+func SetChannelModelRoutingOverride(channelID int) ([]ModelRoutingOverride, error) {
+	if channelID <= 0 {
+		return nil, errors.New("invalid channel id")
+	}
+
+	channel, err := GetChannelById(channelID, false)
+	if err != nil {
+		return nil, err
+	}
+	if channel.Status != common.ChannelStatusEnabled {
+		return nil, errors.New("the target channel is disabled")
+	}
+
+	overrides, err := buildChannelModelRoutingOverrides(channelID, true)
+	if err != nil {
+		return nil, err
+	}
+
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		return replaceAllModelRoutingOverrides(tx, overrides)
 	})
 	if err != nil {
 		return nil, err

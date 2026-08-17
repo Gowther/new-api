@@ -67,6 +67,7 @@ func TestModelRoutingOverrideLifecycle(t *testing.T) {
 	assert.Len(t, overrides, 4)
 	for _, override := range overrides {
 		assert.Equal(t, channelA.Id, override.ChannelId)
+		assert.Equal(t, modelRoutingOverrideScopeChannel, override.Scope)
 	}
 
 	for _, modelName := range []string{"model-a", "shared-model"} {
@@ -221,4 +222,49 @@ func TestRepeatedManualDisableClearsStaleModelRoutingOverride(t *testing.T) {
 	_, found, err := GetModelRoutingOverrideTarget("stale-model")
 	require.NoError(t, err)
 	assert.False(t, found)
+}
+
+func TestMigrateLegacyModelRoutingOverridesExpandsSingleChannelOnce(t *testing.T) {
+	db := setupModelRoutingOverrideTestDB(t)
+	channel := createRoutingTestChannel(t, db, 66, "legacy-a,legacy-b", "default,premium")
+	require.NoError(t, db.Create(&ModelRoutingOverride{
+		Model:     "legacy-a",
+		Group:     "default",
+		ChannelId: channel.Id,
+	}).Error)
+
+	require.NoError(t, migrateLegacyModelRoutingOverrides())
+	overrides, err := GetAllModelRoutingOverrides()
+	require.NoError(t, err)
+	require.Len(t, overrides, 4)
+	for _, override := range overrides {
+		assert.Equal(t, channel.Id, override.ChannelId)
+		assert.Equal(t, modelRoutingOverrideScopeChannel, override.Scope)
+	}
+
+	require.NoError(t, db.Create(&Ability{
+		Group:     "default",
+		Model:     "future-model",
+		ChannelId: channel.Id,
+		Enabled:   true,
+	}).Error)
+	require.NoError(t, migrateLegacyModelRoutingOverrides())
+	overrides, err = GetAllModelRoutingOverrides()
+	require.NoError(t, err)
+	assert.Len(t, overrides, 4, "completed migrations must not rebuild persisted channel-wide rules")
+}
+
+func TestMigrateLegacyModelRoutingOverridesClearsAmbiguousTargets(t *testing.T) {
+	db := setupModelRoutingOverrideTestDB(t)
+	channelA := createRoutingTestChannel(t, db, 67, "legacy-a", "default")
+	channelB := createRoutingTestChannel(t, db, 68, "legacy-b", "default")
+	require.NoError(t, db.Create(&[]ModelRoutingOverride{
+		{Model: "legacy-a", Group: "default", ChannelId: channelA.Id},
+		{Model: "legacy-b", Group: "default", ChannelId: channelB.Id},
+	}).Error)
+
+	require.NoError(t, migrateLegacyModelRoutingOverrides())
+	overrides, err := GetAllModelRoutingOverrides()
+	require.NoError(t, err)
+	assert.Empty(t, overrides)
 }

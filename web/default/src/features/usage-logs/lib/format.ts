@@ -387,9 +387,9 @@ const AUDIT_TEMPLATES: Record<string, string> = {
   'channel.upstream_apply_all':
     'Applied upstream model changes to {{count}} channels',
   'channel.routing_override_set':
-    'Locked model {{model}} to channel {{channel_name}} (ID: {{channel_id}}) for groups {{groups}}',
+    'Enabled temporary single-channel routing through channel {{channel_name}} (ID: {{channel_id}}) for {{model_count}} models ({{models}}) in groups {{groups}}',
   'channel.routing_override_delete':
-    'Restored normal routing for model {{model}}',
+    'Restored normal routing by removing {{count}} temporary routing rules',
   // Redemption codes
   'redemption.create':
     'Created {{count}} redemption codes named {{name}} ({{quota}} each)',

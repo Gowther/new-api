@@ -44,8 +44,8 @@ var auditContentTemplates = map[string]string{
 	"channel.multi_key_manage":        "Multi-key management ${action} on channel (ID: ${id})",
 	"channel.upstream_apply":          "Applied upstream model changes to channel (ID: ${id})",
 	"channel.upstream_apply_all":      "Applied upstream model changes to ${count} channels",
-	"channel.routing_override_set":    "Locked model ${model} to channel ${channel_name} (ID: ${channel_id}) for groups ${groups}",
-	"channel.routing_override_delete": "Restored normal routing for model ${model}",
+	"channel.routing_override_set":    "Enabled temporary single-channel routing through channel ${channel_name} (ID: ${channel_id}) for ${model_count} models (${models}) in groups ${groups}",
+	"channel.routing_override_delete": "Restored normal routing by removing ${count} temporary routing rules",
 
 	"redemption.create": "Created ${count} redemption codes named ${name} (${quota} each)",
 

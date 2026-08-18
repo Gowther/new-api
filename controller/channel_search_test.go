@@ -65,6 +65,77 @@ func TestSearchChannelsChannelIDReturnsOnlyExactChannel(t *testing.T) {
 	assert.Equal(t, 1, response.Data.Total)
 }
 
+func TestSearchChannelsMatchesNameCaseAndTagLiterally(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	tag := "vendor-group"
+	channels := []model.Channel{
+		{
+			Id:     21,
+			Type:   1,
+			Key:    "openai-key",
+			Status: common.ChannelStatusEnabled,
+			Name:   "OpenAI Production",
+			Models: "gpt-4o",
+			Group:  "default",
+			Tag:    &tag,
+		},
+		{
+			Id:     22,
+			Type:   1,
+			Key:    "percent-key",
+			Status: common.ChannelStatusEnabled,
+			Name:   "1000-ready",
+			Models: "gpt-4o",
+			Group:  "default",
+		},
+		{
+			Id:     23,
+			Type:   1,
+			Key:    "literal-key",
+			Status: common.ChannelStatusEnabled,
+			Name:   "100%_ready",
+			Models: "gpt-4o",
+			Group:  "default",
+		},
+	}
+	require.NoError(t, db.Create(&channels).Error)
+
+	tests := []struct {
+		name       string
+		requestURL string
+		wantIDs    []int
+	}{
+		{name: "case insensitive name", requestURL: "/api/channel/search?keyword=openaI", wantIDs: []int{21}},
+		{name: "tag substring", requestURL: "/api/channel/search?keyword=vendor", wantIDs: []int{21}},
+		{name: "tag mode substring", requestURL: "/api/channel/search?keyword=vendor&tag_mode=true", wantIDs: []int{21}},
+		{name: "wildcards are literal", requestURL: "/api/channel/search?keyword=100%25", wantIDs: []int{23}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(recorder)
+			ctx.Request = httptest.NewRequest(http.MethodGet, test.requestURL, nil)
+
+			SearchChannels(ctx)
+
+			var response struct {
+				Success bool `json:"success"`
+				Data    struct {
+					Items []model.Channel `json:"items"`
+				} `json:"data"`
+			}
+			require.Equal(t, http.StatusOK, recorder.Code)
+			require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+			require.True(t, response.Success)
+			require.Len(t, response.Data.Items, len(test.wantIDs))
+			for i, wantID := range test.wantIDs {
+				assert.Equal(t, wantID, response.Data.Items[i].Id)
+			}
+		})
+	}
+}
+
 func TestChannelCategoryFiltersApplyBeforePagination(t *testing.T) {
 	db := setupModelListControllerTestDB(t)
 	channels := []model.Channel{

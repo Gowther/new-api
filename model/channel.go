@@ -475,39 +475,71 @@ func GetChannelsByTag(tag string, idSort bool, selectAll bool, sortOptions ...Ch
 	return channels, err
 }
 
-func SearchChannels(keyword string, group string, model string, idSort bool, channelID *int, sortOptions ...ChannelSortOptions) ([]*Channel, error) {
-	var channels []*Channel
-	modelsCol := "`models`"
+func channelSearchLikeCondition(column string) string {
+	if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
+		return column + " ILIKE ? ESCAPE '!'"
+	}
+	return "LOWER(" + column + ") LIKE LOWER(?) ESCAPE '!'"
+}
 
-	// 如果是 PostgreSQL，使用双引号
+func channelSearchLikePattern(value string) string {
+	value = strings.NewReplacer(
+		"!", "!!",
+		"%", "!%",
+		"_", "!_",
+	).Replace(value)
+	return "%" + value + "%"
+}
+
+func applyChannelSearchFilter(query *gorm.DB, keyword string, modelKeyword string) *gorm.DB {
+	modelsCol := "`models`"
+	baseURLCol := "`base_url`"
 	if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
 		modelsCol = `"models"`
-	}
-
-	baseURLCol := "`base_url`"
-	// 如果是 PostgreSQL，使用双引号
-	if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
 		baseURLCol = `"base_url"`
 	}
 
-	order := resolveChannelSortOptions(idSort, sortOptions)
+	if keyword != "" {
+		keywordPattern := channelSearchLikePattern(keyword)
+		whereClause := "(id = ? OR " +
+			channelSearchLikeCondition("name") + " OR " +
+			channelSearchLikeCondition(commonKeyCol) + " OR " +
+			channelSearchLikeCondition(baseURLCol) + " OR " +
+			channelSearchLikeCondition("tag") + ")"
+		args := []any{
+			common.String2Int(keyword),
+			keywordPattern,
+			keywordPattern,
+			keywordPattern,
+			keywordPattern,
+		}
+		query = query.Where(whereClause, args...)
+	}
 
-	// 构造基础查询
+	if modelKeyword != "" {
+		query = query.Where(
+			channelSearchLikeCondition(modelsCol),
+			channelSearchLikePattern(modelKeyword),
+		)
+	}
+
+	return query
+}
+
+func SearchChannels(keyword string, group string, model string, idSort bool, channelID *int, sortOptions ...ChannelSortOptions) ([]*Channel, error) {
+	var channels []*Channel
+	order := resolveChannelSortOptions(idSort, sortOptions)
 	baseQuery := DB.Model(&Channel{}).Omit("key")
 
 	if channelID != nil {
-		baseQuery = baseQuery.Where("id = ? AND "+modelsCol+" LIKE ?", *channelID, "%"+model+"%")
+		baseQuery = baseQuery.Where("id = ?", *channelID)
+		baseQuery = applyChannelSearchFilter(baseQuery, "", model)
 	} else {
-		// 构造WHERE子句
-		whereClause := "(id = ? OR name LIKE ? OR " + commonKeyCol + " LIKE ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
-		args := []any{common.String2Int(keyword), "%" + keyword + "%", "%" + keyword + "%", "%" + keyword + "%", "%" + model + "%"}
-		baseQuery = baseQuery.Where(whereClause, args...)
+		baseQuery = applyChannelSearchFilter(baseQuery, keyword, model)
 	}
 	baseQuery = ApplyChannelGroupFilter(baseQuery, group)
 
-	// 执行查询
-	err := order.Apply(baseQuery).Find(&channels).Error
-	if err != nil {
+	if err := order.Apply(baseQuery).Find(&channels).Error; err != nil {
 		return nil, err
 	}
 	return channels, nil
@@ -1151,31 +1183,14 @@ func GetPaginatedChannelTags(query *gorm.DB, offset int, limit int) ([]*string, 
 
 func SearchTags(keyword string, group string, model string, idSort bool) ([]*string, error) {
 	var tags []*string
-	modelsCol := "`models`"
-
-	// 如果是 PostgreSQL，使用双引号
-	if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
-		modelsCol = `"models"`
-	}
-
-	baseURLCol := "`base_url`"
-	// 如果是 PostgreSQL，使用双引号
-	if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
-		baseURLCol = `"base_url"`
-	}
 
 	order := "priority desc"
 	if idSort {
 		order = "id desc"
 	}
 
-	// 构造基础查询
 	baseQuery := DB.Model(&Channel{}).Omit("key")
-
-	// 构造WHERE子句
-	whereClause := "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
-	args := []any{common.String2Int(keyword), "%" + keyword + "%", keyword, "%" + keyword + "%", "%" + model + "%"}
-	baseQuery = ApplyChannelGroupFilter(baseQuery.Where(whereClause, args...), group)
+	baseQuery = ApplyChannelGroupFilter(applyChannelSearchFilter(baseQuery, keyword, model), group)
 
 	subQuery := baseQuery.
 		Select("tag").

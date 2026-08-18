@@ -453,28 +453,29 @@ export const useChannelsData = () => {
   ) => {
     const { searchKeyword, searchGroup, searchModel, searchCategory } =
       getFormValues();
+    const keyword = searchKeyword.trim();
+    const model = searchModel.trim();
+    const exactChannelID =
+      directChannelID && keyword === String(directChannelID)
+        ? directChannelID
+        : undefined;
+    const hasTextSearch = keyword !== '' || model !== '';
+
+    if (!hasTextSearch && searchGroup === '') {
+      await loadChannels(
+        page,
+        pageSz,
+        sortFlag,
+        enableTagMode,
+        typeKey,
+        statusF,
+      );
+      return;
+    }
+
+    const reqId = ++requestCounter.current;
     setSearching(true);
     try {
-      const keyword = searchKeyword.trim();
-      const model = searchModel.trim();
-      const exactChannelID =
-        directChannelID && keyword === String(directChannelID)
-          ? directChannelID
-          : undefined;
-      const hasTextSearch = keyword !== '' || model !== '';
-
-      if (!hasTextSearch && searchGroup === '') {
-        await loadChannels(
-          page,
-          pageSz,
-          sortFlag,
-          enableTagMode,
-          typeKey,
-          statusF,
-        );
-        return;
-      }
-
       if (hasTextSearch) {
         setActiveTypeKey('all');
         setStatusFilter('all');
@@ -508,6 +509,9 @@ export const useChannelsData = () => {
         params.set('status', statusF);
       }
       const res = await API.get(`/api/channel/search?${params.toString()}`);
+      if (res === undefined || reqId !== requestCounter.current) {
+        return;
+      }
       const { success, message, data } = res.data;
       if (success) {
         const { items = [], total = 0, type_counts = {} } = data;
@@ -523,7 +527,9 @@ export const useChannelsData = () => {
         showError(message);
       }
     } finally {
-      setSearching(false);
+      if (reqId === requestCounter.current) {
+        setSearching(false);
+      }
     }
   };
 

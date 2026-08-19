@@ -84,12 +84,26 @@ export function CommonLogsStats() {
     return (
       <div className='flex flex-wrap items-center gap-2'>
         <Skeleton className='h-7 w-[150px] rounded-md' />
-        <Skeleton className='h-7 w-[100px] rounded-md' />
+        <Skeleton className='h-7 w-[320px] rounded-md' />
         <Skeleton className='h-7 w-[120px] rounded-md' />
         <Skeleton className='h-7 w-[140px] rounded-md' />
       </div>
     )
   }
+
+  const successCount = Math.max(0, stats?.success_count ?? 0)
+  const totalCount = Math.max(0, stats?.total_count ?? stats?.rpm ?? 0)
+  const reportedSuccessRate = stats?.success_rate
+  let successRate = 0
+  if (
+    typeof reportedSuccessRate === 'number' &&
+    Number.isFinite(reportedSuccessRate)
+  ) {
+    successRate = Math.min(100, Math.max(0, reportedSuccessRate))
+  } else if (totalCount > 0) {
+    successRate = Math.min(100, (successCount / totalCount) * 100)
+  }
+  const successRateText = `${Number(successRate.toFixed(1))}%`
 
   return (
     <div className='flex flex-wrap items-center gap-2'>
@@ -99,8 +113,8 @@ export function CommonLogsStats() {
         accent='bg-sky-500/70'
       />
       <StatBadge
-        label={t('RPM')}
-        value={stats?.rpm || 0}
+        label={`${t('RPM')}:`}
+        value={`${t('Success')} ${successCount} / ${t('Total')} ${totalCount} / ${t('Success rate')} ${successRateText}`}
         accent='bg-rose-500/65'
       />
       <StatBadge

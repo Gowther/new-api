@@ -228,6 +228,9 @@ export interface LogStatistics {
   rpm: number
   tpm: number
   total_tokens: number
+  success_count: number
+  total_count: number
+  success_rate: number
 }
 
 // ============================================================================

@@ -40,11 +40,21 @@ const LogsActions = ({
 }) => {
   const showSkeleton = useMinimumLoadingTime(loadingStat);
   const needSkeleton = !showStat || showSkeleton;
+  const successCount = Math.max(0, Number(stat.success_count ?? 0));
+  const totalCount = Math.max(0, Number(stat.total_count ?? stat.rpm ?? 0));
+  const reportedSuccessRate = Number(stat.success_rate);
+  let successRate = 0;
+  if (Number.isFinite(reportedSuccessRate)) {
+    successRate = Math.min(100, Math.max(0, reportedSuccessRate));
+  } else if (totalCount > 0) {
+    successRate = Math.min(100, (successCount / totalCount) * 100);
+  }
+  const successRateText = `${Number(successRate.toFixed(1))}%`;
 
   const placeholder = (
     <Space wrap>
       <Skeleton.Title style={{ width: 108, height: 21, borderRadius: 6 }} />
-      <Skeleton.Title style={{ width: 65, height: 21, borderRadius: 6 }} />
+      <Skeleton.Title style={{ width: 320, height: 21, borderRadius: 6 }} />
       <Skeleton.Title style={{ width: 64, height: 21, borderRadius: 6 }} />
       <Skeleton.Title style={{ width: 120, height: 21, borderRadius: 6 }} />
     </Space>
@@ -74,7 +84,8 @@ const LogsActions = ({
             }}
             className='!rounded-lg'
           >
-            RPM: {stat.rpm}
+            RPM: {t('成功')} {successCount} / {t('总计')} {totalCount} /{' '}
+            {t('成功率')} {successRateText}
           </Tag>
           <Tag
             color='white'

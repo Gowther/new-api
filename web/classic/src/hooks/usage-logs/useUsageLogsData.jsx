@@ -212,6 +212,9 @@ export const useLogsData = () => {
     rpm: 0,
     tpm: 0,
     total_tokens: 0,
+    success_count: 0,
+    total_count: 0,
+    success_rate: 0,
   });
 
   // Form state

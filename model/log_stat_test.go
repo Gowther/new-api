@@ -97,7 +97,7 @@ func TestSumUsedQuotaCountsInvalidAndErrorRequestsAsFailures(t *testing.T) {
 
 	consumeStat, err := SumUsedQuota(LogTypeConsume, now-60, now, "", username, "", 0, "")
 	require.NoError(t, err)
-	assert.Equal(t, 4, consumeStat.TotalCount)
+	assert.Equal(t, 3, consumeStat.TotalCount)
 	assert.Equal(t, 1, consumeStat.SuccessCount)
 
 	errorStat, err := SumUsedQuota(LogTypeError, now-60, now, "", username, "", 0, "")

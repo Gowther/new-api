@@ -1459,7 +1459,9 @@ func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelNa
 	tx = tx.Where("type = ?", LogTypeConsume)
 	if logType == LogTypeError {
 		rpmTpmQuery = rpmTpmQuery.Where("type = ?", LogTypeError)
-	} else if logType == LogTypeConsume || logType == LogTypeUnknown {
+	} else if logType == LogTypeConsume {
+		rpmTpmQuery = rpmTpmQuery.Where("type = ?", LogTypeConsume)
+	} else if logType == LogTypeUnknown {
 		rpmTpmQuery = rpmTpmQuery.Where("type IN ?", []int{LogTypeConsume, LogTypeError})
 	} else {
 		rpmTpmQuery = rpmTpmQuery.Where("1 = 0")

@@ -2290,27 +2290,7 @@ export function ChannelMutateDrawer({
                           />
                         </div>
 
-                        <div className='grid gap-4 sm:grid-cols-2'>
-                          <FormField
-                            control={form.control}
-                            name='tag'
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>{t('Tag')}</FormLabel>
-                                <FormControl>
-                                  <Input
-                                    placeholder={t(FIELD_PLACEHOLDERS.TAG)}
-                                    {...field}
-                                  />
-                                </FormControl>
-                                <FormDescription>
-                                  {t(FIELD_DESCRIPTIONS.TAG)}
-                                </FormDescription>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-
+                        <div className='grid gap-4'>
                           <FormField
                             control={form.control}
                             name='remark'
@@ -2391,38 +2371,60 @@ export function ChannelMutateDrawer({
                           </fieldset>
                         )}
 
-                        {currentType === 1 && (
-                          <fieldset
-                            disabled={sensitiveLocked}
-                            className='disabled:opacity-60'
-                          >
-                            <FormField
-                              control={form.control}
-                              name='openai_organization'
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>
-                                    {t('OpenAI Organization')}
-                                  </FormLabel>
-                                  <FormControl>
-                                    <Input
-                                      placeholder={t('org-...')}
-                                      {...field}
-                                    />
-                                  </FormControl>
-                                  <FormDescription>
-                                    {sensitiveLocked
-                                      ? t(
-                                          'No permission to perform this action'
-                                        )
-                                      : t(FIELD_DESCRIPTIONS.OPENAI_ORG)}
-                                  </FormDescription>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                          </fieldset>
-                        )}
+                        <div className='grid gap-4 sm:grid-cols-2'>
+                          <FormField
+                            control={form.control}
+                            name='tag'
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>{t('Tag')}</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    placeholder={t(FIELD_PLACEHOLDERS.TAG)}
+                                    {...field}
+                                  />
+                                </FormControl>
+                                <FormDescription>
+                                  {t(FIELD_DESCRIPTIONS.TAG)}
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          {currentType === 1 && (
+                            <fieldset
+                              disabled={sensitiveLocked}
+                              className='disabled:opacity-60'
+                            >
+                              <FormField
+                                control={form.control}
+                                name='openai_organization'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>
+                                      {t('OpenAI Organization')}
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        placeholder={t('org-...')}
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormDescription>
+                                      {sensitiveLocked
+                                        ? t(
+                                            'No permission to perform this action'
+                                          )
+                                        : t(FIELD_DESCRIPTIONS.OPENAI_ORG)}
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </fieldset>
+                          )}
+                        </div>
                       </ChannelBasicSection>
                     </div>
 

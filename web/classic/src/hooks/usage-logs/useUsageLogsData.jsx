@@ -566,10 +566,16 @@ export const useLogsData = () => {
           value: other.cache_tokens,
         });
       }
+      const cacheCreationTokens = Number(other?.cache_creation_tokens) || 0;
+      const cacheCreationTokens5m =
+        Number(other?.cache_creation_tokens_5m) || 0;
+      const cacheCreationTokens1h =
+        Number(other?.cache_creation_tokens_1h) || 0;
+      const splitCacheWriteTokens =
+        cacheCreationTokens5m + cacheCreationTokens1h;
       const cacheWriteTokens = Math.max(
-        Number(other?.cache_creation_tokens) || 0,
-        Number(other?.cache_creation_tokens_5m) || 0,
-        Number(other?.cache_creation_tokens_1h) || 0,
+        cacheCreationTokens,
+        splitCacheWriteTokens,
         Number(other?.cache_write_tokens) || 0,
       );
       if (cacheWriteTokens > 0) {

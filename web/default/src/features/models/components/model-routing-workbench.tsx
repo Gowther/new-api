@@ -41,6 +41,7 @@ import {
   ChannelRemarkText,
 } from '@/components/channel-remark-hover-content'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { CopyButton } from '@/components/copy-button'
 import { ProviderBadge } from '@/components/provider-badge'
 import { StatusBadge } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
@@ -1529,6 +1530,17 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                         </span>
                       </button>
                       <div className='flex shrink-0 items-center gap-1 pr-1'>
+                        <CopyButton
+                          value={model.model_name}
+                          size='icon'
+                          tooltip={t('Copy model name')}
+                          className={cn(
+                            'size-7',
+                            isSelected &&
+                              'text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground'
+                          )}
+                          iconClassName='size-3.5'
+                        />
                         <span
                           className={cn(
                             'shrink-0 text-xs tabular-nums',

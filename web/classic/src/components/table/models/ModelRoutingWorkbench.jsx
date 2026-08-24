@@ -34,6 +34,7 @@ import {
 } from '@douyinfe/semi-ui';
 import {
   IconBookmark,
+  IconCopy,
   IconDelete,
   IconEdit,
   IconHistogram,
@@ -50,6 +51,7 @@ import { ChannelRemarkTooltip } from '../../common/ChannelRemarkTooltip';
 import { CHANNEL_OPTIONS } from '../../../constants';
 import {
   API,
+  copy,
   getChannelIcon,
   getLobeHubIcon,
   showError,
@@ -1586,6 +1588,24 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                         <Text ellipsis>{model.model_name}</Text>
                       </div>
                       <div className='flex shrink-0 items-center gap-1'>
+                        <Tooltip content={t('点击复制模型名称')}>
+                          <Button
+                            theme='borderless'
+                            type='tertiary'
+                            size='small'
+                            icon={<IconCopy />}
+                            title={t('点击复制模型名称')}
+                            aria-label={`${t('点击复制模型名称')}: ${model.model_name}`}
+                            onClick={async (event) => {
+                              event.stopPropagation();
+                              if (await copy(model.model_name)) {
+                                showSuccess(t('已复制模型名称'));
+                              } else {
+                                showError(t('复制失败'));
+                              }
+                            }}
+                          />
+                        </Tooltip>
                         <Tag color='grey' shape='circle' size='small'>
                           {model.channelCount}
                         </Tag>

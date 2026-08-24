@@ -38,7 +38,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
-import { Textarea } from '@/components/ui/textarea'
 
 import {
   editTagChannels,
@@ -46,9 +45,10 @@ import {
   getAllModels,
   getGroups,
 } from '../../api'
-import { channelsQueryKeys } from '../../lib'
+import { channelsQueryKeys, reconcileModelsForMapping } from '../../lib'
 import type { TagOperationParams } from '../../types'
 import { useChannels } from '../channels-provider'
+import { ModelMappingEditor } from '../model-mapping-editor'
 
 type EditTagDialogProps = {
   open: boolean
@@ -364,37 +364,27 @@ export function EditTagDialog({ open, onOpenChange }: EditTagDialogProps) {
 
           {/* Model Mapping */}
           <div className='space-y-2'>
-            <Label htmlFor='model-mapping'>
+            <Label>
               {t('Model Mapping (JSON)')}
               <span className='text-muted-foreground ml-2 text-xs'>
                 {t('(Optional: redirect model names)')}
               </span>
             </Label>
-            <Textarea
-              id='model-mapping'
+            <ModelMappingEditor
               value={modelMapping}
-              onChange={(e) => setModelMapping(e.target.value)}
-              placeholder={'{\n  "gpt-3.5-turbo": "gpt-3.5-turbo-0125"\n}'}
-              rows={4}
-              className='font-mono text-sm'
+              onChange={setModelMapping}
+              disabled={isSubmitting}
+              onTemplateApplied={(appliedMapping, completeMapping) =>
+                setSelectedModels(
+                  reconcileModelsForMapping(
+                    selectedModels,
+                    appliedMapping,
+                    completeMapping
+                  )
+                )
+              }
             />
             <div className='flex gap-2'>
-              <Button
-                type='button'
-                variant='outline'
-                size='sm'
-                onClick={() =>
-                  setModelMapping(
-                    JSON.stringify(
-                      { 'gpt-3.5-turbo': 'gpt-3.5-turbo-0125' },
-                      null,
-                      2
-                    )
-                  )
-                }
-              >
-                {t('Example')}
-              </Button>
               <Button
                 type='button'
                 variant='outline'

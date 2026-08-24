@@ -65,6 +65,17 @@ const LogsTable = (logsData) => {
     [navigate],
   );
 
+  const viewModelRouting = useCallback(
+    (modelName) => {
+      const params = new URLSearchParams({
+        tab: 'routing',
+        routing_model: modelName,
+      });
+      navigate(`/console/models?${params.toString()}`);
+    },
+    [navigate],
+  );
+
   // Get all columns
   const allColumns = useMemo(() => {
     return getLogsColumns({
@@ -73,6 +84,7 @@ const LogsTable = (logsData) => {
       copyText,
       applyColumnFilter,
       viewChannel,
+      viewModelRouting,
       showUserInfoFunc,
       openChannelAffinityUsageCacheModal,
       isAdminUser,
@@ -84,6 +96,7 @@ const LogsTable = (logsData) => {
     copyText,
     applyColumnFilter,
     viewChannel,
+    viewModelRouting,
     showUserInfoFunc,
     openChannelAffinityUsageCacheModal,
     isAdminUser,

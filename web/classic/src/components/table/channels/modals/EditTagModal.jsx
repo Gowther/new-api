@@ -50,12 +50,9 @@ import {
 import { getChannelModels } from '../../../../helpers';
 import { useTranslation } from 'react-i18next';
 import JSONEditor from '../../../common/ui/JSONEditor';
+import { reconcileModelsForMapping } from '../../../../helpers/modelMapping';
 
 const { Text, Title } = Typography;
-
-const MODEL_MAPPING_EXAMPLE = {
-  'gpt-3.5-turbo': 'gpt-3.5-turbo-0125',
-};
 
 const EditTagModal = (props) => {
   const { t } = useTranslation();
@@ -525,9 +522,18 @@ const EditTagModal = (props) => {
                     onChange={(value) =>
                       handleInputChange('model_mapping', value)
                     }
-                    template={MODEL_MAPPING_EXAMPLE}
                     templateLabel={t('填入模板')}
                     templateStorageKey='new-api:model-mapping-templates:v1'
+                    onTemplateApplied={(appliedMapping, completeMapping) =>
+                      handleInputChange(
+                        'models',
+                        reconcileModelsForMapping(
+                          inputs.models,
+                          appliedMapping,
+                          completeMapping,
+                        ),
+                      )
+                    }
                     editorType='keyValue'
                     formApi={formApiRef.current}
                     extraText={

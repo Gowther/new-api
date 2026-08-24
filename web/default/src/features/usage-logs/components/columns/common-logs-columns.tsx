@@ -427,9 +427,22 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                     showDot={false}
                     className='cursor-pointer font-mono hover:underline'
                   />
+                  {channelRemark && (
+                    <span
+                      className='text-muted-foreground -m-1 inline-flex size-7 shrink-0 cursor-help items-center justify-center'
+                      aria-label={t('Remark')}
+                    >
+                      <HugeiconsIcon
+                        icon={Comment01Icon}
+                        strokeWidth={2}
+                        className='size-3.5'
+                        aria-hidden='true'
+                      />
+                    </span>
+                  )}
                   <button
                     type='button'
-                    className='text-muted-foreground hover:text-foreground inline-flex size-5 items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                    className='text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex size-5 items-center justify-center rounded-sm focus-visible:ring-2 focus-visible:outline-none'
                     title={`${t('View')} ${t('Channel')}`}
                     aria-label={`${t('View')} ${t('Channel')}`}
                     onClick={(event) => {
@@ -448,19 +461,6 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                   >
                     <ExternalLink className='size-3' aria-hidden='true' />
                   </button>
-                  {channelRemark && (
-                    <span
-                      className='text-muted-foreground -m-1 inline-flex size-7 shrink-0 cursor-help items-center justify-center'
-                      aria-label={t('Remark')}
-                    >
-                      <HugeiconsIcon
-                        icon={Comment01Icon}
-                        strokeWidth={2}
-                        className='size-3.5'
-                        aria-hidden='true'
-                      />
-                    </span>
-                  )}
                   {showMultiKeyIndex && (
                     <StatusBadge
                       label={String(multiKeyIndex)}
@@ -735,6 +735,24 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                 iconClassName='size-3'
               />
             </span>
+            {isAdmin && modelInfo.name && (
+              <button
+                type='button'
+                className='text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex size-5 items-center justify-center rounded-sm focus-visible:ring-2 focus-visible:outline-none'
+                title={t('Open model routing')}
+                aria-label={t('Open model routing')}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  void navigate({
+                    to: '/models/$section',
+                    params: { section: 'routing' },
+                    search: { routingModel: modelInfo.name },
+                  })
+                }}
+              >
+                <ExternalLink className='size-3' aria-hidden='true' />
+              </button>
+            )}
           </div>
         )
       },

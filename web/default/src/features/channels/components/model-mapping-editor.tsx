@@ -34,12 +34,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 
+import { mergeModelMappingTemplate } from '../lib/model-mapping-templates'
+
 type ModelMappingEditorProps = {
   value: string
   onChange: (value: string) => void
   disabled?: boolean
   sourceModelOptions?: string[]
   targetModelOptions?: string[]
+  onTemplateApplied?: (
+    appliedMapping: Record<string, string>,
+    completeMapping: Record<string, string>
+  ) => void
 }
 
 type MappingRow = {
@@ -55,13 +61,8 @@ type ModelMappingTemplate = {
 }
 
 const DUPLICATE_MAPPING_SENTINEL = '{ "duplicate_source_models": '
-const MODEL_MAPPING_TEMPLATES_STORAGE_KEY =
-  'new-api:model-mapping-templates:v1'
-const DEFAULT_MODEL_MAPPING_TEMPLATE: ModelMappingTemplate = {
-  id: 'default-gpt-3.5-turbo',
-  name: 'gpt-3.5-turbo',
-  mapping: { 'gpt-3.5-turbo': 'gpt-3.5-turbo-0125' },
-}
+const MODEL_MAPPING_TEMPLATES_STORAGE_KEY = 'new-api:model-mapping-templates:v1'
+const LEGACY_DEFAULT_MODEL_MAPPING_TEMPLATE_ID = 'default-gpt-3.5-turbo'
 
 function getDuplicateSources(rows: MappingRow[]): string[] {
   const seen = new Set<string>()
@@ -105,22 +106,30 @@ function normalizeTemplate(value: unknown): ModelMappingTemplate | null {
 }
 
 function loadModelMappingTemplates(): ModelMappingTemplate[] {
-  if (typeof window === 'undefined') return [DEFAULT_MODEL_MAPPING_TEMPLATE]
+  if (typeof window === 'undefined') return []
   try {
     const raw = window.localStorage.getItem(MODEL_MAPPING_TEMPLATES_STORAGE_KEY)
-    if (!raw) return [DEFAULT_MODEL_MAPPING_TEMPLATE]
-    const parsed = JSON.parse(raw)
-    const values = Array.isArray(parsed)
-      ? parsed
-      : parsed?.version === 1 && Array.isArray(parsed.templates)
-        ? parsed.templates
-        : []
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as unknown
+    const persisted = parsed as { version?: unknown; templates?: unknown }
+    let values: unknown[] = []
+    if (Array.isArray(parsed)) {
+      values = parsed
+    } else if (persisted.version === 1 && Array.isArray(persisted.templates)) {
+      values = persisted.templates
+    }
     const templates = values
       .map(normalizeTemplate)
       .filter((template): template is ModelMappingTemplate => template !== null)
-    return templates.length > 0 ? templates : [DEFAULT_MODEL_MAPPING_TEMPLATE]
-  } catch (_error) {
-    return [DEFAULT_MODEL_MAPPING_TEMPLATE]
+      .filter(
+        (template) => template.id !== LEGACY_DEFAULT_MODEL_MAPPING_TEMPLATE_ID
+      )
+    if (templates.length !== values.length) {
+      persistModelMappingTemplates(templates)
+    }
+    return templates
+  } catch {
+    return []
   }
 }
 
@@ -128,7 +137,7 @@ function persistModelMappingTemplates(templates: ModelMappingTemplate[]) {
   if (typeof window === 'undefined') return
   window.localStorage.setItem(
     MODEL_MAPPING_TEMPLATES_STORAGE_KEY,
-    JSON.stringify({ version: 1, templates }),
+    JSON.stringify({ version: 1, templates })
   )
 }
 
@@ -141,10 +150,10 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
   const [jsonValue, setJsonValue] = useState(props.value)
   const [jsonError, setJsonError] = useState<string | null>(null)
   const [templates, setTemplates] = useState<ModelMappingTemplate[]>(
-    loadModelMappingTemplates,
+    loadModelMappingTemplates
   )
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
-    null,
+    null
   )
   const nextRowIdRef = useRef(0)
   const duplicateSources = useMemo(() => getDuplicateSources(rows), [rows])
@@ -199,7 +208,7 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
       })
       setJsonError(null)
       return true
-    } catch (_error) {
+    } catch {
       setJsonError(t('Model mapping must be valid JSON format'))
       return false
     }
@@ -272,11 +281,44 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
   }
 
   const applyTemplate = (template: ModelMappingTemplate) => {
-    const value = JSON.stringify(template.mapping, null, 2)
+    let currentMapping: Record<string, string> = {}
+    try {
+      if (jsonValue.trim()) {
+        const parsed = JSON.parse(jsonValue)
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          setJsonError(t('Model mapping must be a valid JSON object'))
+          return
+        }
+        if (Object.values(parsed).some((value) => typeof value !== 'string')) {
+          setJsonError(t('Model mapping values must be strings'))
+          return
+        }
+        currentMapping = parsed as Record<string, string>
+      }
+    } catch {
+      setJsonError(t('Model mapping must be valid JSON format'))
+      return
+    }
+
+    const { mapping, addedMapping } = mergeModelMappingTemplate(
+      currentMapping,
+      template.mapping
+    )
+    const appliedMapping = Object.fromEntries(
+      Object.keys(template.mapping).map((source) => [source, mapping[source]])
+    )
     setSelectedTemplateId(template.id)
+    if (Object.keys(addedMapping).length === 0) {
+      setJsonError(null)
+      props.onTemplateApplied?.(appliedMapping, mapping)
+      return
+    }
+
+    const value = JSON.stringify(mapping, null, 2)
     setJsonValue(value)
     props.onChange(value)
     parseJsonToRows(value)
+    props.onTemplateApplied?.(appliedMapping, mapping)
   }
 
   const saveCurrentAsTemplate = () => {
@@ -288,19 +330,18 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
     if (Object.keys(mapping).length === 0) return
 
     const selectedTemplate = templates.find(
-      (template) => template.id === selectedTemplateId,
+      (template) => template.id === selectedTemplateId
     )
     const name = window.prompt(
       t('Template name'),
-      selectedTemplate?.name || t('New template'),
+      selectedTemplate?.name || t('New template')
     )
     const trimmedName = name?.trim()
     if (!trimmedName) return
 
     const existing = templates.find(
       (template) =>
-        template.id !== DEFAULT_MODEL_MAPPING_TEMPLATE.id &&
-        (template.id === selectedTemplateId || template.name === trimmedName),
+        template.id === selectedTemplateId || template.name === trimmedName
     )
     const nextTemplate: ModelMappingTemplate = {
       id: existing?.id || `model-mapping-${Date.now()}`,
@@ -309,7 +350,7 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
     }
     const nextTemplates = existing
       ? templates.map((template) =>
-          template.id === existing.id ? nextTemplate : template,
+          template.id === existing.id ? nextTemplate : template
         )
       : [...templates, nextTemplate]
     setTemplates(nextTemplates)
@@ -318,7 +359,6 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
   }
 
   const deleteTemplate = (template: ModelMappingTemplate) => {
-    if (template.id === DEFAULT_MODEL_MAPPING_TEMPLATE.id) return
     if (!window.confirm(`${t('Delete')} "${template.name}"?`)) return
     const nextTemplates = templates.filter((item) => item.id !== template.id)
     setTemplates(nextTemplates)
@@ -392,28 +432,21 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
                 </div>
               )}
               <DropdownMenuSeparator />
-              {templates.some(
-                (template) => template.id !== DEFAULT_MODEL_MAPPING_TEMPLATE.id
-              ) && (
+              {templates.length > 0 && (
                 <div className='text-muted-foreground px-2 py-1 text-xs'>
                   {t('Delete template')}
                 </div>
               )}
-              {templates
-                .filter(
-                  (template) =>
-                    template.id !== DEFAULT_MODEL_MAPPING_TEMPLATE.id
-                )
-                .map((template) => (
-                  <DropdownMenuItem
-                    key={`delete-${template.id}`}
-                    variant='destructive'
-                    onClick={() => deleteTemplate(template)}
-                  >
-                    <Trash2 className='mr-2 h-4 w-4' aria-hidden='true' />
-                    <span className='truncate'>{template.name}</span>
-                  </DropdownMenuItem>
-                ))}
+              {templates.map((template) => (
+                <DropdownMenuItem
+                  key={`delete-${template.id}`}
+                  variant='destructive'
+                  onClick={() => deleteTemplate(template)}
+                >
+                  <Trash2 className='mr-2 h-4 w-4' aria-hidden='true' />
+                  <span className='truncate'>{template.name}</span>
+                </DropdownMenuItem>
+              ))}
               <DropdownMenuItem
                 disabled={props.disabled || rows.length === 0}
                 onClick={saveCurrentAsTemplate}
@@ -459,7 +492,7 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
                     onChange={(e) =>
                       handleRowChange(row.id, 'from', e.target.value)
                     }
-                    placeholder='gpt-3.5-turbo'
+                    placeholder='client-model'
                     disabled={props.disabled}
                     list={sourceListId}
                   />
@@ -468,7 +501,7 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
                     onChange={(e) =>
                       handleRowChange(row.id, 'to', e.target.value)
                     }
-                    placeholder='gpt-3.5-turbo-0125'
+                    placeholder='upstream-model'
                     disabled={props.disabled}
                     list={targetListId}
                   />

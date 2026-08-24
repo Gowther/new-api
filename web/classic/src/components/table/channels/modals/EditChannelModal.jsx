@@ -84,6 +84,7 @@ import {
 } from '../modelOverlapCheck';
 import { useSecureVerification } from '../../../../hooks/common/useSecureVerification';
 import { parseChannelConnectionString } from '../../../../helpers/token';
+import { reconcileModelsForMapping } from '../../../../helpers/modelMapping';
 import { createApiCalls } from '../../../../services/secureVerification';
 import {
   collectInvalidStatusCodeEntries,
@@ -111,10 +112,6 @@ import {
 } from '@douyinfe/semi-icons';
 
 const { Text, Title } = Typography;
-
-const MODEL_MAPPING_EXAMPLE = {
-  'gpt-3.5-turbo': 'gpt-3.5-turbo-0125',
-};
 
 const STATUS_CODE_MAPPING_EXAMPLE = {
   400: '500',
@@ -4964,15 +4961,24 @@ const EditChannelModal = (props) => {
                           t(
                             '此项可选，用于修改请求体中的模型名称，为一个 JSON 字符串，键为请求中模型名称，值为要替换的模型名称，例如：',
                           ) +
-                          `\n${JSON.stringify(MODEL_MAPPING_EXAMPLE, null, 2)}`
+                          `\n${JSON.stringify({ 'client-model': 'upstream-model' }, null, 2)}`
                         }
                         value={inputs.model_mapping || ''}
                         onChange={(value) =>
                           handleInputChange('model_mapping', value)
                         }
-                        template={MODEL_MAPPING_EXAMPLE}
                         templateLabel={t('填入模板')}
                         templateStorageKey='new-api:model-mapping-templates:v1'
+                        onTemplateApplied={(appliedMapping, completeMapping) =>
+                          handleInputChange(
+                            'models',
+                            reconcileModelsForMapping(
+                              inputs.models,
+                              appliedMapping,
+                              completeMapping,
+                            ),
+                          )
+                        }
                         editorType='keyValue'
                         formApi={formApiRef.current}
                         renderStringValueSuffix={({ pairKey, value }) => {

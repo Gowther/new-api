@@ -159,6 +159,7 @@ import {
   getKeyPromptForType,
   parseModelsString,
   formatModelsArray,
+  reconcileModelsForMapping,
   extractRedirectModels,
   extractMappingSourceModels,
   hasModelConfigChanged,
@@ -1425,6 +1426,26 @@ export function ChannelMutateDrawer({
         : formatModelsArray(newModels)
       form.setValue('models', finalModels)
       return newModels.length
+    },
+    [currentModelsArray, form]
+  )
+
+  const handleModelMappingTemplateApplied = useCallback(
+    (
+      appliedMapping: Record<string, string>,
+      completeMapping: Record<string, string>
+    ) => {
+      form.setValue(
+        'models',
+        formatModelsArray(
+          reconcileModelsForMapping(
+            currentModelsArray,
+            appliedMapping,
+            completeMapping
+          )
+        ),
+        { shouldDirty: true, shouldValidate: true }
+      )
     },
     [currentModelsArray, form]
   )
@@ -3809,6 +3830,9 @@ export function ChannelMutateDrawer({
                                     <ModelMappingEditor
                                       value={field.value || ''}
                                       onChange={field.onChange}
+                                      onTemplateApplied={
+                                        handleModelMappingTemplateApplied
+                                      }
                                       disabled={isSubmitting}
                                       sourceModelOptions={currentModelsArray}
                                       targetModelOptions={modelOptions.map(

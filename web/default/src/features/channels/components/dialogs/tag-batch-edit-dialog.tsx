@@ -37,7 +37,12 @@ import {
   getAllModels,
   getGroups,
 } from '../../api'
-import { channelsQueryKeys } from '../../lib'
+import {
+  channelsQueryKeys,
+  formatModelsArray,
+  parseModelsString,
+  reconcileModelsForMapping,
+} from '../../lib'
 import type { TagOperationParams } from '../../types'
 import { useChannels } from '../channels-provider'
 import { ModelMappingEditor } from '../model-mapping-editor'
@@ -273,6 +278,17 @@ export function TagBatchEditDialog({
               <ModelMappingEditor
                 value={modelMapping}
                 onChange={setModelMapping}
+                onTemplateApplied={(appliedMapping, completeMapping) =>
+                  setModels(
+                    formatModelsArray(
+                      reconcileModelsForMapping(
+                        parseModelsString(models),
+                        appliedMapping,
+                        completeMapping
+                      )
+                    )
+                  )
+                }
                 disabled={isSaving}
               />
             </div>

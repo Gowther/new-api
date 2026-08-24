@@ -38,6 +38,7 @@ import {
   Dropdown,
 } from '@douyinfe/semi-ui';
 import { IconPlus, IconDelete, IconAlertTriangle } from '@douyinfe/semi-icons';
+import { mergeModelMappingTemplate } from '../../../helpers/modelMapping';
 
 const { Text } = Typography;
 
@@ -49,7 +50,7 @@ const generateUniqueId = (() => {
 
 const MODEL_MAPPING_TEMPLATES_STORAGE_KEY =
   'new-api:model-mapping-templates:v1';
-const DEFAULT_MODEL_MAPPING_TEMPLATE_ID = 'default-gpt-3.5-turbo';
+const LEGACY_DEFAULT_MODEL_MAPPING_TEMPLATE_ID = 'default-gpt-3.5-turbo';
 
 const normalizeTemplate = (value) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -70,23 +71,16 @@ const normalizeTemplate = (value) => {
     if (trimmedKey) normalizedMapping[trimmedKey] = item;
   }
   const name = value.name.trim();
-  return name
-    ? { id: value.id, name, mapping: normalizedMapping }
-    : null;
+  return name ? { id: value.id, name, mapping: normalizedMapping } : null;
 };
 
-const loadModelMappingTemplates = (template) => {
-  const defaultTemplate = {
-    id: DEFAULT_MODEL_MAPPING_TEMPLATE_ID,
-    name: 'gpt-3.5-turbo',
-    mapping: template || { 'gpt-3.5-turbo': 'gpt-3.5-turbo-0125' },
-  };
-  if (typeof window === 'undefined') return [defaultTemplate];
+const loadModelMappingTemplates = () => {
+  if (typeof window === 'undefined') return [];
   try {
     const raw = window.localStorage.getItem(
       MODEL_MAPPING_TEMPLATES_STORAGE_KEY,
     );
-    if (!raw) return [defaultTemplate];
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
     const values = Array.isArray(parsed)
       ? parsed
@@ -95,10 +89,14 @@ const loadModelMappingTemplates = (template) => {
         : [];
     const templates = values
       .map(normalizeTemplate)
-      .filter(Boolean);
-    return templates.length > 0 ? templates : [defaultTemplate];
+      .filter(Boolean)
+      .filter((item) => item.id !== LEGACY_DEFAULT_MODEL_MAPPING_TEMPLATE_ID);
+    if (templates.length !== values.length) {
+      persistModelMappingTemplates(templates);
+    }
+    return templates;
   } catch {
-    return [defaultTemplate];
+    return [];
   }
 };
 
@@ -121,6 +119,7 @@ const JSONEditor = ({
   showClear = true,
   template,
   templateLabel,
+  onTemplateApplied,
   editorType = 'keyValue',
   rules = [],
   formApi = null,
@@ -199,7 +198,7 @@ const JSONEditor = ({
   const [jsonError, setJsonError] = useState('');
   const [modelMappingTemplates, setModelMappingTemplates] = useState(() =>
     templateStorageKey === MODEL_MAPPING_TEMPLATES_STORAGE_KEY
-      ? loadModelMappingTemplates(template)
+      ? loadModelMappingTemplates()
       : [],
   );
   const [selectedTemplateId, setSelectedTemplateId] = useState(null);
@@ -385,19 +384,79 @@ const JSONEditor = ({
 
   const applyTemplateValue = useCallback(
     (templateValue, templateId = null) => {
-      const templateString = JSON.stringify(templateValue, null, 2);
+      let nextValue = templateValue;
+      let addedMapping = null;
+      let appliedMapping = null;
+
+      if (templateStorageKey === MODEL_MAPPING_TEMPLATES_STORAGE_KEY) {
+        let currentMapping;
+        try {
+          const currentValue =
+            editMode === 'manual'
+              ? manualText
+              : keyValueArrayToObject(keyValuePairs);
+          currentMapping =
+            typeof currentValue === 'string' && currentValue.trim()
+              ? JSON.parse(currentValue)
+              : currentValue || {};
+        } catch {
+          setJsonError(t('当前旧格式 JSON 不合法，无法追加模板'));
+          return;
+        }
+
+        if (
+          !currentMapping ||
+          typeof currentMapping !== 'object' ||
+          Array.isArray(currentMapping) ||
+          Object.values(currentMapping).some((item) => typeof item !== 'string')
+        ) {
+          setJsonError(t('当前旧格式不是 JSON 对象，无法追加模板'));
+          return;
+        }
+
+        const merged = mergeModelMappingTemplate(currentMapping, templateValue);
+        nextValue = merged.mapping;
+        addedMapping = merged.addedMapping;
+        appliedMapping = Object.fromEntries(
+          Object.keys(templateValue).map((source) => [
+            source,
+            nextValue[source],
+          ]),
+        );
+        setSelectedTemplateId(templateId);
+        if (Object.keys(addedMapping).length === 0) {
+          onTemplateApplied?.(appliedMapping, nextValue);
+          setJsonError('');
+          return;
+        }
+      }
+
+      const templateString = JSON.stringify(nextValue, null, 2);
 
       if (formApi && field) {
         formApi.setValue(field, templateString);
       }
 
       setManualText(templateString);
-      setKeyValuePairs(objectToKeyValueArray(templateValue, keyValuePairs));
+      setKeyValuePairs(objectToKeyValueArray(nextValue, keyValuePairs));
       setSelectedTemplateId(templateId);
       onChange?.(templateString);
+      if (appliedMapping) onTemplateApplied?.(appliedMapping, nextValue);
       setJsonError('');
     },
-    [onChange, formApi, field, objectToKeyValueArray, keyValuePairs],
+    [
+      editMode,
+      field,
+      formApi,
+      keyValueArrayToObject,
+      keyValuePairs,
+      manualText,
+      objectToKeyValueArray,
+      onChange,
+      onTemplateApplied,
+      t,
+      templateStorageKey,
+    ],
   );
 
   const saveCurrentMappingAsTemplate = useCallback(() => {
@@ -410,9 +469,7 @@ const JSONEditor = ({
     const trimmedName = name?.trim();
     if (!trimmedName) return;
     const existing = modelMappingTemplates.find(
-      (item) =>
-        item.id !== DEFAULT_MODEL_MAPPING_TEMPLATE_ID &&
-        (item.id === selectedTemplateId || item.name === trimmedName),
+      (item) => item.id === selectedTemplateId || item.name === trimmedName,
     );
     const nextTemplate = {
       id: existing?.id || `model-mapping-${Date.now()}`,
@@ -437,7 +494,6 @@ const JSONEditor = ({
 
   const deleteModelMappingTemplate = useCallback(
     (item) => {
-      if (item.id === DEFAULT_MODEL_MAPPING_TEMPLATE_ID) return;
       if (!window.confirm(`${t('删除')} "${item.name}"?`)) return;
       const nextTemplates = modelMappingTemplates.filter(
         (templateItem) => templateItem.id !== item.id,
@@ -767,7 +823,9 @@ const JSONEditor = ({
               <TabPane tab={t('手动编辑')} itemKey='manual' />
             </Tabs>
 
-            {template && templateLabel &&
+            {templateLabel &&
+              (template ||
+                templateStorageKey === MODEL_MAPPING_TEMPLATES_STORAGE_KEY) &&
               (templateStorageKey === MODEL_MAPPING_TEMPLATES_STORAGE_KEY ? (
                 <Dropdown
                   trigger='click'
@@ -797,20 +855,15 @@ const JSONEditor = ({
                       >
                         {t('保存')} {t('模板')}
                       </Dropdown.Item>
-                      {modelMappingTemplates
-                        .filter(
-                          (item) =>
-                            item.id !== DEFAULT_MODEL_MAPPING_TEMPLATE_ID,
-                        )
-                        .map((item) => (
-                          <Dropdown.Item
-                            key={`delete-${item.id}`}
-                            type='danger'
-                            onClick={() => deleteModelMappingTemplate(item)}
-                          >
-                            {t('删除')} {t('模板')}: {item.name}
-                          </Dropdown.Item>
-                        ))}
+                      {modelMappingTemplates.map((item) => (
+                        <Dropdown.Item
+                          key={`delete-${item.id}`}
+                          type='danger'
+                          onClick={() => deleteModelMappingTemplate(item)}
+                        >
+                          {t('删除')} {t('模板')}: {item.name}
+                        </Dropdown.Item>
+                      ))}
                     </Dropdown.Menu>
                   }
                 >

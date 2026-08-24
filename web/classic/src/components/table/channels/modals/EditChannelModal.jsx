@@ -4993,6 +4993,7 @@ const EditChannelModal = (props) => {
                         }
                         template={MODEL_MAPPING_EXAMPLE}
                         templateLabel={t('填入模板')}
+                        templateStorageKey='new-api:model-mapping-templates:v1'
                         editorType='keyValue'
                         formApi={formApiRef.current}
                         renderStringValueSuffix={({ pairKey, value }) => {

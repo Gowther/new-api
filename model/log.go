@@ -22,6 +22,7 @@ import (
 )
 
 func applyExplicitLogTextFilter(tx *gorm.DB, column string, value string) (*gorm.DB, error) {
+	value = strings.TrimSpace(value)
 	if value == "" {
 		return tx, nil
 	}
@@ -33,6 +34,21 @@ func applyExplicitLogTextFilter(tx *gorm.DB, column string, value string) (*gorm
 		return tx.Where(condition, pattern), nil
 	}
 	return tx.Where(column+" = ?", value), nil
+}
+
+func applyLogModelNameFilter(tx *gorm.DB, column string, value string) (*gorm.DB, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return tx, nil
+	}
+	if !strings.Contains(value, "%") {
+		value = "%" + value + "%"
+	}
+	condition, pattern, err := buildLogLikeCondition(column, value)
+	if err != nil {
+		return nil, err
+	}
+	return tx.Where(condition, pattern), nil
 }
 
 func buildLogLikeCondition(column string, value string) (string, string, error) {
@@ -515,7 +531,7 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 		tx = LOG_DB.Where("logs.type = ?", logType)
 	}
 
-	if tx, err = applyExplicitLogTextFilter(tx, "logs.model_name", modelName); err != nil {
+	if tx, err = applyLogModelNameFilter(tx, "logs.model_name", modelName); err != nil {
 		return nil, 0, err
 	}
 	if tx, err = applyExplicitLogTextFilter(tx, "logs.username", username); err != nil {
@@ -728,7 +744,7 @@ func GetErrorLogSummary(query ErrorLogSummaryQuery) (*ErrorLogSummaryResponse, e
 		Where("logs.created_at <= ?", endTime)
 
 	var err error
-	if tx, err = applyExplicitLogTextFilter(tx, "logs.model_name", query.ModelName); err != nil {
+	if tx, err = applyLogModelNameFilter(tx, "logs.model_name", query.ModelName); err != nil {
 		return nil, err
 	}
 	if query.ChannelId > 0 {
@@ -1362,7 +1378,7 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 		tx = LOG_DB.Where("logs.user_id = ? and logs.type = ?", userId, logType)
 	}
 
-	if tx, err = applyExplicitLogTextFilter(tx, "logs.model_name", modelName); err != nil {
+	if tx, err = applyLogModelNameFilter(tx, "logs.model_name", modelName); err != nil {
 		return nil, 0, err
 	}
 	if tokenName != "" {
@@ -1441,10 +1457,10 @@ func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelNa
 	if endTimestamp != 0 {
 		tx = tx.Where("created_at <= ?", endTimestamp)
 	}
-	if tx, err = applyExplicitLogTextFilter(tx, "model_name", modelName); err != nil {
+	if tx, err = applyLogModelNameFilter(tx, "model_name", modelName); err != nil {
 		return stat, err
 	}
-	if rpmTpmQuery, err = applyExplicitLogTextFilter(rpmTpmQuery, "model_name", modelName); err != nil {
+	if rpmTpmQuery, err = applyLogModelNameFilter(rpmTpmQuery, "model_name", modelName); err != nil {
 		return stat, err
 	}
 	if channel != 0 {
@@ -1500,8 +1516,9 @@ func SumUsedToken(logType int, startTimestamp int64, endTimestamp int64, modelNa
 	if endTimestamp != 0 {
 		tx = tx.Where("created_at <= ?", endTimestamp)
 	}
-	if modelName != "" {
-		tx = tx.Where("model_name = ?", modelName)
+	var err error
+	if tx, err = applyLogModelNameFilter(tx, "model_name", modelName); err != nil {
+		return 0
 	}
 	tx.Where("type = ?", LogTypeConsume).Scan(&token)
 	return token

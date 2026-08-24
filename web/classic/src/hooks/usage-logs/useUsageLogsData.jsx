@@ -19,7 +19,8 @@ For commercial licensing, please contact support@quantumnous.com
 
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Modal } from '@douyinfe/semi-ui';
+import { Button, Modal } from '@douyinfe/semi-ui';
+import { IconCopy } from '@douyinfe/semi-icons';
 import {
   API,
   getTodayStartTimestamp,
@@ -565,10 +566,16 @@ export const useLogsData = () => {
           value: other.cache_tokens,
         });
       }
-      if (other?.cache_creation_tokens > 0) {
+      const cacheWriteTokens = Math.max(
+        Number(other?.cache_creation_tokens) || 0,
+        Number(other?.cache_creation_tokens_5m) || 0,
+        Number(other?.cache_creation_tokens_1h) || 0,
+        Number(other?.cache_write_tokens) || 0,
+      );
+      if (cacheWriteTokens > 0) {
         expandDataLocal.push({
           key: t('缓存创建 Tokens'),
-          value: other.cache_creation_tokens,
+          value: cacheWriteTokens,
         });
       }
       if (logs[i].type === 2) {
@@ -595,6 +602,35 @@ export const useLogsData = () => {
             value: other.reject_reason,
           });
         }
+      }
+      if (logs[i].type === 5 && logs[i].content) {
+        expandDataLocal.push({
+          key: t('错误详情'),
+          value: (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 8,
+                maxWidth: 600,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                lineHeight: 1.6,
+              }}
+            >
+              <span style={{ flex: 1 }}>{logs[i].content}</span>
+              <Button
+                icon={<IconCopy />}
+                size='small'
+                theme='borderless'
+                type='tertiary'
+                aria-label={t('复制')}
+                style={{ height: 24, minWidth: 24, padding: 2 }}
+                onClick={(event) => copyText(event, logs[i].content)}
+              />
+            </div>
+          ),
+        });
       }
       if (logs[i].type === 2) {
         let modelMapped =

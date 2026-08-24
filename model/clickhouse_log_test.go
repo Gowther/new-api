@@ -6,9 +6,11 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/glebarez/sqlite"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestIsClickHouseDSN(t *testing.T) {
@@ -127,6 +129,25 @@ func TestBuildLogLikeConditionUsesClickHouseEscaping(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "logs.model_name LIKE ?", condition)
 	assert.Equal(t, `gpt\_4\\mini%`, pattern)
+}
+
+func TestApplyLogModelNameFilterUsesBoundSubstringPattern(t *testing.T) {
+	originalLogDatabaseType := common.LogDatabaseType()
+	t.Cleanup(func() {
+		common.SetLogDatabaseType(originalLogDatabaseType)
+	})
+	common.SetLogDatabaseType(common.DatabaseTypeSQLite)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{DryRun: true})
+	require.NoError(t, err)
+
+	filtered, err := applyLogModelNameFilter(db.Model(&Log{}), "logs.model_name", `claude_3' OR 1=1 --`)
+	require.NoError(t, err)
+	statement := filtered.Find(&[]Log{}).Statement
+
+	assert.Contains(t, statement.SQL.String(), "logs.model_name LIKE ? ESCAPE '!'")
+	assert.NotContains(t, statement.SQL.String(), "OR 1=1")
+	require.Len(t, statement.Vars, 1)
+	assert.Equal(t, `%claude!_3' OR 1=1 --%`, statement.Vars[0])
 }
 
 func TestEnsureLogRequestId(t *testing.T) {

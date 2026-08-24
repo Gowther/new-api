@@ -47,6 +47,7 @@ import type { UsageLog } from '../../data/schema'
 import {
   parseLogOther,
   formatCacheReadRate,
+  getCacheCreationTokens,
   getParamOverrideActionLabel,
   parseAuditLine,
   decodeBillingExprB64,
@@ -350,12 +351,13 @@ function TokenBreakdown(props: { log: UsageLog; other: LogOtherData }) {
   const promptTokens = log.prompt_tokens || 0
   const completionTokens = log.completion_tokens || 0
   const cacheRead = other.cache_tokens || 0
+  const cacheWrite = getCacheCreationTokens(other)
   const cacheReadRate = formatCacheReadRate(
     cacheRead,
     promptTokens,
+    cacheWrite,
     other.claude === true
   )
-  const cacheWrite = other.cache_creation_tokens || 0
   const cacheWrite5m = other.cache_creation_tokens_5m || 0
   const cacheWrite1h = other.cache_creation_tokens_1h || 0
   const hasTokens = promptTokens > 0 || completionTokens > 0

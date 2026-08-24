@@ -246,33 +246,67 @@ export function hasAnyCacheTokens(
     (other.cache_tokens || 0) > 0 ||
     (other.cache_creation_tokens || 0) > 0 ||
     (other.cache_creation_tokens_5m || 0) > 0 ||
-    (other.cache_creation_tokens_1h || 0) > 0
+    (other.cache_creation_tokens_1h || 0) > 0 ||
+    (other.cache_write_tokens || 0) > 0
   )
 }
 
 /**
+ * Return the normalized cache-creation token count used by the cache-rate
+ * calculation. Newer logs may include both an aggregate and 5m/1h split;
+ * taking the largest value avoids double-counting while remaining compatible
+ * with older records that only have one of those fields.
+ */
+export function getCacheCreationTokens(
+  other: LogOtherData | null | undefined
+): number {
+  if (!other) return 0
+
+  const values = [
+    other.cache_creation_tokens,
+    other.cache_creation_tokens_5m,
+    other.cache_creation_tokens_1h,
+    other.cache_write_tokens,
+  ].map(Number)
+  const aggregate = Number.isFinite(values[0]) ? Math.max(0, values[0]) : 0
+  const split =
+    (Number.isFinite(values[1]) ? Math.max(0, values[1]) : 0) +
+    (Number.isFinite(values[2]) ? Math.max(0, values[2]) : 0)
+  const normalizedWrite = Number.isFinite(values[3])
+    ? Math.max(0, values[3])
+    : 0
+  return Math.max(aggregate, split, normalizedWrite)
+}
+
+/**
  * Format the cache-read rate using the provider's prompt token semantics.
- * Anthropic reports prompt tokens without cache reads, while other providers
- * include cache reads in prompt tokens.
+ * Anthropic reports prompt tokens without cache reads or cache creation, while
+ * other providers include cache reads in prompt tokens.
  */
 export function formatCacheReadRate(
   cacheReadTokens: number,
   promptTokens: number,
+  cacheCreationTokens: number,
   isClaude: boolean
 ): string | null {
   const normalizedCacheReadTokens = Number(cacheReadTokens)
   const normalizedPromptTokens = Number(promptTokens)
+  const normalizedCacheCreationTokens = Number(cacheCreationTokens)
   if (
     !Number.isFinite(normalizedCacheReadTokens) ||
     !Number.isFinite(normalizedPromptTokens) ||
+    !Number.isFinite(normalizedCacheCreationTokens) ||
     normalizedCacheReadTokens <= 0 ||
-    normalizedPromptTokens < 0
+    normalizedPromptTokens < 0 ||
+    normalizedCacheCreationTokens < 0
   ) {
     return null
   }
 
   const denominator = isClaude
-    ? normalizedPromptTokens + normalizedCacheReadTokens
+    ? normalizedPromptTokens +
+      normalizedCacheReadTokens +
+      normalizedCacheCreationTokens
     : normalizedPromptTokens
   if (denominator <= 0) return null
 

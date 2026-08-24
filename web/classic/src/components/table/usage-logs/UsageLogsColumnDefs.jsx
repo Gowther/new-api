@@ -398,15 +398,23 @@ function formatTokenCount(value) {
   return toTokenNumber(value).toLocaleString();
 }
 
-function formatCacheReadRate(cacheReadTokens, promptTokens, isClaude) {
+function formatCacheReadRate(
+  cacheReadTokens,
+  promptTokens,
+  cacheCreationTokens,
+  isClaude,
+) {
   const normalizedCacheReadTokens = toTokenNumber(cacheReadTokens);
   const normalizedPromptTokens = toTokenNumber(promptTokens);
+  const normalizedCacheCreationTokens = toTokenNumber(cacheCreationTokens);
   if (normalizedCacheReadTokens <= 0) {
     return null;
   }
 
   const denominator = isClaude
-    ? normalizedPromptTokens + normalizedCacheReadTokens
+    ? normalizedPromptTokens +
+      normalizedCacheReadTokens +
+      normalizedCacheCreationTokens
     : normalizedPromptTokens;
   if (denominator <= 0) {
     return null;
@@ -427,9 +435,14 @@ function getPromptCacheSummary(other, promptTokens) {
 
   const hasSplitCacheCreation =
     cacheCreationTokens5m > 0 || cacheCreationTokens1h > 0;
-  const cacheWriteTokens = hasSplitCacheCreation
+  const splitCacheWriteTokens = hasSplitCacheCreation
     ? cacheCreationTokens5m + cacheCreationTokens1h
-    : cacheCreationTokens;
+    : 0;
+  const cacheWriteTokens = Math.max(
+    cacheCreationTokens,
+    splitCacheWriteTokens,
+    toTokenNumber(other.cache_write_tokens),
+  );
 
   if (cacheReadTokens <= 0 && cacheWriteTokens <= 0) {
     return null;
@@ -440,6 +453,7 @@ function getPromptCacheSummary(other, promptTokens) {
     cacheReadRate: formatCacheReadRate(
       cacheReadTokens,
       promptTokens,
+      cacheWriteTokens,
       other.claude === true,
     ),
     cacheWriteTokens,
@@ -600,13 +614,8 @@ export const getLogsColumns = ({
           }
         }
 
-        return isAdminUser &&
-          (record.type === 0 ||
-            record.type === 2 ||
-            record.type === 5 ||
-            record.type === 6) ? (
-          <Space>
-            <span style={{ position: 'relative', display: 'inline-block' }}>
+        const channelInfo = (
+          <span style={{ position: 'relative', display: 'inline-block' }}>
               <Tooltip content={record.channel_name || t('未知渠道')}>
                 <span style={{ display: 'inline-flex', alignItems: 'center' }}>
                   <Tag
@@ -627,26 +636,21 @@ export const getLogsColumns = ({
                 </span>
               </Tooltip>
               {record.channel_remark && (
-                <ChannelRemarkTooltip
-                  remark={record.channel_remark}
-                  title={record.channel_name || t('未知渠道')}
+                <span
+                  aria-label={t('备注')}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 28,
+                    height: 28,
+                    color: 'var(--semi-color-text-2)',
+                    cursor: 'help',
+                  }}
+                  onClick={(event) => event.stopPropagation()}
                 >
-                  <span
-                    aria-label={t('备注')}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: 28,
-                      height: 28,
-                      color: 'var(--semi-color-text-2)',
-                      cursor: 'help',
-                    }}
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    <IconCommentStroked size='small' />
-                  </span>
-                </ChannelRemarkTooltip>
+                  <IconCommentStroked size='small' />
+                </span>
               )}
               {showMarker && (
                 <Tooltip
@@ -686,7 +690,25 @@ export const getLogsColumns = ({
                   </span>
                 </Tooltip>
               )}
-            </span>
+          </span>
+        );
+
+        return isAdminUser &&
+          (record.type === 0 ||
+            record.type === 2 ||
+            record.type === 5 ||
+            record.type === 6) ? (
+          <Space>
+            {record.channel_remark ? (
+              <ChannelRemarkTooltip
+                remark={record.channel_remark}
+                title={record.channel_name || t('未知渠道')}
+              >
+                {channelInfo}
+              </ChannelRemarkTooltip>
+            ) : (
+              channelInfo
+            )}
             {isMultiKey && (
               <Tag color='white' shape='circle'>
                 {multiKeyIndex}

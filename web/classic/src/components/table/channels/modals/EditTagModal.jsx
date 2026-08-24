@@ -49,6 +49,7 @@ import {
 } from '@douyinfe/semi-icons';
 import { getChannelModels } from '../../../../helpers';
 import { useTranslation } from 'react-i18next';
+import JSONEditor from '../../../common/ui/JSONEditor';
 
 const { Text, Title } = Typography;
 
@@ -514,29 +515,23 @@ const EditTagModal = (props) => {
                     }
                   />
 
-                  <Form.TextArea
+                  <JSONEditor
                     field='model_mapping'
                     label={t('模型重定向')}
                     placeholder={t(
                       '此项可选，用于修改请求体中的模型名称，为一个 JSON 字符串，键为请求中模型名称，值为要替换的模型名称，留空则不更改',
                     )}
-                    autosize
+                    value={inputs.model_mapping || ''}
                     onChange={(value) =>
                       handleInputChange('model_mapping', value)
                     }
+                    template={MODEL_MAPPING_EXAMPLE}
+                    templateLabel={t('填入模板')}
+                    templateStorageKey='new-api:model-mapping-templates:v1'
+                    editorType='keyValue'
+                    formApi={formApiRef.current}
                     extraText={
                       <Space>
-                        <Text
-                          className='!text-semi-color-primary cursor-pointer'
-                          onClick={() =>
-                            handleInputChange(
-                              'model_mapping',
-                              JSON.stringify(MODEL_MAPPING_EXAMPLE, null, 2),
-                            )
-                          }
-                        >
-                          {t('填入模板')}
-                        </Text>
                         <Text
                           className='!text-semi-color-primary cursor-pointer'
                           onClick={() =>

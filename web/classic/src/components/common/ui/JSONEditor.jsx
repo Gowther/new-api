@@ -35,6 +35,7 @@ import {
   Col,
   Divider,
   Tooltip,
+  Dropdown,
 } from '@douyinfe/semi-ui';
 import { IconPlus, IconDelete, IconAlertTriangle } from '@douyinfe/semi-icons';
 
@@ -45,6 +46,69 @@ const generateUniqueId = (() => {
   let counter = 0;
   return () => `kv_${counter++}`;
 })();
+
+const MODEL_MAPPING_TEMPLATES_STORAGE_KEY =
+  'new-api:model-mapping-templates:v1';
+const DEFAULT_MODEL_MAPPING_TEMPLATE_ID = 'default-gpt-3.5-turbo';
+
+const normalizeTemplate = (value) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const mapping = value.mapping || value.value;
+  if (
+    typeof value.id !== 'string' ||
+    typeof value.name !== 'string' ||
+    !mapping ||
+    typeof mapping !== 'object' ||
+    Array.isArray(mapping)
+  ) {
+    return null;
+  }
+  const normalizedMapping = {};
+  for (const [key, item] of Object.entries(mapping)) {
+    if (typeof item !== 'string') return null;
+    const trimmedKey = String(key).trim();
+    if (trimmedKey) normalizedMapping[trimmedKey] = item;
+  }
+  const name = value.name.trim();
+  return name
+    ? { id: value.id, name, mapping: normalizedMapping }
+    : null;
+};
+
+const loadModelMappingTemplates = (template) => {
+  const defaultTemplate = {
+    id: DEFAULT_MODEL_MAPPING_TEMPLATE_ID,
+    name: 'gpt-3.5-turbo',
+    mapping: template || { 'gpt-3.5-turbo': 'gpt-3.5-turbo-0125' },
+  };
+  if (typeof window === 'undefined') return [defaultTemplate];
+  try {
+    const raw = window.localStorage.getItem(
+      MODEL_MAPPING_TEMPLATES_STORAGE_KEY,
+    );
+    if (!raw) return [defaultTemplate];
+    const parsed = JSON.parse(raw);
+    const values = Array.isArray(parsed)
+      ? parsed
+      : parsed?.version === 1 && Array.isArray(parsed.templates)
+        ? parsed.templates
+        : [];
+    const templates = values
+      .map(normalizeTemplate)
+      .filter(Boolean);
+    return templates.length > 0 ? templates : [defaultTemplate];
+  } catch {
+    return [defaultTemplate];
+  }
+};
+
+const persistModelMappingTemplates = (templates) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(
+    MODEL_MAPPING_TEMPLATES_STORAGE_KEY,
+    JSON.stringify({ version: 1, templates }),
+  );
+};
 
 const JSONEditor = ({
   value = '',
@@ -61,6 +125,7 @@ const JSONEditor = ({
   rules = [],
   formApi = null,
   renderStringValueSuffix,
+  templateStorageKey = '',
   ...props
 }) => {
   const { t } = useTranslation();
@@ -132,6 +197,12 @@ const JSONEditor = ({
   });
 
   const [jsonError, setJsonError] = useState('');
+  const [modelMappingTemplates, setModelMappingTemplates] = useState(() =>
+    templateStorageKey === MODEL_MAPPING_TEMPLATES_STORAGE_KEY
+      ? loadModelMappingTemplates(template)
+      : [],
+  );
+  const [selectedTemplateId, setSelectedTemplateId] = useState(null);
 
   // 计算重复的键
   const duplicateKeys = useMemo(() => {
@@ -312,28 +383,78 @@ const JSONEditor = ({
     [keyValuePairs, handleVisualChange],
   );
 
-  // 填入模板
-  const fillTemplate = useCallback(() => {
-    if (template) {
-      const templateString = JSON.stringify(template, null, 2);
+  const applyTemplateValue = useCallback(
+    (templateValue, templateId = null) => {
+      const templateString = JSON.stringify(templateValue, null, 2);
 
       if (formApi && field) {
         formApi.setValue(field, templateString);
       }
 
       setManualText(templateString);
-      setKeyValuePairs(objectToKeyValueArray(template, keyValuePairs));
+      setKeyValuePairs(objectToKeyValueArray(templateValue, keyValuePairs));
+      setSelectedTemplateId(templateId);
       onChange?.(templateString);
       setJsonError('');
-    }
+    },
+    [onChange, formApi, field, objectToKeyValueArray, keyValuePairs],
+  );
+
+  const saveCurrentMappingAsTemplate = useCallback(() => {
+    const mapping = keyValueArrayToObject(keyValuePairs);
+    if (Object.keys(mapping).length === 0) return;
+    const selected = modelMappingTemplates.find(
+      (item) => item.id === selectedTemplateId,
+    );
+    const name = window.prompt(t('名称'), selected?.name || t('新建'));
+    const trimmedName = name?.trim();
+    if (!trimmedName) return;
+    const existing = modelMappingTemplates.find(
+      (item) =>
+        item.id !== DEFAULT_MODEL_MAPPING_TEMPLATE_ID &&
+        (item.id === selectedTemplateId || item.name === trimmedName),
+    );
+    const nextTemplate = {
+      id: existing?.id || `model-mapping-${Date.now()}`,
+      name: trimmedName,
+      mapping,
+    };
+    const nextTemplates = existing
+      ? modelMappingTemplates.map((item) =>
+          item.id === existing.id ? nextTemplate : item,
+        )
+      : [...modelMappingTemplates, nextTemplate];
+    setModelMappingTemplates(nextTemplates);
+    setSelectedTemplateId(nextTemplate.id);
+    persistModelMappingTemplates(nextTemplates);
   }, [
-    template,
-    onChange,
-    formApi,
-    field,
-    objectToKeyValueArray,
+    keyValueArrayToObject,
     keyValuePairs,
+    modelMappingTemplates,
+    selectedTemplateId,
+    t,
   ]);
+
+  const deleteModelMappingTemplate = useCallback(
+    (item) => {
+      if (item.id === DEFAULT_MODEL_MAPPING_TEMPLATE_ID) return;
+      if (!window.confirm(`${t('删除')} "${item.name}"?`)) return;
+      const nextTemplates = modelMappingTemplates.filter(
+        (templateItem) => templateItem.id !== item.id,
+      );
+      setModelMappingTemplates(nextTemplates);
+      if (selectedTemplateId === item.id) setSelectedTemplateId(null);
+      persistModelMappingTemplates(nextTemplates);
+    },
+    [modelMappingTemplates, selectedTemplateId, t],
+  );
+
+  // 填入单个模板（保留其他 JSONEditor 使用场景的原有行为）
+  const fillTemplate = useCallback(() => {
+    if (template) {
+      applyTemplateValue(template);
+    }
+  }, [template, applyTemplateValue]);
 
   // 渲染值输入控件（支持嵌套）
   const renderValueInput = (pairId, pairKey, value) => {
@@ -646,11 +767,62 @@ const JSONEditor = ({
               <TabPane tab={t('手动编辑')} itemKey='manual' />
             </Tabs>
 
-            {template && templateLabel && (
-              <Button type='tertiary' onClick={fillTemplate} size='small'>
-                {templateLabel}
-              </Button>
-            )}
+            {template && templateLabel &&
+              (templateStorageKey === MODEL_MAPPING_TEMPLATES_STORAGE_KEY ? (
+                <Dropdown
+                  trigger='click'
+                  position='bottomRight'
+                  render={
+                    <Dropdown.Menu>
+                      <Dropdown.Title>{t('模板')}</Dropdown.Title>
+                      {modelMappingTemplates.map((item) => (
+                        <Dropdown.Item
+                          key={item.id}
+                          onClick={() =>
+                            applyTemplateValue(item.mapping, item.id)
+                          }
+                        >
+                          <span className='flex w-full justify-between gap-3'>
+                            <span className='truncate'>{item.name}</span>
+                            <span className='text-xs opacity-60'>
+                              {Object.keys(item.mapping).length}
+                            </span>
+                          </span>
+                        </Dropdown.Item>
+                      ))}
+                      <Dropdown.Divider />
+                      <Dropdown.Item
+                        disabled={keyValuePairs.length === 0}
+                        onClick={saveCurrentMappingAsTemplate}
+                      >
+                        {t('保存')} {t('模板')}
+                      </Dropdown.Item>
+                      {modelMappingTemplates
+                        .filter(
+                          (item) =>
+                            item.id !== DEFAULT_MODEL_MAPPING_TEMPLATE_ID,
+                        )
+                        .map((item) => (
+                          <Dropdown.Item
+                            key={`delete-${item.id}`}
+                            type='danger'
+                            onClick={() => deleteModelMappingTemplate(item)}
+                          >
+                            {t('删除')} {t('模板')}: {item.name}
+                          </Dropdown.Item>
+                        ))}
+                    </Dropdown.Menu>
+                  }
+                >
+                  <Button type='tertiary' size='small'>
+                    {templateLabel}
+                  </Button>
+                </Dropdown>
+              ) : (
+                <Button type='tertiary' onClick={fillTemplate} size='small'>
+                  {templateLabel}
+                </Button>
+              ))}
           </div>
         }
         headerStyle={{ padding: '12px 16px' }}

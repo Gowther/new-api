@@ -16,12 +16,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Code, Plus, Table, Trash2 } from 'lucide-react'
+import { Code, FileStack, Plus, Save, Table, Trash2 } from 'lucide-react'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
@@ -41,7 +48,20 @@ type MappingRow = {
   to: string
 }
 
+type ModelMappingTemplate = {
+  id: string
+  name: string
+  mapping: Record<string, string>
+}
+
 const DUPLICATE_MAPPING_SENTINEL = '{ "duplicate_source_models": '
+const MODEL_MAPPING_TEMPLATES_STORAGE_KEY =
+  'new-api:model-mapping-templates:v1'
+const DEFAULT_MODEL_MAPPING_TEMPLATE: ModelMappingTemplate = {
+  id: 'default-gpt-3.5-turbo',
+  name: 'gpt-3.5-turbo',
+  mapping: { 'gpt-3.5-turbo': 'gpt-3.5-turbo-0125' },
+}
 
 function getDuplicateSources(rows: MappingRow[]): string[] {
   const seen = new Set<string>()
@@ -60,6 +80,58 @@ function getDuplicateSources(rows: MappingRow[]): string[] {
   return Array.from(duplicates)
 }
 
+function normalizeTemplate(value: unknown): ModelMappingTemplate | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const candidate = value as Record<string, unknown>
+  if (typeof candidate.id !== 'string' || typeof candidate.name !== 'string') {
+    return null
+  }
+  if (
+    !candidate.mapping ||
+    typeof candidate.mapping !== 'object' ||
+    Array.isArray(candidate.mapping)
+  ) {
+    return null
+  }
+  const mapping: Record<string, string> = {}
+  for (const [from, to] of Object.entries(candidate.mapping)) {
+    if (typeof to !== 'string') return null
+    const source = from.trim()
+    if (source) mapping[source] = to
+  }
+  const name = candidate.name.trim()
+  if (!name) return null
+  return { id: candidate.id, name, mapping }
+}
+
+function loadModelMappingTemplates(): ModelMappingTemplate[] {
+  if (typeof window === 'undefined') return [DEFAULT_MODEL_MAPPING_TEMPLATE]
+  try {
+    const raw = window.localStorage.getItem(MODEL_MAPPING_TEMPLATES_STORAGE_KEY)
+    if (!raw) return [DEFAULT_MODEL_MAPPING_TEMPLATE]
+    const parsed = JSON.parse(raw)
+    const values = Array.isArray(parsed)
+      ? parsed
+      : parsed?.version === 1 && Array.isArray(parsed.templates)
+        ? parsed.templates
+        : []
+    const templates = values
+      .map(normalizeTemplate)
+      .filter((template): template is ModelMappingTemplate => template !== null)
+    return templates.length > 0 ? templates : [DEFAULT_MODEL_MAPPING_TEMPLATE]
+  } catch (_error) {
+    return [DEFAULT_MODEL_MAPPING_TEMPLATE]
+  }
+}
+
+function persistModelMappingTemplates(templates: ModelMappingTemplate[]) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(
+    MODEL_MAPPING_TEMPLATES_STORAGE_KEY,
+    JSON.stringify({ version: 1, templates }),
+  )
+}
+
 export function ModelMappingEditor(props: ModelMappingEditorProps) {
   const { t } = useTranslation()
   const sourceListId = useId()
@@ -68,6 +140,12 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
   const [rows, setRows] = useState<MappingRow[]>([])
   const [jsonValue, setJsonValue] = useState(props.value)
   const [jsonError, setJsonError] = useState<string | null>(null)
+  const [templates, setTemplates] = useState<ModelMappingTemplate[]>(
+    loadModelMappingTemplates,
+  )
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
+    null,
+  )
   const nextRowIdRef = useRef(0)
   const duplicateSources = useMemo(() => getDuplicateSources(rows), [rows])
 
@@ -193,15 +271,59 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
     parseJsonToRows(newJson)
   }
 
-  const handleFillTemplate = () => {
-    const template = JSON.stringify(
-      { 'gpt-3.5-turbo': 'gpt-3.5-turbo-0125' },
-      null,
-      2
+  const applyTemplate = (template: ModelMappingTemplate) => {
+    const value = JSON.stringify(template.mapping, null, 2)
+    setSelectedTemplateId(template.id)
+    setJsonValue(value)
+    props.onChange(value)
+    parseJsonToRows(value)
+  }
+
+  const saveCurrentAsTemplate = () => {
+    const mapping = rows.reduce<Record<string, string>>((result, row) => {
+      const source = row.from.trim()
+      if (source) result[source] = row.to.trim()
+      return result
+    }, {})
+    if (Object.keys(mapping).length === 0) return
+
+    const selectedTemplate = templates.find(
+      (template) => template.id === selectedTemplateId,
     )
-    setJsonValue(template)
-    props.onChange(template)
-    parseJsonToRows(template)
+    const name = window.prompt(
+      t('Template name'),
+      selectedTemplate?.name || t('New template'),
+    )
+    const trimmedName = name?.trim()
+    if (!trimmedName) return
+
+    const existing = templates.find(
+      (template) =>
+        template.id !== DEFAULT_MODEL_MAPPING_TEMPLATE.id &&
+        (template.id === selectedTemplateId || template.name === trimmedName),
+    )
+    const nextTemplate: ModelMappingTemplate = {
+      id: existing?.id || `model-mapping-${Date.now()}`,
+      name: trimmedName,
+      mapping,
+    }
+    const nextTemplates = existing
+      ? templates.map((template) =>
+          template.id === existing.id ? nextTemplate : template,
+        )
+      : [...templates, nextTemplate]
+    setTemplates(nextTemplates)
+    setSelectedTemplateId(nextTemplate.id)
+    persistModelMappingTemplates(nextTemplates)
+  }
+
+  const deleteTemplate = (template: ModelMappingTemplate) => {
+    if (template.id === DEFAULT_MODEL_MAPPING_TEMPLATE.id) return
+    if (!window.confirm(`${t('Delete')} "${template.name}"?`)) return
+    const nextTemplates = templates.filter((item) => item.id !== template.id)
+    setTemplates(nextTemplates)
+    if (selectedTemplateId === template.id) setSelectedTemplateId(null)
+    persistModelMappingTemplates(nextTemplates)
   }
 
   const handleModeChange = (nextMode: string) => {
@@ -234,16 +356,73 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
               {t('JSON')}
             </TabsTrigger>
           </TabsList>
-          <Button
-            type='button'
-            variant='link'
-            size='sm'
-            className='h-auto p-0'
-            onClick={handleFillTemplate}
-            disabled={props.disabled}
-          >
-            {t('Fill Template')}
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type='button'
+                  variant='link'
+                  size='sm'
+                  className='h-auto p-0'
+                  disabled={props.disabled}
+                />
+              }
+            >
+              <FileStack className='mr-1 h-4 w-4' aria-hidden='true' />
+              {t('Fill Templates')}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align='end' className='w-72'>
+              <div className='text-muted-foreground px-2 py-1 text-xs'>
+                {t('Select a template')}
+              </div>
+              {templates.map((template) => (
+                <DropdownMenuItem
+                  key={template.id}
+                  onClick={() => applyTemplate(template)}
+                >
+                  <span className='truncate'>{template.name}</span>
+                  <span className='text-muted-foreground ml-auto text-xs'>
+                    {Object.keys(template.mapping).length}
+                  </span>
+                </DropdownMenuItem>
+              ))}
+              {templates.length === 0 && (
+                <div className='text-muted-foreground px-2 py-2 text-xs'>
+                  {t('No saved templates')}
+                </div>
+              )}
+              <DropdownMenuSeparator />
+              {templates.some(
+                (template) => template.id !== DEFAULT_MODEL_MAPPING_TEMPLATE.id
+              ) && (
+                <div className='text-muted-foreground px-2 py-1 text-xs'>
+                  {t('Delete template')}
+                </div>
+              )}
+              {templates
+                .filter(
+                  (template) =>
+                    template.id !== DEFAULT_MODEL_MAPPING_TEMPLATE.id
+                )
+                .map((template) => (
+                  <DropdownMenuItem
+                    key={`delete-${template.id}`}
+                    variant='destructive'
+                    onClick={() => deleteTemplate(template)}
+                  >
+                    <Trash2 className='mr-2 h-4 w-4' aria-hidden='true' />
+                    <span className='truncate'>{template.name}</span>
+                  </DropdownMenuItem>
+                ))}
+              <DropdownMenuItem
+                disabled={props.disabled || rows.length === 0}
+                onClick={saveCurrentAsTemplate}
+              >
+                <Save className='mr-2 h-4 w-4' aria-hidden='true' />
+                {t('Save current mapping as template')}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {jsonError && (

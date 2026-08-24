@@ -308,7 +308,34 @@ function ViewChannelButton({ keyword, viewChannel, t }) {
   );
 }
 
-function renderModelName(record, copyText, applyColumnFilter, t) {
+function ViewModelRoutingButton({ modelName, viewModelRouting, t }) {
+  if (!modelName || !viewModelRouting) {
+    return null;
+  }
+  return (
+    <Button
+      icon={<ExternalLink size={14} />}
+      size='small'
+      theme='borderless'
+      type='tertiary'
+      aria-label={t('打开模型路由')}
+      title={t('打开模型路由')}
+      style={{ height: 22, minWidth: 22, padding: 2 }}
+      onClick={(event) => {
+        event.stopPropagation();
+        viewModelRouting(modelName);
+      }}
+    />
+  );
+}
+
+function renderModelName(
+  record,
+  copyText,
+  applyColumnFilter,
+  viewModelRouting,
+  t,
+) {
   let other = getLogOther(record.other);
   let modelMapped =
     other?.is_model_mapped &&
@@ -324,12 +351,17 @@ function renderModelName(record, copyText, applyColumnFilter, t) {
           },
         })}
         <CopyTextButton text={record.model_name} copyText={copyText} t={t} />
+        <ViewModelRoutingButton
+          modelName={record.model_name}
+          viewModelRouting={viewModelRouting}
+          t={t}
+        />
       </Space>
     );
   } else {
     return (
-      <>
-        <Space vertical align={'start'}>
+      <Space vertical align={'start'}>
+        <Space spacing={4}>
           <Popover
             content={
               <div style={{ padding: 10 }}>
@@ -374,14 +406,15 @@ function renderModelName(record, copyText, applyColumnFilter, t) {
                 />
               ),
             })}
-            <CopyTextButton
-              text={record.model_name}
-              copyText={copyText}
-              t={t}
-            />
           </Popover>
+          <CopyTextButton text={record.model_name} copyText={copyText} t={t} />
+          <ViewModelRoutingButton
+            modelName={record.model_name}
+            viewModelRouting={viewModelRouting}
+            t={t}
+          />
         </Space>
-      </>
+      </Space>
     );
   }
 }
@@ -574,6 +607,7 @@ export const getLogsColumns = ({
   copyText,
   applyColumnFilter,
   viewChannel,
+  viewModelRouting,
   showUserInfoFunc,
   openChannelAffinityUsageCacheModal,
   isAdminUser,
@@ -616,80 +650,80 @@ export const getLogsColumns = ({
 
         const channelInfo = (
           <span style={{ position: 'relative', display: 'inline-block' }}>
-              <Tooltip content={record.channel_name || t('未知渠道')}>
-                <span style={{ display: 'inline-flex', alignItems: 'center' }}>
-                  <Tag
-                    color={colors[parseInt(text) % colors.length]}
-                    shape='circle'
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      applyColumnFilter?.('channel', text);
-                    }}
-                  >
-                    {text}
-                  </Tag>
-                  <ViewChannelButton
-                    keyword={String(text || record.channel_name || '').trim()}
-                    viewChannel={viewChannel}
-                    t={t}
+            <Tooltip content={record.channel_name || t('未知渠道')}>
+              <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                <Tag
+                  color={colors[parseInt(text) % colors.length]}
+                  shape='circle'
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    applyColumnFilter?.('channel', text);
+                  }}
+                >
+                  {text}
+                </Tag>
+              </span>
+            </Tooltip>
+            {record.channel_remark && (
+              <span
+                aria-label={t('备注')}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 28,
+                  height: 28,
+                  color: 'var(--semi-color-text-2)',
+                  cursor: 'help',
+                }}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <IconCommentStroked size='small' />
+              </span>
+            )}
+            <ViewChannelButton
+              keyword={String(text || record.channel_name || '').trim()}
+              viewChannel={viewChannel}
+              t={t}
+            />
+            {showMarker && (
+              <Tooltip
+                content={
+                  <div style={{ lineHeight: 1.6 }}>
+                    <div>{content}</div>
+                    {affinity ? (
+                      <div style={{ marginTop: 6 }}>
+                        {buildChannelAffinityTooltip(affinity, t)}
+                      </div>
+                    ) : null}
+                  </div>
+                }
+              >
+                <span
+                  style={{
+                    position: 'absolute',
+                    right: -4,
+                    top: -4,
+                    lineHeight: 1,
+                    fontWeight: 600,
+                    color: '#f59e0b',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openChannelAffinityUsageCacheModal?.(affinity);
+                  }}
+                >
+                  <Sparkles
+                    size={14}
+                    strokeWidth={2}
+                    color='currentColor'
+                    fill='currentColor'
                   />
                 </span>
               </Tooltip>
-              {record.channel_remark && (
-                <span
-                  aria-label={t('备注')}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: 28,
-                    height: 28,
-                    color: 'var(--semi-color-text-2)',
-                    cursor: 'help',
-                  }}
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <IconCommentStroked size='small' />
-                </span>
-              )}
-              {showMarker && (
-                <Tooltip
-                  content={
-                    <div style={{ lineHeight: 1.6 }}>
-                      <div>{content}</div>
-                      {affinity ? (
-                        <div style={{ marginTop: 6 }}>
-                          {buildChannelAffinityTooltip(affinity, t)}
-                        </div>
-                      ) : null}
-                    </div>
-                  }
-                >
-                  <span
-                    style={{
-                      position: 'absolute',
-                      right: -4,
-                      top: -4,
-                      lineHeight: 1,
-                      fontWeight: 600,
-                      color: '#f59e0b',
-                      cursor: 'pointer',
-                      userSelect: 'none',
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openChannelAffinityUsageCacheModal?.(affinity);
-                    }}
-                  >
-                    <Sparkles
-                      size={14}
-                      strokeWidth={2}
-                      color='currentColor'
-                      fill='currentColor'
-                    />
-                  </span>
-                </Tooltip>
-              )}
+            )}
           </span>
         );
 
@@ -825,7 +859,15 @@ export const getLogsColumns = ({
           record.type === 2 ||
           record.type === 5 ||
           record.type === 6 ? (
-          <>{renderModelName(record, copyText, applyColumnFilter, t)}</>
+          <>
+            {renderModelName(
+              record,
+              copyText,
+              applyColumnFilter,
+              isAdminUser ? viewModelRouting : undefined,
+              t,
+            )}
+          </>
         ) : (
           <></>
         );

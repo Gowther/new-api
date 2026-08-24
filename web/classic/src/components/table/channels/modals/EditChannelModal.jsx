@@ -4292,27 +4292,6 @@ const EditChannelModal = (props) => {
                         />
                       )}
 
-                      <Form.Input
-                        field='tag'
-                        label={t('渠道标签')}
-                        placeholder={t('渠道标签')}
-                        showClear
-                        onChange={(value) => handleInputChange('tag', value)}
-                      />
-
-                      {inputs.type === 1 && (
-                        <Form.Input
-                          field='openai_organization'
-                          label={t('组织')}
-                          placeholder={t('请输入组织org-xxx')}
-                          showClear
-                          helpText={t('组织，不填则为默认组织')}
-                          onChange={(value) =>
-                            handleInputChange('openai_organization', value)
-                          }
-                        />
-                      )}
-
                       {/* API Configuration Section */}
                       {showApiConfigCard && (
                         <div onClick={handleApiConfigSecretClick}>
@@ -5122,6 +5101,26 @@ const EditChannelModal = (props) => {
                           />
                         </div>
                       </div>
+                    )}
+                    <Form.Input
+                      field='tag'
+                      label={t('渠道标签')}
+                      placeholder={t('渠道标签')}
+                      showClear
+                      onChange={(value) => handleInputChange('tag', value)}
+                    />
+
+                    {inputs.type === 1 && (
+                      <Form.Input
+                        field='openai_organization'
+                        label={t('组织')}
+                        placeholder={t('请输入组织org-xxx')}
+                        showClear
+                        helpText={t('组织，不填则为默认组织')}
+                        onChange={(value) =>
+                          handleInputChange('openai_organization', value)
+                        }
+                      />
                     )}
                   </div>
                 </Spin>

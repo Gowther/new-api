@@ -77,6 +77,7 @@ import {
   getChannelModelVendorGroups,
   getChannels,
   getModelRoutingOverride,
+  normalizeModelRoutingOverrides,
   setModelRoutingOverride,
   updateChannel,
   updateChannelStatus,
@@ -662,7 +663,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
           response.message || t('Failed to load temporary routing mode')
         )
       }
-      return response.data ?? null
+      return normalizeModelRoutingOverrides(response.data)
     },
     staleTime: 10 * 1000,
   })
@@ -825,10 +826,10 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
   }, [channelsForModel])
   const enabledChannelCount = routingRanks.size
   const disabledChannelCount = channelsForModel.length - enabledChannelCount
-  const routingOverride: ModelRoutingOverride | null =
-    routingOverrideQuery.data ?? null
+  const routingOverrides: ModelRoutingOverride[] =
+    routingOverrideQuery.data ?? []
   const isRoutingOverrideTarget = (channelId: number) =>
-    routingOverride?.channel_id === channelId
+    routingOverrides.some((override) => override.channel_id === channelId)
 
   const isLoading =
     pricingQuery.isLoading ||
@@ -1030,9 +1031,10 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
 
     setIsUpdatingRoutingOverride(true)
     try {
-      const response = await setModelRoutingOverride(
-        routingOverrideCandidate.id
-      )
+      const isActive = isRoutingOverrideTarget(routingOverrideCandidate.id)
+      const response = isActive
+        ? await deleteModelRoutingOverride(routingOverrideCandidate.id)
+        : await setModelRoutingOverride(routingOverrideCandidate.id)
       if (!response.success) {
         throw new Error(
           response.message || t('Failed to update temporary routing mode')
@@ -1040,10 +1042,14 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
       }
       queryClient.setQueryData(
         channelsQueryKeys.routingOverride(),
-        response.data ?? null
+        normalizeModelRoutingOverrides(response.data)
       )
       setRoutingOverrideCandidate(null)
-      toast.success(t('Temporary single-channel mode enabled'))
+      toast.success(
+        isActive
+          ? t('Normal routing restored')
+          : t('Temporary single-channel mode enabled')
+      )
     } catch (error) {
       toast.error(
         error instanceof Error
@@ -1064,7 +1070,10 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
           response.message || t('Failed to update temporary routing mode')
         )
       }
-      queryClient.setQueryData(channelsQueryKeys.routingOverride(), null)
+      queryClient.setQueryData(
+        channelsQueryKeys.routingOverride(),
+        normalizeModelRoutingOverrides(response.data)
+      )
       setRestoreRoutingOverrideOpen(false)
       toast.success(t('Normal routing restored'))
     } catch (error) {
@@ -1606,7 +1615,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
               ) : null}
             </div>
             <div className='flex shrink-0 items-center gap-2'>
-              {routingOverride ? (
+              {routingOverrides.length > 0 ? (
                 <Button
                   type='button'
                   variant='outline'
@@ -1635,36 +1644,40 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
             </div>
           </div>
 
-          {routingOverride ? (
-            <div className='bg-muted/30 border-b px-3 py-2 text-sm'>
-              <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
-                <StatusBadge
-                  label={t('Temporary single-channel mode')}
-                  variant='warning'
-                  size='sm'
-                  copyable={false}
-                />
-                <span className='min-w-0 truncate font-medium'>
-                  {routingOverride.channel_name ||
-                    `#${routingOverride.channel_id}`}
-                </span>
-                <span className='text-muted-foreground font-mono text-xs'>
-                  ID:{routingOverride.channel_id}
-                </span>
-                <span className='text-muted-foreground text-xs'>
-                  {t('{{count}} covered model(s)', {
-                    count: routingOverride.model_count,
-                  })}
-                </span>
-                <span className='text-muted-foreground text-xs'>
-                  {t('Covered groups')}: {routingOverride.groups.join(', ')}
-                </span>
-              </div>
-              <div className='text-muted-foreground mt-1 text-xs'>
-                {t(
-                  'Automatic requests for every covered model use only this channel. Requests that explicitly specify a channel are unaffected.'
-                )}
-              </div>
+          {routingOverrides.length > 0 ? (
+            <div className='bg-muted/30 space-y-2 border-b px-3 py-2 text-sm'>
+              {routingOverrides.map((routingOverride) => (
+                <div key={routingOverride.channel_id}>
+                  <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
+                    <StatusBadge
+                      label={t('Temporary single-channel mode')}
+                      variant='warning'
+                      size='sm'
+                      copyable={false}
+                    />
+                    <span className='min-w-0 truncate font-medium'>
+                      {routingOverride.channel_name ||
+                        `#${routingOverride.channel_id}`}
+                    </span>
+                    <span className='text-muted-foreground font-mono text-xs'>
+                      ID:{routingOverride.channel_id}
+                    </span>
+                    <span className='text-muted-foreground text-xs'>
+                      {t('{{count}} covered model(s)', {
+                        count: routingOverride.model_count,
+                      })}
+                    </span>
+                    <span className='text-muted-foreground text-xs'>
+                      {t('Covered groups')}: {routingOverride.groups.join(', ')}
+                    </span>
+                  </div>
+                  <div className='text-muted-foreground mt-1 text-xs'>
+                    {t(
+                      'Automatic requests for every covered model use only this channel. Requests that explicitly specify a channel are unaffected.'
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           ) : null}
 
@@ -1964,8 +1977,8 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                                       aria-label={`${t('Use this channel temporarily for all models')}: ${channel.name}`}
                                       disabled={
                                         !canEditRouting ||
-                                        !isEnabled ||
-                                        isRoutingOverrideTarget(channel.id) ||
+                                        (!isEnabled &&
+                                          !isRoutingOverrideTarget(channel.id)) ||
                                         isUpdatingRoutingOverride
                                       }
                                       onClick={() =>
@@ -2137,20 +2150,17 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
         open={routingOverrideCandidate !== null}
         onOpenChange={handleRoutingOverrideDialogOpenChange}
         title={
-          routingOverride
-            ? t('Switch temporary single-channel mode?')
+          routingOverrideCandidate &&
+          isRoutingOverrideTarget(routingOverrideCandidate.id)
+            ? t('Restore normal routing?')
             : t('Enable temporary single-channel mode?')
         }
         desc={
-          routingOverride
+          routingOverrideCandidate &&
+          isRoutingOverrideTarget(routingOverrideCandidate.id)
             ? t(
-                'Temporary routing will switch from "{{from}}" to "{{to}}". All enabled models on the new channel will prefer it exclusively; models it does not support return to normal routing. Explicit channel selection is unaffected.',
-                {
-                  from:
-                    routingOverride.channel_name ||
-                    `#${routingOverride.channel_id}`,
-                  to: routingOverrideCandidate?.name ?? '',
-                }
+                'The temporary routing rule for channel "{{channel}}" and its models will be removed. Existing channel statuses, priorities, weights, and affinity data will remain unchanged.',
+                { channel: routingOverrideCandidate?.name ?? '' }
               )
             : t(
                 'All enabled models on channel "{{channel}}" will temporarily use only this channel in its supported groups. Explicit channel selection is unaffected.',
@@ -2158,8 +2168,9 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
               )
         }
         confirmText={
-          routingOverride
-            ? t('Switch temporary mode')
+          routingOverrideCandidate &&
+          isRoutingOverrideTarget(routingOverrideCandidate.id)
+            ? t('Restore normal routing')
             : t('Enable temporary mode')
         }
         isLoading={isUpdatingRoutingOverride}
@@ -2174,9 +2185,12 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
         desc={t(
           'All temporary routing rules for channel "{{channel}}" and its models will be removed. Existing channel statuses, priorities, weights, and affinity data will remain unchanged.',
           {
-            channel:
-              routingOverride?.channel_name ||
-              `#${routingOverride?.channel_id ?? ''}`,
+            channel: routingOverrides
+              .map(
+                (override) =>
+                  override.channel_name || `#${override.channel_id}`
+              )
+              .join(', '),
           }
         )}
         confirmText={t('Restore normal routing')}

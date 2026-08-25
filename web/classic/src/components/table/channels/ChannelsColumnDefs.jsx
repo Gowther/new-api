@@ -334,6 +334,12 @@ export const getChannelsColumns = ({
   routingOverrideUpdating,
   toggleRoutingOverride,
 }) => {
+  const routingOverrides = Array.isArray(routingOverride)
+    ? routingOverride
+    : routingOverride
+      ? [routingOverride]
+      : [];
+
   return [
     {
       key: COLUMN_KEYS.ID,
@@ -688,13 +694,12 @@ export const getChannelsColumns = ({
       render: (text, record, index) => {
         if (record.children === undefined) {
           const upstreamUpdateMeta = getUpstreamUpdateMeta(record);
-          const isRoutingOverrideTarget =
-            routingOverride?.channel_id === record.id;
+          const isRoutingOverrideTarget = routingOverrides.some(
+            (override) => override.channel_id === record.id,
+          );
           const temporaryRoutingMenuName = isRoutingOverrideTarget
             ? t('恢复正常路由')
-            : routingOverride
-              ? t('切换临时单渠道模式')
-              : t('临时单渠道模式');
+            : t('临时单渠道模式');
           const moreMenuItems = [
             {
               node: 'item',

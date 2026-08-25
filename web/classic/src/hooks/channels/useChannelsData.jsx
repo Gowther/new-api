@@ -49,7 +49,8 @@ const fetchModelRoutingOverride = async () => {
   if (!success) {
     throw new Error(message || '加载临时路由模式失败');
   }
-  return data || null;
+  if (Array.isArray(data)) return data;
+  return data ? [data] : [];
 };
 
 const getChannelModelCount = (channel) =>
@@ -123,7 +124,7 @@ export const useChannelsData = () => {
   const [isStreamTest, setIsStreamTest] = useState(false);
   const [globalPassThroughEnabled, setGlobalPassThroughEnabled] =
     useState(false);
-  const [routingOverride, setRoutingOverride] = useState(null);
+  const [routingOverride, setRoutingOverride] = useState([]);
   const [routingOverrideLoading, setRoutingOverrideLoading] = useState(false);
   const [routingOverrideUpdating, setRoutingOverrideUpdating] = useState(false);
 
@@ -606,52 +607,43 @@ export const useChannelsData = () => {
   const toggleRoutingOverride = (channel) => {
     if (!channel || channel.children !== undefined) return;
 
-    const isCurrentTarget = routingOverride?.channel_id === channel.id;
+    const isCurrentTarget = routingOverride.some(
+      (override) => override.channel_id === channel.id,
+    );
     if (!isCurrentTarget && channel.status !== 1) return;
 
     const channelModelCount = getChannelModelCount(channel);
-    const currentTargetName = routingOverride
-      ? routingOverride.channel_name || `#${routingOverride.channel_id}`
-      : '';
-    const isSwitch = Boolean(routingOverride) && !isCurrentTarget;
+    const activeOverride = routingOverride.find(
+      (override) => override.channel_id === channel.id,
+    );
+    const currentTargetName = activeOverride
+      ? activeOverride.channel_name || `#${activeOverride.channel_id}`
+      : channel.name;
     const title = isCurrentTarget
       ? t('恢复正常路由？')
-      : isSwitch
-        ? t('切换临时单渠道模式？')
-        : t('开启临时单渠道模式？');
+      : t('开启临时单渠道模式？');
     const content = isCurrentTarget
       ? t(
           '临时路由目标“{{channel}}”及其模型规则将被移除。现有渠道状态、优先级、权重和亲和性数据不会改变。',
           { channel: currentTargetName },
         )
-      : isSwitch
-        ? t(
-            '临时路由将从“{{from}}”切换到“{{to}}”。新渠道覆盖 {{count}} 个模型；不支持的模型恢复正常路由。显式指定渠道的请求不受影响。',
-            {
-              from: currentTargetName,
-              to: channel.name,
-              count: channelModelCount,
-            },
-          )
-        : t(
-            '渠道“{{channel}}”上的 {{count}} 个模型将临时仅使用该渠道；该渠道不支持的模型恢复正常路由。显式指定渠道的请求不受影响。',
-            { channel: channel.name, count: channelModelCount },
-          );
+      : t(
+          '渠道“{{channel}}”上的 {{count}} 个模型将临时仅使用该渠道；该渠道不支持的模型恢复正常路由。显式指定渠道的请求不受影响。',
+          { channel: channel.name, count: channelModelCount },
+        );
 
     Modal.confirm({
       title,
       content,
-      okText: isCurrentTarget
-        ? t('恢复正常路由')
-        : isSwitch
-          ? t('切换临时模式')
-          : t('开启临时模式'),
+      okText: isCurrentTarget ? t('恢复正常路由') : t('开启临时模式'),
       cancelText: t('取消'),
       onOk: async () => {
         setRoutingOverrideUpdating(true);
         try {
           const res = isCurrentTarget
-            ? await API.delete('/api/channel/model_routing_override')
+            ? await API.delete('/api/channel/model_routing_override', {
+                params: { channel_id: channel.id },
+              })
             : await API.put('/api/channel/model_routing_override', {
                 channel_id: channel.id,
               });
@@ -659,13 +651,9 @@ export const useChannelsData = () => {
           if (!success) {
             throw new Error(message || t('更新临时路由模式失败'));
           }
-          setRoutingOverride(isCurrentTarget ? null : data || null);
+          setRoutingOverride(Array.isArray(data) ? data : data ? [data] : []);
           showSuccess(
-            isCurrentTarget
-              ? t('已恢复正常路由')
-              : isSwitch
-                ? t('已切换临时单渠道模式')
-                : t('已开启临时单渠道模式'),
+            isCurrentTarget ? t('已恢复正常路由') : t('已开启临时单渠道模式'),
           );
         } catch (error) {
           showError(error.message || t('更新临时路由模式失败'));

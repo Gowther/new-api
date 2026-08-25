@@ -26,7 +26,11 @@ import React, {
   useMemo,
 } from 'react'
 
-import { getModelRoutingOverride, type ModelRoutingOverride } from '../api'
+import {
+  getModelRoutingOverride,
+  normalizeModelRoutingOverrides,
+  type ModelRoutingOverride,
+} from '../api'
 import { useChannelUpstreamUpdates } from '../hooks/use-channel-upstream-updates'
 import { channelsQueryKeys } from '../lib'
 import type { Channel } from '../types'
@@ -67,7 +71,7 @@ type ChannelsContextType = {
   setBatchMode: (enabled: boolean) => void
   sensitiveVisible: boolean
   setSensitiveVisible: (visible: boolean) => void
-  routingOverride: ModelRoutingOverride | null
+  routingOverrides: ModelRoutingOverride[]
   routingOverrideLoading: boolean
   upstream: UpstreamUpdateState
 }
@@ -107,7 +111,7 @@ export function ChannelsProvider({ children }: { children: React.ReactNode }) {
           response.message || 'Failed to load temporary routing mode'
         )
       }
-      return response.data ?? null
+      return normalizeModelRoutingOverrides(response.data)
     },
     staleTime: 10 * 1000,
   })
@@ -135,7 +139,7 @@ export function ChannelsProvider({ children }: { children: React.ReactNode }) {
       setBatchMode,
       sensitiveVisible,
       setSensitiveVisible,
-      routingOverride: routingOverrideQuery.data ?? null,
+      routingOverrides: routingOverrideQuery.data ?? [],
       routingOverrideLoading: routingOverrideQuery.isLoading,
       upstream,
     }),

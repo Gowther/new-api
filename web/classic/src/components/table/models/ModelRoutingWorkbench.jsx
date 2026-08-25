@@ -525,7 +525,8 @@ const fetchModelRoutingOverride = async () => {
   if (!success) {
     throw new Error(message || '加载临时路由模式失败');
   }
-  return data || null;
+  if (Array.isArray(data)) return data;
+  return data ? [data] : [];
 };
 
 const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
@@ -548,7 +549,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   const [showEditChannel, setShowEditChannel] = useState(false);
   const [deletingChannelId, setDeletingChannelId] = useState(null);
   const [testingChannelIds, setTestingChannelIds] = useState({});
-  const [routingOverride, setRoutingOverride] = useState(null);
+  const [routingOverride, setRoutingOverride] = useState([]);
   const [routingOverrideLoading, setRoutingOverrideLoading] = useState(false);
   const [routingOverrideUpdating, setRoutingOverrideUpdating] = useState(false);
   const [providerDefaultSelections, setProviderDefaultSelections] = useState(
@@ -585,7 +586,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
 
   useEffect(() => {
     let cancelled = false;
-    setRoutingOverride(null);
+    setRoutingOverride([]);
     setRoutingOverrideLoading(true);
     fetchModelRoutingOverride()
       .then((override) => {
@@ -955,44 +956,47 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   };
 
   const handleEnableRoutingOverride = (channel) => {
-    if (channel.status !== CHANNEL_STATUS.ENABLED) return;
+    const activeOverride = routingOverride.find(
+      (override) => override.channel_id === channel.id,
+    );
+    const isActive = Boolean(activeOverride);
+    if (!isActive && channel.status !== CHANNEL_STATUS.ENABLED) return;
 
-    const isSwitch = Boolean(routingOverride);
-    const currentTargetName = routingOverride
-      ? routingOverride.channel_name || `#${routingOverride.channel_id}`
-      : '';
+    const currentTargetName = activeOverride
+      ? activeOverride.channel_name || `#${activeOverride.channel_id}`
+      : channel.name;
     const modelCount = splitCsv(channel.models).length;
 
     Modal.confirm({
-      title: isSwitch ? t('切换临时单渠道模式？') : t('开启临时单渠道模式？'),
-      content: isSwitch
+      title: isActive ? t('恢复正常路由？') : t('开启临时单渠道模式？'),
+      content: isActive
         ? t(
-            '临时路由将从“{{from}}”切换到“{{to}}”。新渠道覆盖 {{count}} 个模型；不支持的模型恢复正常路由。显式指定渠道的请求不受影响。',
-            {
-              from: currentTargetName,
-              to: channel.name,
-              count: modelCount,
-            },
+            '临时路由目标“{{channel}}”及其模型规则将被移除。现有渠道状态、优先级、权重和亲和性数据不会改变。',
+            { channel: currentTargetName },
           )
         : t(
             '渠道“{{channel}}”上的 {{count}} 个模型将临时仅使用该渠道；该渠道不支持的模型恢复正常路由。显式指定渠道的请求不受影响。',
             { channel: channel.name, count: modelCount },
           ),
-      okText: isSwitch ? t('切换临时模式') : t('开启临时模式'),
+      okText: isActive ? t('恢复正常路由') : t('开启临时模式'),
       cancelText: t('取消'),
       onOk: async () => {
         setRoutingOverrideUpdating(true);
         try {
-          const res = await API.put('/api/channel/model_routing_override', {
-            channel_id: channel.id,
-          });
+          const res = isActive
+            ? await API.delete('/api/channel/model_routing_override', {
+                params: { channel_id: channel.id },
+              })
+            : await API.put('/api/channel/model_routing_override', {
+                channel_id: channel.id,
+              });
           const { success, message, data } = res.data || {};
           if (!success) {
             throw new Error(message || t('更新临时路由模式失败'));
           }
-          setRoutingOverride(data || null);
+          setRoutingOverride(Array.isArray(data) ? data : data ? [data] : []);
           showSuccess(
-            isSwitch ? t('已切换临时单渠道模式') : t('已开启临时单渠道模式'),
+            isActive ? t('已恢复正常路由') : t('已开启临时单渠道模式'),
           );
         } catch (error) {
           showError(error.message || t('更新临时路由模式失败'));
@@ -1005,15 +1009,18 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   };
 
   const handleRestoreRoutingOverride = () => {
-    if (!routingOverride) return;
+    if (routingOverride.length === 0) return;
 
     Modal.confirm({
       title: t('恢复正常路由？'),
       content: t(
         '临时路由目标“{{channel}}”及其模型规则将被移除。现有渠道状态、优先级、权重和亲和性数据不会改变。',
         {
-          channel:
-            routingOverride.channel_name || `#${routingOverride.channel_id}`,
+          channel: routingOverride
+            .map(
+              (override) => override.channel_name || `#${override.channel_id}`,
+            )
+            .join(', '),
         },
       ),
       okText: t('恢复正常路由'),
@@ -1026,7 +1033,10 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
           if (!success) {
             throw new Error(message || t('更新临时路由模式失败'));
           }
-          setRoutingOverride(null);
+          const nextData = res.data?.data;
+          setRoutingOverride(
+            Array.isArray(nextData) ? nextData : nextData ? [nextData] : [],
+          );
           showSuccess(t('已恢复正常路由'));
         } catch (error) {
           showError(error.message || t('更新临时路由模式失败'));
@@ -1281,7 +1291,9 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
       width: 225,
       render: (_, record) => {
         const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
-        const isOverrideTarget = routingOverride?.channel_id === record.id;
+        const isOverrideTarget = routingOverride.some(
+          (override) => override.channel_id === record.id,
+        );
         return (
           <div className='flex items-center gap-2'>
             <Tooltip content={t('打开使用日志')}>
@@ -1297,11 +1309,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
             </Tooltip>
             <Tooltip
               content={
-                isOverrideTarget
-                  ? t('当前临时路由目标')
-                  : routingOverride
-                    ? t('切换临时单渠道模式')
-                    : t('临时单渠道模式')
+                isOverrideTarget ? t('当前临时路由目标') : t('临时单渠道模式')
               }
             >
               <Button
@@ -1310,14 +1318,10 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                 size='small'
                 icon={<IconLock />}
                 aria-label={`${
-                  isOverrideTarget
-                    ? t('当前临时路由目标')
-                    : routingOverride
-                      ? t('切换临时单渠道模式')
-                      : t('临时单渠道模式')
+                  isOverrideTarget ? t('当前临时路由目标') : t('临时单渠道模式')
                 }: ${record.name}`}
                 disabled={
-                  !isEnabled || isOverrideTarget || routingOverrideUpdating
+                  (!isEnabled && !isOverrideTarget) || routingOverrideUpdating
                 }
                 onClick={() => handleEnableRoutingOverride(record)}
               />
@@ -1650,7 +1654,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                 ) : null}
               </div>
               <div className='flex shrink-0 items-center gap-2'>
-                {routingOverride ? (
+                {routingOverride.length > 0 ? (
                   <Button
                     theme='light'
                     type='warning'
@@ -1675,35 +1679,38 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
               </div>
             </div>
           </div>
-          {routingOverride ? (
-            <div className='border-b border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)] px-3 py-2'>
-              <div className='flex flex-wrap items-center gap-2'>
-                <Tag color='orange' shape='circle' size='small'>
-                  {t('临时单渠道模式')}
-                </Tag>
-                <Text strong ellipsis>
-                  {routingOverride.channel_name ||
-                    `#${routingOverride.channel_id}`}
-                </Text>
-                <Text type='tertiary' size='small'>
-                  ID:{routingOverride.channel_id}
-                </Text>
-                <Text type='tertiary' size='small'>
-                  {t('{{count}} 个覆盖模型', {
-                    count: routingOverride.model_count,
-                  })}
-                </Text>
-                <Text type='tertiary' size='small'>
-                  {t('覆盖分组')}: {routingOverride.groups.join(', ')}
-                </Text>
-              </div>
-              <div className='mt-1'>
-                <Text type='tertiary' size='small'>
-                  {t(
-                    '所有覆盖模型的自动请求仅使用此渠道；显式指定渠道的请求不受影响。',
-                  )}
-                </Text>
-              </div>
+          {routingOverride.length > 0 ? (
+            <div className='space-y-2 border-b border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)] px-3 py-2'>
+              {routingOverride.map((override) => (
+                <div key={override.channel_id}>
+                  <div className='flex flex-wrap items-center gap-2'>
+                    <Tag color='orange' shape='circle' size='small'>
+                      {t('临时单渠道模式')}
+                    </Tag>
+                    <Text strong ellipsis>
+                      {override.channel_name || `#${override.channel_id}`}
+                    </Text>
+                    <Text type='tertiary' size='small'>
+                      ID:{override.channel_id}
+                    </Text>
+                    <Text type='tertiary' size='small'>
+                      {t('{{count}} 个覆盖模型', {
+                        count: override.model_count,
+                      })}
+                    </Text>
+                    <Text type='tertiary' size='small'>
+                      {t('覆盖分组')}: {override.groups.join(', ')}
+                    </Text>
+                  </div>
+                  <div className='mt-1'>
+                    <Text type='tertiary' size='small'>
+                      {t(
+                        '所有覆盖模型的自动请求仅使用此渠道；显式指定渠道的请求不受影响。',
+                      )}
+                    </Text>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : null}
           <div className='min-h-0 flex-1 overflow-auto p-2'>

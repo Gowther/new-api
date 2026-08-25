@@ -64,7 +64,11 @@ import {
 import { ROLE } from '@/lib/roles'
 import { useAuthStore } from '@/stores/auth-store'
 
-import { deleteModelRoutingOverride, setModelRoutingOverride } from '../api'
+import {
+  deleteModelRoutingOverride,
+  normalizeModelRoutingOverrides,
+  setModelRoutingOverride,
+} from '../api'
 import { MODEL_FETCHABLE_TYPES } from '../constants'
 import {
   channelsQueryKeys,
@@ -91,7 +95,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
     setOpen,
     setCurrentRow,
     upstream,
-    routingOverride,
+    routingOverrides,
     routingOverrideLoading,
   } = useChannels()
   const queryClient = useQueryClient()
@@ -116,7 +120,10 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
     ADMIN_PERMISSION_RESOURCES.CHANNEL,
     ADMIN_PERMISSION_ACTIONS.WRITE
   )
-  const isTemporaryRoutingTarget = routingOverride?.channel_id === channel.id
+  const activeRoutingOverride = routingOverrides.find(
+    (override) => override.channel_id === channel.id
+  )
+  const isTemporaryRoutingTarget = activeRoutingOverride !== undefined
   const channelModelCount = new Set(
     channel.models
       .split(',')
@@ -200,13 +207,16 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
     setIsUpdatingTemporaryRouting(true)
     try {
       if (isTemporaryRoutingTarget) {
-        const response = await deleteModelRoutingOverride()
+        const response = await deleteModelRoutingOverride(channel.id)
         if (!response.success) {
           throw new Error(
             response.message || t('Failed to update temporary routing mode')
           )
         }
-        queryClient.setQueryData(channelsQueryKeys.routingOverride(), null)
+        queryClient.setQueryData(
+          channelsQueryKeys.routingOverride(),
+          normalizeModelRoutingOverrides(response.data)
+        )
         toast.success(t('Normal routing restored'))
       } else {
         const response = await setModelRoutingOverride(channel.id)
@@ -217,7 +227,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         }
         queryClient.setQueryData(
           channelsQueryKeys.routingOverride(),
-          response.data ?? null
+          normalizeModelRoutingOverrides(response.data)
         )
         toast.success(t('Temporary single-channel mode enabled'))
       }
@@ -258,19 +268,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
       { channel: channel.name }
     )
     temporaryRoutingConfirmText = t('Restore normal routing')
-  } else if (routingOverride) {
-    temporaryRoutingLabel = t('Switch temporary mode to this channel')
-    temporaryRoutingIcon = <ArrowRightLeft />
-    temporaryRoutingTitle = t('Switch temporary single-channel mode?')
-    temporaryRoutingDescription = t(
-      'Temporary routing will switch from "{{from}}" to "{{to}}". The new channel covers {{count}} model(s); models it does not support return to normal routing. Explicit channel selection is unaffected.',
-      {
-        from: routingOverride.channel_name || `#${routingOverride.channel_id}`,
-        to: channel.name,
-        count: channelModelCount,
-      }
-    )
-    temporaryRoutingConfirmText = t('Switch temporary mode')
   }
 
   return (

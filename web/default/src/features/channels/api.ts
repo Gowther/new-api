@@ -93,7 +93,14 @@ export type ModelRoutingOverride = {
 export type ModelRoutingOverrideResponse = {
   success: boolean
   message?: string
-  data?: ModelRoutingOverride | null
+  data?: ModelRoutingOverride[] | ModelRoutingOverride | null
+}
+
+export function normalizeModelRoutingOverrides(
+  data?: ModelRoutingOverride[] | ModelRoutingOverride | null
+): ModelRoutingOverride[] {
+  if (Array.isArray(data)) return data
+  return data ? [data] : []
 }
 
 // ============================================================================
@@ -182,14 +189,18 @@ export async function setModelRoutingOverride(
   return res.data
 }
 
-export async function deleteModelRoutingOverride(): Promise<{
+export async function deleteModelRoutingOverride(
+  channelId?: number
+): Promise<{
   success: boolean
   message?: string
-  data?: number
+  data?: ModelRoutingOverride[] | ModelRoutingOverride | null
 }> {
   const res = await api.delete(
     '/api/channel/model_routing_override',
-    channelActionConfig()
+    channelActionConfig(
+      channelId === undefined ? {} : { params: { channel_id: channelId } }
+    )
   )
   return res.data
 }

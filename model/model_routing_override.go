@@ -24,6 +24,7 @@ const modelRoutingOverrideScopeChannel = "channel"
 
 var modelRoutingOverrideCache = map[string]map[string]int{}
 var modelRoutingOverrideCacheLock sync.RWMutex
+var modelRoutingOverrideMutationLock sync.Mutex
 
 func modelRoutingAbilityCandidates(modelName string) []string {
 	modelName = strings.TrimSpace(modelName)
@@ -36,6 +37,18 @@ func modelRoutingAbilityCandidates(modelName string) []string {
 		candidates = append(candidates, normalized)
 	}
 	return candidates
+}
+
+func modelRoutingConflictKey(modelName string) string {
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" {
+		return ""
+	}
+	normalized := ratio_setting.FormatMatchingModelName(modelName)
+	if normalized != "" {
+		return normalized
+	}
+	return modelName
 }
 
 func InitModelRoutingOverrideCache() error {
@@ -204,19 +217,74 @@ func buildChannelModelRoutingOverrides(channelID int, enabledOnly bool) ([]Model
 	return overrides, nil
 }
 
-func replaceAllModelRoutingOverrides(tx *gorm.DB, overrides []ModelRoutingOverride) error {
-	if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&ModelRoutingOverride{}).Error; err != nil {
+func findModelRoutingOverrideConflicts(
+	tx *gorm.DB,
+	channelID int,
+	overrides []ModelRoutingOverride,
+) error {
+	var existing []ModelRoutingOverride
+	if err := tx.Where("channel_id <> ?", channelID).Find(&existing).Error; err != nil {
 		return err
 	}
-	if len(overrides) == 0 {
+
+	conflicts := make(map[string]map[int]struct{})
+	for _, override := range existing {
+		key := modelRoutingConflictKey(override.Model)
+		if key == "" {
+			continue
+		}
+		if conflicts[key] == nil {
+			conflicts[key] = make(map[int]struct{})
+		}
+		conflicts[key][override.ChannelId] = struct{}{}
+	}
+
+	conflictingModels := make(map[string][]int)
+	for _, override := range overrides {
+		key := modelRoutingConflictKey(override.Model)
+		channelIDs := conflicts[key]
+		if key == "" || len(channelIDs) == 0 {
+			continue
+		}
+		ids := make([]int, 0, len(channelIDs))
+		for existingChannelID := range channelIDs {
+			ids = append(ids, existingChannelID)
+		}
+		sort.Ints(ids)
+		conflictingModels[key] = ids
+	}
+	if len(conflictingModels) == 0 {
 		return nil
 	}
-	return tx.Create(&overrides).Error
+
+	keys := make([]string, 0, len(conflictingModels))
+	for key := range conflictingModels {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	details := make([]string, 0, len(keys))
+	for _, key := range keys {
+		ids := conflictingModels[key]
+		idStrings := make([]string, 0, len(ids))
+		for _, id := range ids {
+			idStrings = append(idStrings, fmt.Sprintf("%d", id))
+		}
+		details = append(details, fmt.Sprintf("%s (channel %s)", key, strings.Join(idStrings, ", ")))
+	}
+	return fmt.Errorf(
+		"temporary routing conflicts with existing channel rules: %s",
+		strings.Join(details, "; "),
+	)
+}
+
+func deleteLegacyModelRoutingOverrides(tx *gorm.DB) error {
+	return tx.Where("scope = ? OR scope IS NULL", "").Delete(&ModelRoutingOverride{}).Error
 }
 
 // migrateLegacyModelRoutingOverrides upgrades the old model-scoped rows once.
 // A single unambiguous target is expanded to the channel's current abilities;
 // ambiguous multi-channel data is cleared instead of silently choosing a target.
+// Existing channel-scoped rules are preserved during this migration.
 func migrateLegacyModelRoutingOverrides() error {
 	if DB == nil || !DB.Migrator().HasTable(&ModelRoutingOverride{}) ||
 		!DB.Migrator().HasColumn(&ModelRoutingOverride{}, "scope") {
@@ -232,23 +300,23 @@ func migrateLegacyModelRoutingOverrides() error {
 		return nil
 	}
 
-	var existing []ModelRoutingOverride
-	if err := DB.Find(&existing).Error; err != nil {
+	var legacy []ModelRoutingOverride
+	if err := legacyQuery.Find(&legacy).Error; err != nil {
 		return err
 	}
 	targetChannelIDs := make(map[int]struct{})
-	for _, override := range existing {
+	for _, override := range legacy {
 		targetChannelIDs[override.ChannelId] = struct{}{}
 	}
 	if len(targetChannelIDs) != 1 {
 		if err := DB.Transaction(func(tx *gorm.DB) error {
-			return replaceAllModelRoutingOverrides(tx, nil)
+			return deleteLegacyModelRoutingOverrides(tx)
 		}); err != nil {
 			return err
 		}
 		common.SysLog(fmt.Sprintf(
 			"cleared %d legacy model routing overrides with ambiguous channel targets",
-			len(existing),
+			len(legacy),
 		))
 		return nil
 	}
@@ -261,13 +329,13 @@ func migrateLegacyModelRoutingOverrides() error {
 	if errors.Is(err, gorm.ErrRecordNotFound) ||
 		(err == nil && channel.Status == common.ChannelStatusManuallyDisabled) {
 		if err := DB.Transaction(func(tx *gorm.DB) error {
-			return replaceAllModelRoutingOverrides(tx, nil)
+			return deleteLegacyModelRoutingOverrides(tx)
 		}); err != nil {
 			return err
 		}
 		common.SysLog(fmt.Sprintf(
 			"cleared %d legacy model routing overrides for unavailable channel %d",
-			len(existing), targetChannelID,
+			len(legacy), targetChannelID,
 		))
 		return nil
 	}
@@ -283,24 +351,31 @@ func migrateLegacyModelRoutingOverrides() error {
 		}
 		common.SysLog(fmt.Sprintf(
 			"preserved %d legacy model routing overrides for channel %d without expansion: %v",
-			len(existing), targetChannelID, err,
+			len(legacy), targetChannelID, err,
 		))
 		return nil
 	}
 	if err := DB.Transaction(func(tx *gorm.DB) error {
-		return replaceAllModelRoutingOverrides(tx, normalized)
+		if err := tx.Where("channel_id = ?", targetChannelID).Delete(&ModelRoutingOverride{}).Error; err != nil {
+			return err
+		}
+		if err := deleteLegacyModelRoutingOverrides(tx); err != nil {
+			return err
+		}
+		return tx.Create(&normalized).Error
 	}); err != nil {
 		return err
 	}
 	common.SysLog(fmt.Sprintf(
 		"migrated %d legacy model routing overrides to %d channel-wide rules for channel %d",
-		len(existing), len(normalized), targetChannelID,
+		len(legacy), len(normalized), targetChannelID,
 	))
 	return nil
 }
 
-// SetChannelModelRoutingOverride atomically replaces every temporary routing
-// rule with the enabled model/group abilities of channelID.
+// SetChannelModelRoutingOverride adds or refreshes the temporary routing rules
+// for channelID. A channel may coexist with other temporary targets when its
+// effective model set does not overlap theirs.
 func SetChannelModelRoutingOverride(channelID int) ([]ModelRoutingOverride, error) {
 	if channelID <= 0 {
 		return nil, errors.New("invalid channel id")
@@ -319,8 +394,16 @@ func SetChannelModelRoutingOverride(channelID int) ([]ModelRoutingOverride, erro
 		return nil, err
 	}
 
+	modelRoutingOverrideMutationLock.Lock()
+	defer modelRoutingOverrideMutationLock.Unlock()
 	err = DB.Transaction(func(tx *gorm.DB) error {
-		return replaceAllModelRoutingOverrides(tx, overrides)
+		if err := findModelRoutingOverrideConflicts(tx, channelID, overrides); err != nil {
+			return err
+		}
+		if err := tx.Where("channel_id = ?", channelID).Delete(&ModelRoutingOverride{}).Error; err != nil {
+			return err
+		}
+		return tx.Create(&overrides).Error
 	})
 	if err != nil {
 		return nil, err
@@ -346,6 +429,8 @@ func DeleteModelRoutingOverride(modelName string) (int64, error) {
 	if modelName == "" {
 		return 0, errors.New("invalid model name")
 	}
+	modelRoutingOverrideMutationLock.Lock()
+	defer modelRoutingOverrideMutationLock.Unlock()
 	result := DB.Where("model IN ?", modelRoutingAbilityCandidates(modelName)).Delete(&ModelRoutingOverride{})
 	if result.Error != nil {
 		return 0, result.Error
@@ -357,6 +442,8 @@ func DeleteModelRoutingOverride(modelName string) (int64, error) {
 }
 
 func DeleteAllModelRoutingOverrides() (int64, error) {
+	modelRoutingOverrideMutationLock.Lock()
+	defer modelRoutingOverrideMutationLock.Unlock()
 	result := DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&ModelRoutingOverride{})
 	if result.Error != nil {
 		return 0, result.Error
@@ -379,6 +466,8 @@ func deleteModelRoutingOverridesByChannelIDs(tx *gorm.DB, channelIDs []int) (int
 }
 
 func DeleteModelRoutingOverridesByChannelIDs(channelIDs []int) (int64, error) {
+	modelRoutingOverrideMutationLock.Lock()
+	defer modelRoutingOverrideMutationLock.Unlock()
 	deleted, err := deleteModelRoutingOverridesByChannelIDs(DB, channelIDs)
 	if err != nil {
 		return 0, err

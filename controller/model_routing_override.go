@@ -26,6 +26,32 @@ type modelRoutingOverrideResponse struct {
 	Groups      []string `json:"groups"`
 }
 
+func buildModelRoutingOverrideResponses(overrides []model.ModelRoutingOverride) ([]modelRoutingOverrideResponse, error) {
+	if len(overrides) == 0 {
+		return []modelRoutingOverrideResponse{}, nil
+	}
+
+	byChannel := make(map[int][]model.ModelRoutingOverride)
+	for _, override := range overrides {
+		byChannel[override.ChannelId] = append(byChannel[override.ChannelId], override)
+	}
+	channelIDs := make([]int, 0, len(byChannel))
+	for channelID := range byChannel {
+		channelIDs = append(channelIDs, channelID)
+	}
+	sort.Ints(channelIDs)
+
+	responses := make([]modelRoutingOverrideResponse, 0, len(channelIDs))
+	for _, channelID := range channelIDs {
+		response, err := buildModelRoutingOverrideResponse(byChannel[channelID])
+		if err != nil {
+			return nil, err
+		}
+		responses = append(responses, response)
+	}
+	return responses, nil
+}
+
 func buildModelRoutingOverrideResponse(overrides []model.ModelRoutingOverride) (modelRoutingOverrideResponse, error) {
 	if len(overrides) == 0 {
 		return modelRoutingOverrideResponse{}, nil
@@ -87,16 +113,16 @@ func GetModelRoutingOverride(c *gin.Context) {
 		return
 	}
 	if len(overrides) == 0 {
-		common.ApiSuccess(c, nil)
+		common.ApiSuccess(c, []modelRoutingOverrideResponse{})
 		return
 	}
 
-	response, err := buildModelRoutingOverrideResponse(overrides)
+	responses, err := buildModelRoutingOverrideResponses(overrides)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	common.ApiSuccess(c, response)
+	common.ApiSuccess(c, responses)
 }
 
 func SetModelRoutingOverride(c *gin.Context) {
@@ -122,11 +148,33 @@ func SetModelRoutingOverride(c *gin.Context) {
 		"model_count":  response.ModelCount,
 		"groups":       strings.Join(response.Groups, ","),
 	})
-	common.ApiSuccess(c, response)
+	allOverrides, err := model.GetAllModelRoutingOverrides()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	responses, err := buildModelRoutingOverrideResponses(allOverrides)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, responses)
 }
 
 func DeleteModelRoutingOverride(c *gin.Context) {
-	deleted, err := model.DeleteAllModelRoutingOverrides()
+	channelIDText := strings.TrimSpace(c.Query("channel_id"))
+	var deleted int64
+	var err error
+	if channelIDText == "" {
+		deleted, err = model.DeleteAllModelRoutingOverrides()
+	} else {
+		channelID, parseErr := strconv.Atoi(channelIDText)
+		if parseErr != nil || channelID <= 0 {
+			common.ApiError(c, errors.New("invalid channel id"))
+			return
+		}
+		deleted, err = model.DeleteModelRoutingOverridesByChannelIDs([]int{channelID})
+	}
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -134,5 +182,15 @@ func DeleteModelRoutingOverride(c *gin.Context) {
 	recordManageAudit(c, "channel.routing_override_delete", map[string]interface{}{
 		"count": strconv.FormatInt(deleted, 10),
 	})
-	common.ApiSuccess(c, deleted)
+	allOverrides, err := model.GetAllModelRoutingOverrides()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	responses, err := buildModelRoutingOverrideResponses(allOverrides)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, responses)
 }

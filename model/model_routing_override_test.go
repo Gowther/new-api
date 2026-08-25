@@ -76,6 +76,9 @@ func TestModelRoutingOverrideLifecycle(t *testing.T) {
 		assert.True(t, found)
 		assert.Equal(t, channelA.Id, channelID)
 	}
+	refreshed, err := SetChannelModelRoutingOverride(channelA.Id)
+	require.NoError(t, err)
+	assert.Len(t, refreshed, 4)
 
 	// A channel status/ability outage does not silently leave temporary mode.
 	require.NoError(t, UpdateAbilityStatus(channelA.Id, false))
@@ -84,29 +87,73 @@ func TestModelRoutingOverrideLifecycle(t *testing.T) {
 	assert.True(t, found)
 	assert.Equal(t, channelA.Id, channelID)
 
-	// Switching channels is atomic: old rules disappear, and only B's enabled
-	// model/group abilities are covered.
-	overrides, err = SetChannelModelRoutingOverride(channelB.Id)
-	require.NoError(t, err)
-	assert.Len(t, overrides, 2)
-	_, found, err = GetModelRoutingOverrideTarget("model-a")
-	require.NoError(t, err)
-	assert.False(t, found)
+	// Overlapping models are rejected and the existing channel remains active.
+	_, err = SetChannelModelRoutingOverride(channelB.Id)
+	require.ErrorContains(t, err, "temporary routing conflicts")
 	channelID, found, err = GetModelRoutingOverrideTarget("shared-model")
 	require.NoError(t, err)
 	assert.True(t, found)
-	assert.Equal(t, channelB.Id, channelID)
+	assert.Equal(t, channelA.Id, channelID)
+
+	// A disjoint channel can be enabled alongside the existing target.
+	channelC := createRoutingTestChannel(t, db, 43, "model-b", "default")
+	overrides, err = SetChannelModelRoutingOverride(channelC.Id)
+	require.NoError(t, err)
+	assert.Len(t, overrides, 1)
+	channelID, found, err = GetModelRoutingOverrideTarget("model-a")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, channelA.Id, channelID)
 	channelID, found, err = GetModelRoutingOverrideTarget("model-b")
 	require.NoError(t, err)
 	assert.True(t, found)
-	assert.Equal(t, channelB.Id, channelID)
+	assert.Equal(t, channelC.Id, channelID)
 
-	deleted, err := DeleteAllModelRoutingOverrides()
+	common.MemoryCacheEnabled = true
+	require.NoError(t, InitModelRoutingOverrideCache())
+	channelID, found, err = GetModelRoutingOverrideTarget("model-a")
 	require.NoError(t, err)
-	assert.EqualValues(t, 2, deleted)
+	assert.True(t, found)
+	assert.Equal(t, channelA.Id, channelID)
+	channelID, found, err = GetModelRoutingOverrideTarget("model-b")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, channelC.Id, channelID)
+	common.MemoryCacheEnabled = false
+
+	deleted, err := DeleteModelRoutingOverridesByChannelIDs([]int{channelA.Id})
+	require.NoError(t, err)
+	assert.EqualValues(t, 4, deleted)
+	_, found, err = GetModelRoutingOverrideTarget("model-a")
+	require.NoError(t, err)
+	assert.False(t, found)
+	channelID, found, err = GetModelRoutingOverrideTarget("model-b")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, channelC.Id, channelID)
+
+	deleted, err = DeleteAllModelRoutingOverrides()
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, deleted)
 	_, found, err = GetModelRoutingOverrideTarget("shared-model")
 	require.NoError(t, err)
 	assert.False(t, found)
+}
+
+func TestModelRoutingOverrideRejectsNormalizedModelConflicts(t *testing.T) {
+	db := setupModelRoutingOverrideTestDB(t)
+	wildcardChannel := createRoutingTestChannel(t, db, 44, "gpt-4-gizmo-*", "default")
+	variantChannel := createRoutingTestChannel(t, db, 45, "gpt-4-gizmo-alpha", "default")
+
+	_, err := SetChannelModelRoutingOverride(wildcardChannel.Id)
+	require.NoError(t, err)
+	_, err = SetChannelModelRoutingOverride(variantChannel.Id)
+	require.ErrorContains(t, err, "gpt-4-gizmo-*")
+
+	channelID, found, err := GetModelRoutingOverrideTarget("gpt-4-gizmo-alpha")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, wildcardChannel.Id, channelID)
 }
 
 func TestModelRoutingOverrideSupportsNormalizedAbilities(t *testing.T) {
@@ -267,4 +314,24 @@ func TestMigrateLegacyModelRoutingOverridesClearsAmbiguousTargets(t *testing.T) 
 	overrides, err := GetAllModelRoutingOverrides()
 	require.NoError(t, err)
 	assert.Empty(t, overrides)
+}
+
+func TestMigrateLegacyModelRoutingOverridesPreservesChannelScopedRules(t *testing.T) {
+	db := setupModelRoutingOverrideTestDB(t)
+	legacyChannel := createRoutingTestChannel(t, db, 69, "legacy-model", "default")
+	activeChannel := createRoutingTestChannel(t, db, 70, "active-model", "default")
+	_, err := SetChannelModelRoutingOverride(activeChannel.Id)
+	require.NoError(t, err)
+	require.NoError(t, db.Create(&ModelRoutingOverride{
+		Model:     "legacy-model",
+		Group:     "default",
+		ChannelId: legacyChannel.Id,
+	}).Error)
+
+	require.NoError(t, migrateLegacyModelRoutingOverrides())
+	overrides, err := GetAllModelRoutingOverrides()
+	require.NoError(t, err)
+	require.Len(t, overrides, 2)
+	assert.Equal(t, activeChannel.Id, overrides[0].ChannelId)
+	assert.Equal(t, legacyChannel.Id, overrides[1].ChannelId)
 }

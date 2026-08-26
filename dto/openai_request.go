@@ -3,13 +3,12 @@ package dto
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 
-	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/types"
+	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/samber/lo"
-
-	"github.com/gin-gonic/gin"
 )
 
 type ResponseFormat struct {
@@ -90,6 +89,7 @@ type GeneralOpenAIRequest struct {
 	// Ali Qwen Params
 	VlHighResolutionImages json.RawMessage `json:"vl_high_resolution_images,omitempty"`
 	EnableThinking         json.RawMessage `json:"enable_thinking,omitempty"`
+	ThinkingBudget         json.RawMessage `json:"thinking_budget,omitempty"`
 	ChatTemplateKwargs     json.RawMessage `json:"chat_template_kwargs,omitempty"`
 	EnableSearch           json.RawMessage `json:"enable_search,omitempty"`
 	// ollama Params
@@ -106,6 +106,16 @@ type GeneralOpenAIRequest struct {
 	SearchMode             json.RawMessage `json:"search_mode,omitempty"`
 	// Minimax
 	ReasoningSplit json.RawMessage `json:"reasoning_split,omitempty"`
+	// vLLM
+	ThinkingTokenBudget json.RawMessage `json:"thinking_token_budget,omitempty"`
+}
+
+func (r GeneralOpenAIRequest) MarshalJSON() ([]byte, error) {
+	type Alias GeneralOpenAIRequest
+	if !IsQwenThinkingBudgetModel(r.Model) {
+		r.ThinkingBudget = nil
+	}
+	return kitutil.Marshal((*Alias)(&r))
 }
 
 func (r *GeneralOpenAIRequest) GetTokenCountMeta() *types.TokenCountMeta {
@@ -196,7 +206,7 @@ func (r *GeneralOpenAIRequest) GetTokenCountMeta() *types.TokenCountMeta {
 	return &tokenCountMeta
 }
 
-func (r *GeneralOpenAIRequest) IsStream(c *gin.Context) bool {
+func (r *GeneralOpenAIRequest) IsStream(c *http.Request) bool {
 	return lo.FromPtrOr(r.Stream, false)
 }
 
@@ -208,8 +218,8 @@ func (r *GeneralOpenAIRequest) SetModelName(modelName string) {
 
 func (r *GeneralOpenAIRequest) ToMap() map[string]any {
 	result := make(map[string]any)
-	data, _ := common.Marshal(r)
-	_ = common.Unmarshal(data, &result)
+	data, _ := kitutil.Marshal(r)
+	_ = kitutil.Unmarshal(data, &result)
 	return result
 }
 
@@ -221,6 +231,14 @@ func IsOpenAIReasoningOModel(modelName string) bool {
 
 func IsOpenAIGPT5Model(modelName string) bool {
 	return strings.HasPrefix(modelName, "gpt-5")
+}
+
+func IsQwenThinkingBudgetModel(modelName string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(modelName))
+	return strings.HasPrefix(normalized, "qwen") ||
+		strings.Contains(normalized, "/qwen") ||
+		strings.HasPrefix(normalized, "qwq") ||
+		strings.Contains(normalized, "/qwq")
 }
 
 func (r *GeneralOpenAIRequest) GetSystemRoleName() string {
@@ -315,9 +333,9 @@ func (m *MediaContent) GetImageMedia() *MessageImageUrl {
 		}
 		if itemMap, ok := m.ImageUrl.(map[string]any); ok {
 			out := &MessageImageUrl{
-				Url:      common.Interface2String(itemMap["url"]),
-				Detail:   common.Interface2String(itemMap["detail"]),
-				MimeType: common.Interface2String(itemMap["mime_type"]),
+				Url:      kitutil.Interface2String(itemMap["url"]),
+				Detail:   kitutil.Interface2String(itemMap["detail"]),
+				MimeType: kitutil.Interface2String(itemMap["mime_type"]),
 			}
 			return out
 		}
@@ -332,8 +350,8 @@ func (m *MediaContent) GetInputAudio() *MessageInputAudio {
 		}
 		if itemMap, ok := m.InputAudio.(map[string]any); ok {
 			out := &MessageInputAudio{
-				Data:   common.Interface2String(itemMap["data"]),
-				Format: common.Interface2String(itemMap["format"]),
+				Data:   kitutil.Interface2String(itemMap["data"]),
+				Format: kitutil.Interface2String(itemMap["format"]),
 			}
 			return out
 		}
@@ -348,9 +366,9 @@ func (m *MediaContent) GetFile() *MessageFile {
 		}
 		if itemMap, ok := m.File.(map[string]any); ok {
 			out := &MessageFile{
-				FileName: common.Interface2String(itemMap["file_name"]),
-				FileData: common.Interface2String(itemMap["file_data"]),
-				FileId:   common.Interface2String(itemMap["file_id"]),
+				FileName: kitutil.Interface2String(itemMap["file_name"]),
+				FileData: kitutil.Interface2String(itemMap["file_data"]),
+				FileId:   kitutil.Interface2String(itemMap["file_id"]),
 			}
 			return out
 		}
@@ -365,7 +383,7 @@ func (m *MediaContent) GetVideoUrl() *MessageVideoUrl {
 		}
 		if itemMap, ok := m.VideoUrl.(map[string]any); ok {
 			out := &MessageVideoUrl{
-				Url: common.Interface2String(itemMap["url"]),
+				Url: kitutil.Interface2String(itemMap["url"]),
 			}
 			return out
 		}
@@ -843,13 +861,19 @@ type OpenAIResponsesRequest struct {
 	Include json.RawMessage `json:"include,omitempty"`
 	// 在后台运行推理，暂时还不支持依赖的接口
 	// Background         json.RawMessage `json:"background,omitempty"`
-	Conversation       json.RawMessage `json:"conversation,omitempty"`
-	ContextManagement  json.RawMessage `json:"context_management,omitempty"`
-	Instructions       json.RawMessage `json:"instructions,omitempty"`
-	MaxOutputTokens    *uint           `json:"max_output_tokens,omitempty"`
-	TopLogProbs        *int            `json:"top_logprobs,omitempty"`
-	Metadata           json.RawMessage `json:"metadata,omitempty"`
-	ParallelToolCalls  json.RawMessage `json:"parallel_tool_calls,omitempty"`
+	Conversation      json.RawMessage `json:"conversation,omitempty"`
+	ContextManagement json.RawMessage `json:"context_management,omitempty"`
+	Instructions      json.RawMessage `json:"instructions,omitempty"`
+	MaxOutputTokens   *uint           `json:"max_output_tokens,omitempty"`
+	TopLogProbs       *int            `json:"top_logprobs,omitempty"`
+	Metadata          json.RawMessage `json:"metadata,omitempty"`
+	Moderation        json.RawMessage `json:"moderation,omitempty"`
+	ParallelToolCalls json.RawMessage `json:"parallel_tool_calls,omitempty"`
+	// FrequencyPenalty/PresencePenalty are not part of the official OpenAI
+	// Responses API; they are forwarded verbatim for OpenAI-compatible upstreams
+	// (e.g. vLLM) that accept them.
+	FrequencyPenalty   json.RawMessage `json:"frequency_penalty,omitempty"`
+	PresencePenalty    json.RawMessage `json:"presence_penalty,omitempty"`
 	PreviousResponseID string          `json:"previous_response_id,omitempty"`
 	Reasoning          *Reasoning      `json:"reasoning,omitempty"`
 	// ServiceTier specifies upstream service level and may affect billing.
@@ -859,6 +883,7 @@ type OpenAIResponsesRequest struct {
 	// This field is allowed by default and can be disabled via channel setting disable_store.
 	Store                json.RawMessage `json:"store,omitempty"`
 	PromptCacheKey       json.RawMessage `json:"prompt_cache_key,omitempty"`
+	PromptCacheOptions   json.RawMessage `json:"prompt_cache_options,omitempty"`
 	PromptCacheRetention json.RawMessage `json:"prompt_cache_retention,omitempty"`
 	// SafetyIdentifier carries client identity for policy abuse detection.
 	// This field is filtered by default and can be enabled via channel setting allow_safety_identifier.
@@ -879,8 +904,17 @@ type OpenAIResponsesRequest struct {
 	ClientMetadata json.RawMessage `json:"client_metadata,omitempty"`
 	// qwen
 	EnableThinking json.RawMessage `json:"enable_thinking,omitempty"`
+	ThinkingBudget json.RawMessage `json:"thinking_budget,omitempty"`
 	// perplexity
 	Preset json.RawMessage `json:"preset,omitempty"`
+}
+
+func (r OpenAIResponsesRequest) MarshalJSON() ([]byte, error) {
+	type Alias OpenAIResponsesRequest
+	if !IsQwenThinkingBudgetModel(r.Model) {
+		r.ThinkingBudget = nil
+	}
+	return kitutil.Marshal((*Alias)(&r))
 }
 
 func (r *OpenAIResponsesRequest) GetTokenCountMeta() *types.TokenCountMeta {
@@ -942,7 +976,7 @@ func (r *OpenAIResponsesRequest) GetTokenCountMeta() *types.TokenCountMeta {
 	}
 }
 
-func (r *OpenAIResponsesRequest) IsStream(c *gin.Context) bool {
+func (r *OpenAIResponsesRequest) IsStream(c *http.Request) bool {
 	return lo.FromPtrOr(r.Stream, false)
 }
 
@@ -955,7 +989,7 @@ func (r *OpenAIResponsesRequest) SetModelName(modelName string) {
 func (r *OpenAIResponsesRequest) GetToolsMap() []map[string]any {
 	var toolsMap []map[string]any
 	if len(r.Tools) > 0 {
-		_ = common.Unmarshal(r.Tools, &toolsMap)
+		_ = kitutil.Unmarshal(r.Tools, &toolsMap)
 	}
 	return toolsMap
 }
@@ -994,31 +1028,31 @@ func (r *OpenAIResponsesRequest) ParseInput() []MediaInput {
 	var mediaInputs []MediaInput
 
 	// Try string first
-	// if str, ok := common.GetJsonType(r.Input); ok {
+	// if str, ok := kitutil.GetJsonType(r.Input); ok {
 	// 	inputs = append(inputs, MediaInput{Type: "input_text", Text: str})
 	// 	return inputs
 	// }
-	if common.GetJsonType(r.Input) == "string" {
+	if kitutil.GetJsonType(r.Input) == "string" {
 		var str string
-		_ = common.Unmarshal(r.Input, &str)
+		_ = kitutil.Unmarshal(r.Input, &str)
 		mediaInputs = append(mediaInputs, MediaInput{Type: "input_text", Text: str})
 		return mediaInputs
 	}
 
 	// Try array of parts
-	if common.GetJsonType(r.Input) == "array" {
+	if kitutil.GetJsonType(r.Input) == "array" {
 		var inputs []Input
-		_ = common.Unmarshal(r.Input, &inputs)
+		_ = kitutil.Unmarshal(r.Input, &inputs)
 		for _, input := range inputs {
-			if common.GetJsonType(input.Content) == "string" {
+			if kitutil.GetJsonType(input.Content) == "string" {
 				var str string
-				_ = common.Unmarshal(input.Content, &str)
+				_ = kitutil.Unmarshal(input.Content, &str)
 				mediaInputs = append(mediaInputs, MediaInput{Type: "input_text", Text: str})
 			}
 
-			if common.GetJsonType(input.Content) == "array" {
+			if kitutil.GetJsonType(input.Content) == "array" {
 				var array []any
-				_ = common.Unmarshal(input.Content, &array)
+				_ = kitutil.Unmarshal(input.Content, &array)
 				for _, itemAny := range array {
 					// Already parsed MediaContent
 					if media, ok := itemAny.(MediaInput); ok {

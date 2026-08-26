@@ -1690,13 +1690,12 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
               <EmptyState title={t('No channels support this model')} />
             )}
             {!isLoading && selectedModel && channelsForModel.length > 0 && (
-              <Table className='min-w-[64rem] table-fixed'>
+              <Table className='min-w-[62rem] table-fixed'>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className='w-80'>{t('Channel')}</TableHead>
+                    <TableHead className='w-96'>{t('Channel')}</TableHead>
                     <TableHead className='w-40'>{t('Actions')}</TableHead>
                     <TableHead className='w-28'>{t('Type')}</TableHead>
-                    <TableHead className='w-24'>{t('Group')}</TableHead>
                     <TableHead className='w-36'>{t('Status')}</TableHead>
                     <TableHead className='bg-background sticky right-0 w-48'>
                       <div className='grid grid-cols-2 gap-2'>
@@ -1709,7 +1708,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                 <TableBody>
                   {enabledChannelCount > 0 ? (
                     <TableRow className='bg-muted/20 hover:bg-muted/20'>
-                      <TableCell colSpan={6} className='py-2'>
+                      <TableCell colSpan={5} className='py-2'>
                         <div className='flex items-center gap-2'>
                           <StatusBadge
                             label={t('Participating in routing')}
@@ -1812,7 +1811,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                               key='disabled-routing-channels'
                               className='bg-muted/40 hover:bg-muted/40'
                             >
-                              <TableCell colSpan={6} className='py-2'>
+                              <TableCell colSpan={5} className='py-2'>
                                 <div className='flex items-center gap-2'>
                                   <StatusBadge
                                     label={t('Not participating in routing')}
@@ -1846,7 +1845,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                       >
                         <TableCell
                           className={cn(
-                            'w-80 max-w-80 border-l-4 border-l-transparent',
+                            'w-96 max-w-96 border-l-4 border-l-transparent',
                             channel.status === CHANNEL_STATUS.MANUAL_DISABLED &&
                               'border-l-destructive',
                             channel.status === CHANNEL_STATUS.AUTO_DISABLED &&
@@ -1858,36 +1857,10 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                               'border-l-border'
                           )}
                         >
-                          <div className='grid min-w-0 grid-cols-[9.5rem_minmax(0,1fr)] items-center gap-2'>
-                            <div className='flex min-w-0 items-center gap-1'>
-                              <StatusBadge
-                                label={
-                                  routingRank === undefined
-                                    ? '—'
-                                    : `#${routingRank}`
-                                }
-                                variant='neutral'
-                                size='sm'
-                                copyable={false}
-                                className='w-9 justify-center'
-                              />
-                              <span className='text-muted-foreground w-14 truncate font-mono text-xs'>
-                                ID:{channel.id}
-                              </span>
-                              {routeRoleLabelKey ? (
-                                <StatusBadge
-                                  label={t(routeRoleLabelKey)}
-                                  variant={
-                                    ROUTING_ROLE_VARIANTS[routeRoleIndex]
-                                  }
-                                  size='sm'
-                                  copyable={false}
-                                  className='w-12 justify-center'
-                                />
-                              ) : (
-                                <span className='w-12' aria-hidden='true' />
-                              )}
-                            </div>
+                          {/* Two lines: the name owns the first one so long
+                              channel names stay readable, while rank, id, role
+                              and group sit together on a compact second line. */}
+                          <div className='flex min-w-0 flex-col gap-1'>
                             <div className='flex min-w-0 items-center gap-2'>
                               <div className='min-w-0 flex-1'>
                                 <HoverCard>
@@ -1922,6 +1895,39 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                               {!isEnabled
                                 ? channelStatusBadgeWithDetails
                                 : null}
+                            </div>
+                            <div className='flex min-w-0 items-center gap-1'>
+                              <StatusBadge
+                                label={
+                                  routingRank === undefined
+                                    ? '—'
+                                    : `#${routingRank}`
+                                }
+                                variant='neutral'
+                                size='sm'
+                                copyable={false}
+                                className='w-9 shrink-0 justify-center'
+                              />
+                              <span className='text-muted-foreground shrink-0 font-mono text-xs'>
+                                ID:{channel.id}
+                              </span>
+                              {routeRoleLabelKey ? (
+                                <StatusBadge
+                                  label={t(routeRoleLabelKey)}
+                                  variant={
+                                    ROUTING_ROLE_VARIANTS[routeRoleIndex]
+                                  }
+                                  size='sm'
+                                  copyable={false}
+                                  className='shrink-0 justify-center'
+                                />
+                              ) : null}
+                              <span
+                                className='text-muted-foreground truncate text-xs'
+                                title={channel.group}
+                              >
+                                {channel.group}
+                              </span>
                             </div>
                           </div>
                         </TableCell>
@@ -2043,14 +2049,6 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                         </TableCell>
                         <TableCell className='w-28'>
                           <div className='truncate'>{t(channelType)}</div>
-                        </TableCell>
-                        <TableCell className='w-24'>
-                          <StatusBadge
-                            label={channel.group}
-                            variant='neutral'
-                            size='sm'
-                            copyable={false}
-                          />
                         </TableCell>
                         <TableCell className='w-36'>
                           <div className='flex min-w-0 items-center gap-2'>

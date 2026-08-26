@@ -1224,7 +1224,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     {
       title: t('渠道'),
       dataIndex: 'name',
-      width: 320,
+      width: 384,
       render: (_, record) => {
         const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
         const remark = record.remark?.trim();
@@ -1248,19 +1248,30 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
             {record.name}
           </Text>
         );
+        // Two lines: the name owns the first one so long channel names stay
+        // readable, while rank, id, role and group sit together on a compact
+        // second line.
         return (
-          <div className='grid min-w-0 grid-cols-[150px_minmax(0,1fr)] items-center gap-2'>
+          <div className='flex min-w-0 flex-col gap-1'>
+            <div className='flex min-w-0 items-center gap-2'>
+              <div className='min-w-0 flex-1'>
+                <ChannelRemarkTooltip title={record.name} remark={remark}>
+                  {nameNode}
+                </ChannelRemarkTooltip>
+              </div>
+              {!isEnabled ? renderRoutingChannelStatusTag(record, t) : null}
+            </div>
             <div className='flex min-w-0 items-center gap-1'>
-              <span className='inline-flex w-9 shrink-0'>
+              <span className='inline-flex shrink-0'>
                 <Tag color='grey' shape='circle' size='small'>
                   {routingRank === undefined ? '—' : `#${routingRank}`}
                 </Tag>
               </span>
-              <span className='w-14 shrink-0 truncate font-mono text-xs text-[var(--semi-color-text-2)]'>
+              <span className='shrink-0 font-mono text-xs text-[var(--semi-color-text-2)]'>
                 ID:{record.id}
               </span>
               {routeRoleLabel ? (
-                <span className='inline-flex w-11 shrink-0'>
+                <span className='inline-flex shrink-0'>
                   <Tag
                     color={ROUTING_ROLE_COLORS[routeRoleIndex]}
                     shape='circle'
@@ -1269,17 +1280,13 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                     {t(routeRoleLabel)}
                   </Tag>
                 </span>
-              ) : (
-                <span className='w-11 shrink-0' aria-hidden='true' />
-              )}
-            </div>
-            <div className='flex min-w-0 items-center gap-2'>
-              <div className='min-w-0 flex-1'>
-                <ChannelRemarkTooltip title={record.name} remark={remark}>
-                  {nameNode}
-                </ChannelRemarkTooltip>
-              </div>
-              {!isEnabled ? renderRoutingChannelStatusTag(record, t) : null}
+              ) : null}
+              <span
+                className='truncate text-xs text-[var(--semi-color-text-2)]'
+                title={record.group}
+              >
+                {record.group}
+              </span>
             </div>
           </div>
         );
@@ -1362,16 +1369,6 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
           {getChannelIcon(type)}
           {CHANNEL_TYPE_LABELS[type] || t('未知')}
         </span>
-      ),
-    },
-    {
-      title: t('分组'),
-      dataIndex: 'group',
-      width: 100,
-      render: (group) => (
-        <Tag color='grey' shape='circle' size='small'>
-          {group}
-        </Tag>
       ),
     },
     {
@@ -1751,7 +1748,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                 }}
                 pagination={false}
                 size='small'
-                scroll={{ x: 1120 }}
+                scroll={{ x: 1080 }}
                 onRow={(record) => {
                   const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
                   const isTarget = record.id === targetChannelId;

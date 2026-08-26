@@ -338,8 +338,12 @@ func (channel *Channel) GetNextEnabledKey() (string, int, *types.NewAPIError) {
 		selectedIdx := enabledIdx[rand.Intn(len(enabledIdx))]
 		return keys[selectedIdx], selectedIdx, nil
 	case constant.MultiKeyModePolling:
-		// Use channel-specific lock to ensure thread-safe polling
-
+		// The polling cursor must advance on the object the next request will read,
+		// which is not necessarily the receiver: callers that resolve a channel
+		// outside the memory cache (指定渠道 and playground channel_id both use
+		// GetChannelById) hold a throwaway object that is discarded with the request.
+		// CacheGetChannelInfo returns a pointer into the cached channel when the
+		// memory cache is on, so the cursor is advanced through channelInfo as well.
 		channelInfo, err := CacheGetChannelInfo(channel.Id)
 		if err != nil {
 			return "", 0, types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
@@ -350,8 +354,6 @@ func (channel *Channel) GetNextEnabledKey() (string, int, *types.NewAPIError) {
 			}
 			if !common.MemoryCacheEnabled {
 				_ = channel.SaveChannelInfo()
-			} else {
-				// CacheUpdateChannel(channel)
 			}
 		}()
 		// Start from the saved polling index and look for the next enabled key
@@ -363,7 +365,9 @@ func (channel *Channel) GetNextEnabledKey() (string, int, *types.NewAPIError) {
 			idx := (start + i) % len(keys)
 			if getStatus(idx) == common.ChannelStatusEnabled {
 				// update polling index for next call (point to the next position)
-				channel.ChannelInfo.MultiKeyPollingIndex = (idx + 1) % len(keys)
+				next := (idx + 1) % len(keys)
+				channelInfo.MultiKeyPollingIndex = next
+				channel.ChannelInfo.MultiKeyPollingIndex = next
 				return keys[idx], idx, nil
 			}
 		}
@@ -972,8 +976,6 @@ func updateChannelStatus(channelId int, usingKey string, keyIndex *int, status i
 			if beforeStatus != channelCache.Status {
 				CacheUpdateChannelStatus(channelId, channelCache.Status)
 			}
-			//CacheUpdateChannel(channelCache)
-			//return true
 		} else {
 			// 如果缓存渠道存在，且状态已是目标状态，直接返回
 			if channelCache.Status == status {

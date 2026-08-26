@@ -1231,7 +1231,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     {
       title: t('渠道'),
       dataIndex: 'name',
-      width: 384,
+      width: 320,
       render: (_, record) => {
         const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
         const remark = record.remark?.trim();
@@ -1302,7 +1302,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     {
       title: t('操作'),
       dataIndex: 'actions',
-      width: 225,
+      width: 190,
       render: (_, record) => {
         const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
         const isOverrideTarget = routingOverride.some(
@@ -1381,7 +1381,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     {
       title: t('状态'),
       dataIndex: 'status',
-      width: 170,
+      width: 150,
       render: (_, record) => {
         const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
         const updating = Boolean(statusUpdatingIds[record.id]);
@@ -1755,7 +1755,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                 }}
                 pagination={false}
                 size='small'
-                scroll={{ x: 1120 }}
+                scroll={{ x: 1000 }}
                 onRow={(record) => {
                   const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
                   const isTarget = record.id === targetChannelId;

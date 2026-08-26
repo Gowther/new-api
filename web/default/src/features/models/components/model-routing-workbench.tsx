@@ -1690,13 +1690,13 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
               <EmptyState title={t('No channels support this model')} />
             )}
             {!isLoading && selectedModel && channelsForModel.length > 0 && (
-              <Table className='min-w-[64rem] table-fixed'>
+              <Table className='min-w-[60rem] table-fixed'>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className='w-96'>{t('Channel')}</TableHead>
-                    <TableHead className='w-40'>{t('Actions')}</TableHead>
+                    <TableHead className='w-80'>{t('Channel')}</TableHead>
+                    <TableHead className='w-44'>{t('Actions')}</TableHead>
                     <TableHead className='w-28'>{t('Type')}</TableHead>
-                    <TableHead className='w-40'>{t('Status')}</TableHead>
+                    <TableHead className='w-36'>{t('Status')}</TableHead>
                     <TableHead className='bg-background sticky right-0 w-52'>
                       <div className='grid grid-cols-2 gap-2'>
                         <span>{t('Priority')}</span>
@@ -1845,7 +1845,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                       >
                         <TableCell
                           className={cn(
-                            'w-96 max-w-96 border-l-4 border-l-transparent',
+                            'w-80 max-w-80 border-l-4 border-l-transparent',
                             channel.status === CHANNEL_STATUS.MANUAL_DISABLED &&
                               'border-l-destructive',
                             channel.status === CHANNEL_STATUS.AUTO_DISABLED &&
@@ -1931,7 +1931,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className='w-40'>
+                        <TableCell className='w-44'>
                           <div className='flex items-center gap-1'>
                             <TooltipProvider delay={100}>
                               <Tooltip>
@@ -2050,7 +2050,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                         <TableCell className='w-28'>
                           <div className='truncate'>{t(channelType)}</div>
                         </TableCell>
-                        <TableCell className='w-40'>
+                        <TableCell className='w-36'>
                           <div className='flex min-w-0 items-center gap-2'>
                             <Switch
                               size='sm'

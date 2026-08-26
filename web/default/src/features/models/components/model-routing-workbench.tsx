@@ -1690,14 +1690,14 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
               <EmptyState title={t('No channels support this model')} />
             )}
             {!isLoading && selectedModel && channelsForModel.length > 0 && (
-              <Table className='min-w-[62rem] table-fixed'>
+              <Table className='min-w-[64rem] table-fixed'>
                 <TableHeader>
                   <TableRow>
                     <TableHead className='w-96'>{t('Channel')}</TableHead>
                     <TableHead className='w-40'>{t('Actions')}</TableHead>
                     <TableHead className='w-28'>{t('Type')}</TableHead>
-                    <TableHead className='w-36'>{t('Status')}</TableHead>
-                    <TableHead className='bg-background sticky right-0 w-48'>
+                    <TableHead className='w-40'>{t('Status')}</TableHead>
+                    <TableHead className='bg-background sticky right-0 w-52'>
                       <div className='grid grid-cols-2 gap-2'>
                         <span>{t('Priority')}</span>
                         <span>{t('Weight')}</span>
@@ -2050,7 +2050,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                         <TableCell className='w-28'>
                           <div className='truncate'>{t(channelType)}</div>
                         </TableCell>
-                        <TableCell className='w-36'>
+                        <TableCell className='w-40'>
                           <div className='flex min-w-0 items-center gap-2'>
                             <Switch
                               size='sm'
@@ -2064,7 +2064,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                             {channelStatusBadgeWithDetails}
                           </div>
                         </TableCell>
-                        <TableCell className='bg-background sticky right-0 w-48 p-0'>
+                        <TableCell className='bg-background sticky right-0 w-52 p-0'>
                           {/* Keep the pinned column opaque and in sync with the
                               row tint so scrolled columns do not show through. */}
                           <div

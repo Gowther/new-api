@@ -94,8 +94,15 @@ const renderRoutingChannelStatusTag = (channel, t) => {
   const statusMeta =
     CHANNEL_STATUS_META[channel.status] ||
     CHANNEL_STATUS_META[CHANNEL_STATUS.UNKNOWN];
+  // shrink-0 keeps flex from squeezing the tag below its text width, which
+  // truncated the longer labels such as 自动禁用 in the status column.
   const statusTag = (
-    <Tag color={statusMeta.color} shape='circle' size='small'>
+    <Tag
+      color={statusMeta.color}
+      shape='circle'
+      size='small'
+      className='shrink-0'
+    >
       {t(statusMeta.label)}
     </Tag>
   );
@@ -1374,7 +1381,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     {
       title: t('状态'),
       dataIndex: 'status',
-      width: 150,
+      width: 170,
       render: (_, record) => {
         const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
         const updating = Boolean(statusUpdatingIds[record.id]);
@@ -1400,7 +1407,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
         </div>
       ),
       dataIndex: 'routing',
-      width: 190,
+      width: 210,
       fixed: 'right',
       render: (_, record) => {
         const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
@@ -1748,7 +1755,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                 }}
                 pagination={false}
                 size='small'
-                scroll={{ x: 1080 }}
+                scroll={{ x: 1120 }}
                 onRow={(record) => {
                   const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
                   const isTarget = record.id === targetChannelId;

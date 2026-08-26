@@ -2,7 +2,9 @@ package model
 
 import (
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -53,6 +55,17 @@ func setupPollingChannelTest(t *testing.T, memoryCacheEnabled bool, keys []strin
 		channelSyncLock.Unlock()
 		require.NoError(t, sqlDB.Close())
 	})
+
+	// The polling cursor lives in process-global state, so clear it on both ends to
+	// keep these tests independent of each other and of the rest of the package.
+	clearPollingCursors := func() {
+		channelPollingCursors.Range(func(key, _ any) bool {
+			channelPollingCursors.Delete(key)
+			return true
+		})
+	}
+	clearPollingCursors()
+	t.Cleanup(clearPollingCursors)
 
 	require.NoError(t, db.AutoMigrate(&Channel{}, &Ability{}))
 
@@ -140,6 +153,101 @@ func TestGetNextEnabledKeyPersistsCursorWithoutMemoryCache(t *testing.T) {
 	key, _, apiErr = stored.GetNextEnabledKey()
 	require.Nil(t, apiErr)
 	assert.Equal(t, "key-b", key)
+}
+
+// TestGetNextEnabledKeyConcurrentWithCacheSyncIsRaceFree pins the lock order
+// between the polling cursor and the channel cache rebuild: InitChannelCache
+// carries the cursor over to the new channel object while requests advance it.
+// Both sides must hold the per-channel polling lock, and channelSyncLock must
+// always be taken before it, otherwise this deadlocks. Run with -race to see
+// the unsynchronized cursor access this guards against.
+func TestGetNextEnabledKeyConcurrentWithCacheSyncIsRaceFree(t *testing.T) {
+	keys := []string{"key-a", "key-b", "key-c"}
+	setupPollingChannelTest(t, true, keys)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 25; j++ {
+				cached, err := CacheGetChannel(91)
+				if err != nil {
+					continue
+				}
+				if _, _, apiErr := cached.GetNextEnabledKey(); apiErr != nil {
+					t.Errorf("GetNextEnabledKey failed: %v", apiErr)
+					return
+				}
+			}
+		}()
+	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for j := 0; j < 25; j++ {
+			InitChannelCache()
+		}
+	}()
+
+	wg.Wait()
+
+	// The cursor survived the rebuilds and still points at a valid key.
+	cursor, ok := channelPollingCursors.Load(91)
+	require.True(t, ok)
+	assert.GreaterOrEqual(t, cursor.(int), 0)
+	assert.Less(t, cursor.(int), len(keys))
+}
+
+// TestGetNextEnabledKeyKeepsCursorAcrossCacheSync pins the behaviour that
+// InitChannelCache used to hand-carry between channel objects: a cache rebuild
+// must not reset multi-key rotation back to the first key.
+func TestGetNextEnabledKeyKeepsCursorAcrossCacheSync(t *testing.T) {
+	keys := []string{"key-a", "key-b", "key-c"}
+	setupPollingChannelTest(t, true, keys)
+
+	cached, err := CacheGetChannel(91)
+	require.NoError(t, err)
+	key, _, apiErr := cached.GetNextEnabledKey()
+	require.Nil(t, apiErr)
+	assert.Equal(t, "key-a", key)
+
+	InitChannelCache()
+
+	cached, err = CacheGetChannel(91)
+	require.NoError(t, err)
+	key, _, apiErr = cached.GetNextEnabledKey()
+	require.Nil(t, apiErr)
+	assert.Equal(t, "key-b", key, "cache rebuild must not reset the polling cursor")
+}
+
+// TestInitChannelCacheUnderPollingLockDoesNotDeadlock pins the lock order that
+// controller.multi_key_manage relies on: it holds a channel's polling lock for
+// the whole request and calls InitChannelCache inside it (disable_key,
+// enable_key, delete_key, ...). InitChannelCache must therefore never acquire a
+// polling lock, since sync.Mutex is not reentrant. Guarding the cursor there
+// instead of keeping it in channelPollingCursors would hang every one of those
+// admin actions.
+func TestInitChannelCacheUnderPollingLockDoesNotDeadlock(t *testing.T) {
+	keys := []string{"key-a", "key-b", "key-c"}
+	setupPollingChannelTest(t, true, keys)
+
+	lock := GetChannelPollingLock(91)
+	lock.Lock()
+	defer lock.Unlock()
+
+	done := make(chan struct{})
+	go func() {
+		InitChannelCache()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("InitChannelCache blocked while a channel polling lock was held")
+	}
 }
 
 // TestGetNextEnabledKeySkipsDisabledKeysForUncachedChannelObject pins the

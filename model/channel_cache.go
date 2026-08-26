@@ -77,17 +77,13 @@ func InitChannelCache() {
 	channelSyncLock.Lock()
 	group2model2channels = newGroup2model2channels
 	//channelsIDM = newChannelId2channel
-	for i, channel := range newChannelId2channel {
+	// 多key轮询索引不在这里搬运：它保存在 channelPollingCursors 中，按 channel.id
+	// 索引，本来就能跨缓存重建存活。此处读写旧渠道对象的索引会与 GetNextEnabledKey
+	// 的并发推进构成 data race，而在持有 channelSyncLock 时去拿轮询锁又会与
+	// multi_key_manage（持轮询锁再调 InitChannelCache）形成死锁。
+	for _, channel := range newChannelId2channel {
 		if channel.ChannelInfo.IsMultiKey {
 			channel.Keys = channel.GetKeys()
-			if channel.ChannelInfo.MultiKeyMode == constant.MultiKeyModePolling {
-				if oldChannel, ok := channelsIDM[i]; ok {
-					// 存在旧的渠道，如果是多key且轮询，保留轮询索引信息
-					if oldChannel.ChannelInfo.IsMultiKey && oldChannel.ChannelInfo.MultiKeyMode == constant.MultiKeyModePolling {
-						channel.ChannelInfo.MultiKeyPollingIndex = oldChannel.ChannelInfo.MultiKeyPollingIndex
-					}
-				}
-			}
 		}
 	}
 	channelsIDM = newChannelId2channel

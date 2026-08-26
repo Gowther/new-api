@@ -338,15 +338,29 @@ func (channel *Channel) GetNextEnabledKey() (string, int, *types.NewAPIError) {
 		selectedIdx := enabledIdx[rand.Intn(len(enabledIdx))]
 		return keys[selectedIdx], selectedIdx, nil
 	case constant.MultiKeyModePolling:
-		// The polling cursor must advance on the object the next request will read,
-		// which is not necessarily the receiver: callers that resolve a channel
-		// outside the memory cache (指定渠道 and playground channel_id both use
-		// GetChannelById) hold a throwaway object that is discarded with the request.
-		// CacheGetChannelInfo returns a pointer into the cached channel when the
-		// memory cache is on, so the cursor is advanced through channelInfo as well.
-		channelInfo, err := CacheGetChannelInfo(channel.Id)
-		if err != nil {
-			return "", 0, types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+		// The cursor must live somewhere the next request will read it, which rules
+		// out the receiver: callers that resolve a channel outside the memory cache
+		// (指定渠道 and playground channel_id both use GetChannelById) hold a
+		// throwaway object that is discarded with the request, and even the cached
+		// object is replaced wholesale by InitChannelCache. So when the memory cache
+		// is on the cursor is kept in channelPollingCursors, keyed by channel id,
+		// seeded once from the persisted value. Writes to channel.ChannelInfo are
+		// kept for the no-cache path (SaveChannelInfo) and the debug log below.
+		var start int
+		if common.MemoryCacheEnabled {
+			if cursor, ok := channelPollingCursors.Load(channel.Id); ok {
+				start = cursor.(int)
+			} else {
+				start = channel.ChannelInfo.MultiKeyPollingIndex
+			}
+		} else {
+			// Without the memory cache the database is the source of truth, and it is
+			// re-read inside the lock so concurrent requests do not reuse a cursor.
+			info, err := CacheGetChannelInfo(channel.Id)
+			if err != nil {
+				return "", 0, types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+			}
+			start = info.MultiKeyPollingIndex
 		}
 		defer func() {
 			if common.DebugEnabled {
@@ -357,7 +371,6 @@ func (channel *Channel) GetNextEnabledKey() (string, int, *types.NewAPIError) {
 			}
 		}()
 		// Start from the saved polling index and look for the next enabled key
-		start := channelInfo.MultiKeyPollingIndex
 		if start < 0 || start >= len(keys) {
 			start = 0
 		}
@@ -366,7 +379,7 @@ func (channel *Channel) GetNextEnabledKey() (string, int, *types.NewAPIError) {
 			if getStatus(idx) == common.ChannelStatusEnabled {
 				// update polling index for next call (point to the next position)
 				next := (idx + 1) % len(keys)
-				channelInfo.MultiKeyPollingIndex = next
+				channelPollingCursors.Store(channel.Id, next)
 				channel.ChannelInfo.MultiKeyPollingIndex = next
 				return keys[idx], idx, nil
 			}
@@ -803,6 +816,13 @@ var channelStatusLock sync.Mutex
 // channelPollingLocks stores locks for each channel.id to ensure thread-safe polling
 var channelPollingLocks sync.Map
 
+// channelPollingCursors holds the multi-key polling cursor (channel.id -> next key
+// index) for the memory-cache mode. It is deliberately kept outside the channel
+// objects in channelsIDM, which InitChannelCache replaces wholesale, and outside
+// the per-request objects returned by GetChannelById. Access is serialized by the
+// channel's polling lock.
+var channelPollingCursors sync.Map
+
 // GetChannelPollingLock returns or creates a mutex for the given channel ID
 func GetChannelPollingLock(channelId int) *sync.Mutex {
 	if lock, exists := channelPollingLocks.Load(channelId); exists {
@@ -829,6 +849,14 @@ func CleanupChannelPollingLocks() {
 		channelId := key.(int)
 		if !activeChannelSet[channelId] {
 			channelPollingLocks.Delete(channelId)
+		}
+		return true
+	})
+
+	channelPollingCursors.Range(func(key, value interface{}) bool {
+		channelId := key.(int)
+		if !activeChannelSet[channelId] {
+			channelPollingCursors.Delete(channelId)
 		}
 		return true
 	})

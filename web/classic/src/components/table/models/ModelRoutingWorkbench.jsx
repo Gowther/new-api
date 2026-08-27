@@ -17,7 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   Button,
   Empty,
@@ -48,6 +54,8 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
+import { useIsMobile } from '../../../hooks/common/useIsMobile';
+
 import { ChannelRemarkTooltip } from '../../common/ChannelRemarkTooltip';
 import { CHANNEL_OPTIONS } from '../../../constants';
 import {
@@ -61,6 +69,7 @@ import {
   timestamp2string,
 } from '../../../helpers';
 import EditChannelModal from '../channels/modals/EditChannelModal';
+import ModelTestModal from '../channels/modals/ModelTestModal';
 
 const { Text } = Typography;
 
@@ -540,6 +549,7 @@ const fetchModelRoutingOverride = async () => {
 const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [vendors, setVendors] = useState([]);
@@ -558,7 +568,17 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   const [showEditChannel, setShowEditChannel] = useState(false);
   const [deletingChannelId, setDeletingChannelId] = useState(null);
   const [copyingChannelId, setCopyingChannelId] = useState(null);
-  const [testingChannelIds, setTestingChannelIds] = useState({});
+  const [testingChannel, setTestingChannel] = useState(null);
+  const [modelTestResults, setModelTestResults] = useState({});
+  const [testingModels, setTestingModels] = useState(new Set());
+  const [selectedModelKeys, setSelectedModelKeys] = useState([]);
+  const [isBatchTesting, setIsBatchTesting] = useState(false);
+  const [modelSearchKeyword, setModelSearchKeyword] = useState('');
+  const [modelTablePage, setModelTablePage] = useState(1);
+  const [selectedEndpointType, setSelectedEndpointType] = useState('');
+  const [isStreamTest, setIsStreamTest] = useState(false);
+  // ModelTestModal writes through this ref while its select-all runs.
+  const testModalAllSelectingRef = useRef(false);
   const [routingOverride, setRoutingOverride] = useState([]);
   const [routingOverrideLoading, setRoutingOverrideLoading] = useState(false);
   const [routingOverrideUpdating, setRoutingOverrideUpdating] = useState(false);
@@ -1136,41 +1156,43 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     });
   };
 
-  const handleTestChannel = async (channel) => {
-    let shouldStart = false;
-    setTestingChannelIds((prev) => {
-      if (prev[channel.id]) return prev;
-      shouldStart = true;
-      return { ...prev, [channel.id]: true };
-    });
-    if (!shouldStart) return;
+  // The modal is scoped to the routed model, so currentTestChannel carries a
+  // single-entry models list. ModelTestModal derives its rows, header count and
+  // batch label from that field, which keeps it unmodified.
+  const testModalChannel = useMemo(() => {
+    if (!testingChannel) return null;
+    return { ...testingChannel, models: selectedModelName || '' };
+  }, [testingChannel, selectedModelName]);
+
+  // Picking another model would silently re-scope an open modal, so close it.
+  useEffect(() => {
+    setTestingChannel(null);
+  }, [selectedModelName]);
+
+  const testRoutingModel = async (channel, model, endpointType, stream) => {
+    const testKey = `${channel.id}-${model}`;
+    setTestingModels((prev) => new Set([...prev, model]));
 
     try {
-      let url = `/api/channel/test/${channel.id}`;
-      if (selectedModelName) {
-        url += `?model=${encodeURIComponent(selectedModelName)}`;
-      }
+      let url = `/api/channel/test/${channel.id}?model=${encodeURIComponent(model)}`;
+      if (endpointType) url += `&endpoint_type=${endpointType}`;
+      if (stream) url += '&stream=true';
+
       const res = await API.get(url);
-      const { success, message, time } = res.data || {};
+      const { success, message, time, error_code } = res.data || {};
+
+      setModelTestResults((prev) => ({
+        ...prev,
+        [testKey]: {
+          success,
+          message,
+          time: time || 0,
+          timestamp: Date.now(),
+          errorCode: error_code || null,
+        },
+      }));
+
       if (success) {
-        const elapsed =
-          typeof time === 'number' ? time.toFixed(2) : String(time ?? '');
-        if (selectedModelName) {
-          showInfo(
-            t(
-              '通道 ${name} 测试成功，模型 ${model} 耗时 ${time.toFixed(2)} 秒。',
-            )
-              .replace('${name}', channel.name)
-              .replace('${model}', selectedModelName)
-              .replace('${time.toFixed(2)}', elapsed),
-          );
-        } else {
-          showInfo(
-            t('通道 ${name} 测试成功，耗时 ${time.toFixed(2)} 秒。')
-              .replace('${name}', channel.name)
-              .replace('${time.toFixed(2)}', elapsed),
-          );
-        }
         setChannels((prev) =>
           prev.map((item) =>
             item.id === channel.id
@@ -1187,14 +1209,48 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
         showError(message || t('测试失败'));
       }
     } catch (error) {
+      setModelTestResults((prev) => ({
+        ...prev,
+        [testKey]: {
+          success: false,
+          message: error.message || t('网络错误'),
+          time: 0,
+          timestamp: Date.now(),
+          errorCode: null,
+        },
+      }));
       showError(error.message || t('测试失败'));
     } finally {
-      setTestingChannelIds((prev) => {
-        const next = { ...prev };
-        delete next[channel.id];
+      setTestingModels((prev) => {
+        const next = new Set(prev);
+        next.delete(model);
         return next;
       });
     }
+  };
+
+  const runTestModalBatch = async () => {
+    if (!testModalChannel || !selectedModelName) return;
+    setIsBatchTesting(true);
+    try {
+      await testRoutingModel(
+        testModalChannel,
+        selectedModelName,
+        selectedEndpointType,
+        isStreamTest,
+      );
+    } finally {
+      setIsBatchTesting(false);
+    }
+  };
+
+  const handleCloseTestModal = () => {
+    setTestingChannel(null);
+    setModelSearchKeyword('');
+    setSelectedModelKeys([]);
+    setModelTablePage(1);
+    setIsBatchTesting(false);
+    setTestingModels(new Set());
   };
 
   const handleSaveRouting = async () => {
@@ -1394,8 +1450,8 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
             <Button
               type='tertiary'
               size='small'
-              loading={Boolean(testingChannelIds[record.id])}
-              onClick={() => handleTestChannel(record)}
+              disabled={!selectedModelName}
+              onClick={() => setTestingChannel(record)}
             >
               {t('测试')}
             </Button>
@@ -1882,6 +1938,29 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
         visible={showEditChannel}
         handleClose={closeChannelEditor}
         editingChannel={editingChannel}
+      />
+      <ModelTestModal
+        showModelTestModal={testingChannel !== null}
+        currentTestChannel={testModalChannel}
+        handleCloseModal={handleCloseTestModal}
+        isBatchTesting={isBatchTesting}
+        batchTestModels={runTestModalBatch}
+        modelSearchKeyword={modelSearchKeyword}
+        setModelSearchKeyword={setModelSearchKeyword}
+        selectedModelKeys={selectedModelKeys}
+        setSelectedModelKeys={setSelectedModelKeys}
+        modelTestResults={modelTestResults}
+        testingModels={testingModels}
+        testChannel={testRoutingModel}
+        modelTablePage={modelTablePage}
+        setModelTablePage={setModelTablePage}
+        selectedEndpointType={selectedEndpointType}
+        setSelectedEndpointType={setSelectedEndpointType}
+        isStreamTest={isStreamTest}
+        setIsStreamTest={setIsStreamTest}
+        allSelectingRef={testModalAllSelectingRef}
+        isMobile={isMobile}
+        t={t}
       />
     </div>
   );

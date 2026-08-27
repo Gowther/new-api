@@ -103,6 +103,11 @@ import { useChannels } from '../channels-provider'
 type ChannelTestDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Overrides the provider's row, for callers outside the channels table. */
+  currentRow?: Channel | null
+  /** Restricts the table to these models instead of the channel's full list.
+   *  The model routing workbench passes the one model being routed. */
+  restrictToModels?: string[]
 }
 
 type ChannelTestDialogContentProps = ChannelTestDialogProps & {
@@ -303,8 +308,11 @@ function getTestTableColumnClass(columnId: string) {
 export function ChannelTestDialog({
   open,
   onOpenChange,
+  currentRow: currentRowProp,
+  restrictToModels,
 }: ChannelTestDialogProps) {
-  const { currentRow } = useChannels()
+  const { currentRow: contextRow } = useChannels()
+  const currentRow = currentRowProp ?? contextRow
 
   if (!currentRow) {
     return null
@@ -312,10 +320,11 @@ export function ChannelTestDialog({
 
   return (
     <ChannelTestDialogContent
-      key={currentRow.id}
+      key={`${currentRow.id}:${restrictToModels?.join(',') ?? ''}`}
       open={open}
       onOpenChange={onOpenChange}
       currentRow={currentRow}
+      restrictToModels={restrictToModels}
     />
   )
 }
@@ -324,6 +333,7 @@ function ChannelTestDialogContent({
   open,
   onOpenChange,
   currentRow,
+  restrictToModels,
 }: ChannelTestDialogContentProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
@@ -440,13 +450,23 @@ function ChannelTestDialogContent({
   const modelsValue = currentRow.models
   const defaultTestModel = currentRow.test_model?.trim()
 
+  const restrictKey = restrictToModels?.join(',')
+
   const baseModels = useMemo(() => {
+    // A restriction wins over the channel's own list, so the caller can scope
+    // the dialog to the models it cares about.
+    if (restrictKey !== undefined) {
+      return restrictKey
+        .split(',')
+        .map((model) => model.trim())
+        .filter(Boolean)
+    }
     if (!modelsValue) return []
     return modelsValue
       .split(',')
       .map((model) => model.trim())
       .filter(Boolean)
-  }, [modelsValue])
+  }, [modelsValue, restrictKey])
 
   const models = useMemo(
     () => baseModels.filter((model) => !removedModels.has(model)),

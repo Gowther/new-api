@@ -85,6 +85,7 @@ import {
   updateChannelStatus,
 } from '@/features/channels/api'
 import { ChannelsProvider } from '@/features/channels/components/channels-provider'
+import { ChannelTestDialog } from '@/features/channels/components/dialogs/channel-test-dialog'
 import { CopyChannelDialog } from '@/features/channels/components/dialogs/copy-channel-dialog'
 import { ChannelMutateDrawer } from '@/features/channels/components/drawers/channel-mutate-drawer'
 import {
@@ -94,7 +95,7 @@ import {
   ERROR_MESSAGES,
   SUCCESS_MESSAGES,
 } from '@/features/channels/constants'
-import { channelsQueryKeys, handleTestChannel } from '@/features/channels/lib'
+import { channelsQueryKeys } from '@/features/channels/lib'
 import type {
   Channel,
   ChannelModelVendorGroup,
@@ -630,10 +631,8 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
   const [channelEditorOpen, setChannelEditorOpen] = useState(false)
   const [deletingChannel, setDeletingChannel] = useState<Channel | null>(null)
   const [copyingChannel, setCopyingChannel] = useState<Channel | null>(null)
+  const [testingChannel, setTestingChannel] = useState<Channel | null>(null)
   const [isDeletingChannel, setIsDeletingChannel] = useState(false)
-  const [testingChannelIds, setTestingChannelIds] = useState<
-    Record<number, boolean>
-  >({})
   const [isSaving, setIsSaving] = useState(false)
   const [routingOverrideCandidate, setRoutingOverrideCandidate] =
     useState<Channel | null>(null)
@@ -1232,42 +1231,19 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     }
   }
 
-  const handleTestRoutingChannel = useCallback(
-    async (channel: Channel) => {
-      let shouldStart = false
-      setTestingChannelIds((prev) => {
-        if (prev[channel.id]) return prev
-        shouldStart = true
-        return { ...prev, [channel.id]: true }
-      })
-      if (!shouldStart) return
+  // Picking another model would silently re-scope an open dialog, so close it.
+  useEffect(() => {
+    setTestingChannel(null)
+  }, [selectedModelName])
 
-      try {
-        await handleTestChannel(
-          channel.id,
-          {
-            channelName: channel.name,
-            testModel: selectedModelName || undefined,
-          },
-          () => {
-            void queryClient.invalidateQueries({
-              queryKey: channelsQueryKeys.lists(),
-            })
-            void queryClient.invalidateQueries({
-              queryKey: ['model-routing', 'channels'],
-            })
-          }
-        )
-      } finally {
-        setTestingChannelIds((prev) => {
-          const next = { ...prev }
-          delete next[channel.id]
-          return next
-        })
-      }
-    },
-    [queryClient, selectedModelName]
-  )
+  const handleTestDialogOpenChange = (open: boolean) => {
+    if (open) return
+    setTestingChannel(null)
+    // The dialog writes response_time / test_time into the channel caches.
+    void queryClient.invalidateQueries({
+      queryKey: ['model-routing', 'channels'],
+    })
+  }
 
   const handleSaveRouting = async () => {
     if (changedCount === 0) {
@@ -2070,15 +2046,11 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                               size='icon-sm'
                               className='shrink-0'
                               title={t('Test Connection')}
-                              aria-label={t('Test Connection')}
-                              disabled={Boolean(testingChannelIds[channel.id])}
-                              onClick={() => handleTestRoutingChannel(channel)}
+                              aria-label={`${t('Test Connection')}: ${channel.name}`}
+                              disabled={!selectedModelName}
+                              onClick={() => setTestingChannel(channel)}
                             >
-                              {testingChannelIds[channel.id] ? (
-                                <Loader2 className='size-4 animate-spin' />
-                              ) : (
-                                <Gauge className='size-4' />
-                              )}
+                              <Gauge className='size-4' />
                             </Button>
                             <Button
                               type='button'
@@ -2217,6 +2189,14 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
           open={copyingChannel !== null}
           currentRow={copyingChannel}
           onOpenChange={handleCopyDialogOpenChange}
+        />
+        {/* Scoped to the routed model, so the table holds one row instead of
+            the channel's whole model list. */}
+        <ChannelTestDialog
+          open={testingChannel !== null}
+          currentRow={testingChannel}
+          restrictToModels={selectedModelName ? [selectedModelName] : []}
+          onOpenChange={handleTestDialogOpenChange}
         />
       </ChannelsProvider>
       <ConfirmDialog

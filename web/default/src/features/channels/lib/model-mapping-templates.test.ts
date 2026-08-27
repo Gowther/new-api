@@ -22,6 +22,8 @@ import { describe, test } from 'node:test'
 import {
   mergeModelMappingTemplate,
   reconcileModelsForMapping,
+  upsertModelMappingTemplate,
+  type ModelMappingTemplate,
 } from './model-mapping-templates.ts'
 
 describe('model mapping templates', () => {
@@ -93,5 +95,40 @@ describe('model mapping templates', () => {
       ),
       ['template-target', 'shared']
     )
+  })
+
+  test('renaming a template in place keeps its position and identity', () => {
+    const templates: ModelMappingTemplate[] = [
+      { id: 'a', name: 'first', mapping: { from: 'to' } },
+      { id: 'b', name: 'second', mapping: { x: 'y' } },
+    ]
+
+    const result = upsertModelMappingTemplate(templates, {
+      id: 'b',
+      name: 'renamed',
+      mapping: { x: 'z' },
+    })
+
+    assert.deepEqual(result, [
+      { id: 'a', name: 'first', mapping: { from: 'to' } },
+      { id: 'b', name: 'renamed', mapping: { x: 'z' } },
+    ])
+  })
+
+  test('an unknown id is appended rather than replacing an existing template', () => {
+    const templates: ModelMappingTemplate[] = [
+      { id: 'a', name: 'first', mapping: { from: 'to' } },
+    ]
+
+    const result = upsertModelMappingTemplate(templates, {
+      id: 'new',
+      name: 'second',
+      mapping: { x: 'y' },
+    })
+
+    assert.deepEqual(result, [
+      { id: 'a', name: 'first', mapping: { from: 'to' } },
+      { id: 'new', name: 'second', mapping: { x: 'y' } },
+    ])
   })
 })

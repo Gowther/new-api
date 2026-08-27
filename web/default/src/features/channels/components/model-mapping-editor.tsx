@@ -16,7 +16,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Code, FileStack, Plus, Save, Table, Trash2 } from 'lucide-react'
+import {
+  Code,
+  FileStack,
+  Plus,
+  Save,
+  Settings2,
+  Table,
+  Trash2,
+} from 'lucide-react'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -34,7 +42,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 
-import { mergeModelMappingTemplate } from '../lib/model-mapping-templates'
+import {
+  loadModelMappingTemplates,
+  mergeModelMappingTemplate,
+  type ModelMappingTemplate,
+} from '../lib/model-mapping-templates'
+import { ModelMappingTemplatesDialog } from './dialogs/model-mapping-templates-dialog'
 
 type ModelMappingEditorProps = {
   value: string
@@ -46,6 +59,9 @@ type ModelMappingEditorProps = {
     appliedMapping: Record<string, string>,
     completeMapping: Record<string, string>
   ) => void
+  /** Hides the template menu. Set by the template dialog, which embeds this
+   *  editor to edit a template's own mapping. */
+  hideTemplates?: boolean
 }
 
 type MappingRow = {
@@ -54,15 +70,7 @@ type MappingRow = {
   to: string
 }
 
-type ModelMappingTemplate = {
-  id: string
-  name: string
-  mapping: Record<string, string>
-}
-
 const DUPLICATE_MAPPING_SENTINEL = '{ "duplicate_source_models": '
-const MODEL_MAPPING_TEMPLATES_STORAGE_KEY = 'new-api:model-mapping-templates:v1'
-const LEGACY_DEFAULT_MODEL_MAPPING_TEMPLATE_ID = 'default-gpt-3.5-turbo'
 
 function getDuplicateSources(rows: MappingRow[]): string[] {
   const seen = new Set<string>()
@@ -81,66 +89,6 @@ function getDuplicateSources(rows: MappingRow[]): string[] {
   return Array.from(duplicates)
 }
 
-function normalizeTemplate(value: unknown): ModelMappingTemplate | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const candidate = value as Record<string, unknown>
-  if (typeof candidate.id !== 'string' || typeof candidate.name !== 'string') {
-    return null
-  }
-  if (
-    !candidate.mapping ||
-    typeof candidate.mapping !== 'object' ||
-    Array.isArray(candidate.mapping)
-  ) {
-    return null
-  }
-  const mapping: Record<string, string> = {}
-  for (const [from, to] of Object.entries(candidate.mapping)) {
-    if (typeof to !== 'string') return null
-    const source = from.trim()
-    if (source) mapping[source] = to
-  }
-  const name = candidate.name.trim()
-  if (!name) return null
-  return { id: candidate.id, name, mapping }
-}
-
-function loadModelMappingTemplates(): ModelMappingTemplate[] {
-  if (typeof window === 'undefined') return []
-  try {
-    const raw = window.localStorage.getItem(MODEL_MAPPING_TEMPLATES_STORAGE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw) as unknown
-    const persisted = parsed as { version?: unknown; templates?: unknown }
-    let values: unknown[] = []
-    if (Array.isArray(parsed)) {
-      values = parsed
-    } else if (persisted.version === 1 && Array.isArray(persisted.templates)) {
-      values = persisted.templates
-    }
-    const templates = values
-      .map(normalizeTemplate)
-      .filter((template): template is ModelMappingTemplate => template !== null)
-      .filter(
-        (template) => template.id !== LEGACY_DEFAULT_MODEL_MAPPING_TEMPLATE_ID
-      )
-    if (templates.length !== values.length) {
-      persistModelMappingTemplates(templates)
-    }
-    return templates
-  } catch {
-    return []
-  }
-}
-
-function persistModelMappingTemplates(templates: ModelMappingTemplate[]) {
-  if (typeof window === 'undefined') return
-  window.localStorage.setItem(
-    MODEL_MAPPING_TEMPLATES_STORAGE_KEY,
-    JSON.stringify({ version: 1, templates })
-  )
-}
-
 export function ModelMappingEditor(props: ModelMappingEditorProps) {
   const { t } = useTranslation()
   const sourceListId = useId()
@@ -155,6 +103,8 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
     null
   )
+  const [templateManagerOpen, setTemplateManagerOpen] = useState(false)
+  const [templateSeed, setTemplateSeed] = useState('')
   const nextRowIdRef = useRef(0)
   const duplicateSources = useMemo(() => getDuplicateSources(rows), [rows])
 
@@ -321,49 +271,28 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
     props.onTemplateApplied?.(appliedMapping, mapping)
   }
 
-  const saveCurrentAsTemplate = () => {
+  const openTemplateManager = (seedWithCurrentMapping: boolean) => {
     const mapping = rows.reduce<Record<string, string>>((result, row) => {
       const source = row.from.trim()
       if (source) result[source] = row.to.trim()
       return result
     }, {})
-    if (Object.keys(mapping).length === 0) return
-
-    const selectedTemplate = templates.find(
-      (template) => template.id === selectedTemplateId
+    setTemplateSeed(
+      seedWithCurrentMapping && Object.keys(mapping).length > 0
+        ? JSON.stringify(mapping, null, 2)
+        : ''
     )
-    const name = window.prompt(
-      t('Template name'),
-      selectedTemplate?.name || t('New template')
-    )
-    const trimmedName = name?.trim()
-    if (!trimmedName) return
-
-    const existing = templates.find(
-      (template) =>
-        template.id === selectedTemplateId || template.name === trimmedName
-    )
-    const nextTemplate: ModelMappingTemplate = {
-      id: existing?.id || `model-mapping-${Date.now()}`,
-      name: trimmedName,
-      mapping,
-    }
-    const nextTemplates = existing
-      ? templates.map((template) =>
-          template.id === existing.id ? nextTemplate : template
-        )
-      : [...templates, nextTemplate]
-    setTemplates(nextTemplates)
-    setSelectedTemplateId(nextTemplate.id)
-    persistModelMappingTemplates(nextTemplates)
+    setTemplateManagerOpen(true)
   }
 
-  const deleteTemplate = (template: ModelMappingTemplate) => {
-    if (!window.confirm(`${t('Delete')} "${template.name}"?`)) return
-    const nextTemplates = templates.filter((item) => item.id !== template.id)
+  const handleTemplatesChange = (nextTemplates: ModelMappingTemplate[]) => {
     setTemplates(nextTemplates)
-    if (selectedTemplateId === template.id) setSelectedTemplateId(null)
-    persistModelMappingTemplates(nextTemplates)
+    if (
+      selectedTemplateId &&
+      !nextTemplates.some((template) => template.id === selectedTemplateId)
+    ) {
+      setSelectedTemplateId(null)
+    }
   }
 
   const handleModeChange = (nextMode: string) => {
@@ -396,66 +325,62 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
               {t('JSON')}
             </TabsTrigger>
           </TabsList>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  type='button'
-                  variant='link'
-                  size='sm'
-                  className='h-auto p-0'
-                  disabled={props.disabled}
-                />
-              }
-            >
-              <FileStack className='mr-1 h-4 w-4' aria-hidden='true' />
-              {t('Fill Templates')}
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align='end' className='w-72'>
-              <div className='text-muted-foreground px-2 py-1 text-xs'>
-                {t('Select a template')}
-              </div>
-              {templates.map((template) => (
-                <DropdownMenuItem
-                  key={template.id}
-                  onClick={() => applyTemplate(template)}
-                >
-                  <span className='truncate'>{template.name}</span>
-                  <span className='text-muted-foreground ml-auto text-xs'>
-                    {Object.keys(template.mapping).length}
-                  </span>
-                </DropdownMenuItem>
-              ))}
-              {templates.length === 0 && (
-                <div className='text-muted-foreground px-2 py-2 text-xs'>
-                  {t('No saved templates')}
-                </div>
-              )}
-              <DropdownMenuSeparator />
-              {templates.length > 0 && (
-                <div className='text-muted-foreground px-2 py-1 text-xs'>
-                  {t('Delete template')}
-                </div>
-              )}
-              {templates.map((template) => (
-                <DropdownMenuItem
-                  key={`delete-${template.id}`}
-                  variant='destructive'
-                  onClick={() => deleteTemplate(template)}
-                >
-                  <Trash2 className='mr-2 h-4 w-4' aria-hidden='true' />
-                  <span className='truncate'>{template.name}</span>
-                </DropdownMenuItem>
-              ))}
-              <DropdownMenuItem
-                disabled={props.disabled || rows.length === 0}
-                onClick={saveCurrentAsTemplate}
+          {!props.hideTemplates && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    type='button'
+                    variant='link'
+                    size='sm'
+                    className='h-auto p-0'
+                    disabled={props.disabled}
+                  />
+                }
               >
-                <Save className='mr-2 h-4 w-4' aria-hidden='true' />
-                {t('Save current mapping as template')}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <FileStack className='mr-1 h-4 w-4' aria-hidden='true' />
+                {t('Fill Templates')}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align='end' className='w-72'>
+                <div className='text-muted-foreground px-2 py-1 text-xs'>
+                  {t('Select a template')}
+                </div>
+                {templates.map((template) => (
+                  <DropdownMenuItem
+                    key={template.id}
+                    onClick={() => applyTemplate(template)}
+                  >
+                    <span className='truncate'>{template.name}</span>
+                    <span className='text-muted-foreground ml-auto text-xs'>
+                      {Object.keys(template.mapping).length}
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+                {templates.length === 0 && (
+                  <div className='text-muted-foreground px-2 py-2 text-xs'>
+                    {t('No saved templates')}
+                  </div>
+                )}
+                <DropdownMenuSeparator />
+                {/* Editing and deleting both live in the manager, so a template
+                    can be changed without applying it to this channel first. */}
+                <DropdownMenuItem
+                  disabled={props.disabled}
+                  onClick={() => openTemplateManager(false)}
+                >
+                  <Settings2 className='mr-2 h-4 w-4' aria-hidden='true' />
+                  {t('Manage templates')}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={props.disabled || rows.length === 0}
+                  onClick={() => openTemplateManager(true)}
+                >
+                  <Save className='mr-2 h-4 w-4' aria-hidden='true' />
+                  {t('Save current mapping as template')}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
 
         {jsonError && (
@@ -567,6 +492,18 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
             <option key={model} value={model} />
           ))}
         </datalist>
+      )}
+
+      {!props.hideTemplates && (
+        <ModelMappingTemplatesDialog
+          open={templateManagerOpen}
+          onOpenChange={setTemplateManagerOpen}
+          templates={templates}
+          onTemplatesChange={handleTemplatesChange}
+          initialMapping={templateSeed}
+          sourceModelOptions={props.sourceModelOptions}
+          targetModelOptions={props.targetModelOptions}
+        />
       )}
     </div>
   )

@@ -38,7 +38,12 @@ import {
   Dropdown,
 } from '@douyinfe/semi-ui';
 import { IconPlus, IconDelete, IconAlertTriangle } from '@douyinfe/semi-icons';
-import { mergeModelMappingTemplate } from '../../../helpers/modelMapping';
+import {
+  MODEL_MAPPING_TEMPLATES_STORAGE_KEY,
+  loadModelMappingTemplates,
+  mergeModelMappingTemplate,
+} from '../../../helpers/modelMapping';
+import ModelMappingTemplateModal from './ModelMappingTemplateModal';
 
 const { Text } = Typography;
 
@@ -47,66 +52,6 @@ const generateUniqueId = (() => {
   let counter = 0;
   return () => `kv_${counter++}`;
 })();
-
-const MODEL_MAPPING_TEMPLATES_STORAGE_KEY =
-  'new-api:model-mapping-templates:v1';
-const LEGACY_DEFAULT_MODEL_MAPPING_TEMPLATE_ID = 'default-gpt-3.5-turbo';
-
-const normalizeTemplate = (value) => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const mapping = value.mapping || value.value;
-  if (
-    typeof value.id !== 'string' ||
-    typeof value.name !== 'string' ||
-    !mapping ||
-    typeof mapping !== 'object' ||
-    Array.isArray(mapping)
-  ) {
-    return null;
-  }
-  const normalizedMapping = {};
-  for (const [key, item] of Object.entries(mapping)) {
-    if (typeof item !== 'string') return null;
-    const trimmedKey = String(key).trim();
-    if (trimmedKey) normalizedMapping[trimmedKey] = item;
-  }
-  const name = value.name.trim();
-  return name ? { id: value.id, name, mapping: normalizedMapping } : null;
-};
-
-const loadModelMappingTemplates = () => {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = window.localStorage.getItem(
-      MODEL_MAPPING_TEMPLATES_STORAGE_KEY,
-    );
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    const values = Array.isArray(parsed)
-      ? parsed
-      : parsed?.version === 1 && Array.isArray(parsed.templates)
-        ? parsed.templates
-        : [];
-    const templates = values
-      .map(normalizeTemplate)
-      .filter(Boolean)
-      .filter((item) => item.id !== LEGACY_DEFAULT_MODEL_MAPPING_TEMPLATE_ID);
-    if (templates.length !== values.length) {
-      persistModelMappingTemplates(templates);
-    }
-    return templates;
-  } catch {
-    return [];
-  }
-};
-
-const persistModelMappingTemplates = (templates) => {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(
-    MODEL_MAPPING_TEMPLATES_STORAGE_KEY,
-    JSON.stringify({ version: 1, templates }),
-  );
-};
 
 const JSONEditor = ({
   value = '',
@@ -202,6 +147,8 @@ const JSONEditor = ({
       : [],
   );
   const [selectedTemplateId, setSelectedTemplateId] = useState(null);
+  const [templateManagerVisible, setTemplateManagerVisible] = useState(false);
+  const [templateSeed, setTemplateSeed] = useState({});
 
   // 计算重复的键
   const duplicateKeys = useMemo(() => {
@@ -459,50 +406,30 @@ const JSONEditor = ({
     ],
   );
 
-  const saveCurrentMappingAsTemplate = useCallback(() => {
-    const mapping = keyValueArrayToObject(keyValuePairs);
-    if (Object.keys(mapping).length === 0) return;
-    const selected = modelMappingTemplates.find(
-      (item) => item.id === selectedTemplateId,
-    );
-    const name = window.prompt(t('名称'), selected?.name || t('新建'));
-    const trimmedName = name?.trim();
-    if (!trimmedName) return;
-    const existing = modelMappingTemplates.find(
-      (item) => item.id === selectedTemplateId || item.name === trimmedName,
-    );
-    const nextTemplate = {
-      id: existing?.id || `model-mapping-${Date.now()}`,
-      name: trimmedName,
-      mapping,
-    };
-    const nextTemplates = existing
-      ? modelMappingTemplates.map((item) =>
-          item.id === existing.id ? nextTemplate : item,
-        )
-      : [...modelMappingTemplates, nextTemplate];
-    setModelMappingTemplates(nextTemplates);
-    setSelectedTemplateId(nextTemplate.id);
-    persistModelMappingTemplates(nextTemplates);
-  }, [
-    keyValueArrayToObject,
-    keyValuePairs,
-    modelMappingTemplates,
-    selectedTemplateId,
-    t,
-  ]);
-
-  const deleteModelMappingTemplate = useCallback(
-    (item) => {
-      if (!window.confirm(`${t('删除')} "${item.name}"?`)) return;
-      const nextTemplates = modelMappingTemplates.filter(
-        (templateItem) => templateItem.id !== item.id,
+  const openTemplateManager = useCallback(
+    (seedWithCurrentMapping) => {
+      const mapping = keyValueArrayToObject(keyValuePairs);
+      setTemplateSeed(
+        seedWithCurrentMapping && Object.keys(mapping).length > 0
+          ? mapping
+          : {},
       );
-      setModelMappingTemplates(nextTemplates);
-      if (selectedTemplateId === item.id) setSelectedTemplateId(null);
-      persistModelMappingTemplates(nextTemplates);
+      setTemplateManagerVisible(true);
     },
-    [modelMappingTemplates, selectedTemplateId, t],
+    [keyValueArrayToObject, keyValuePairs],
+  );
+
+  const handleTemplatesChange = useCallback(
+    (nextTemplates) => {
+      setModelMappingTemplates(nextTemplates);
+      if (
+        selectedTemplateId &&
+        !nextTemplates.some((item) => item.id === selectedTemplateId)
+      ) {
+        setSelectedTemplateId(null);
+      }
+    },
+    [selectedTemplateId],
   );
 
   // 填入单个模板（保留其他 JSONEditor 使用场景的原有行为）
@@ -849,21 +776,17 @@ const JSONEditor = ({
                         </Dropdown.Item>
                       ))}
                       <Dropdown.Divider />
+                      {/* Editing and deleting both live in the manager, so a
+                          template can be changed without applying it first. */}
+                      <Dropdown.Item onClick={() => openTemplateManager(false)}>
+                        {t('管理模板')}
+                      </Dropdown.Item>
                       <Dropdown.Item
                         disabled={keyValuePairs.length === 0}
-                        onClick={saveCurrentMappingAsTemplate}
+                        onClick={() => openTemplateManager(true)}
                       >
                         {t('保存')} {t('模板')}
                       </Dropdown.Item>
-                      {modelMappingTemplates.map((item) => (
-                        <Dropdown.Item
-                          key={`delete-${item.id}`}
-                          type='danger'
-                          onClick={() => deleteModelMappingTemplate(item)}
-                        >
-                          {t('删除')} {t('模板')}: {item.name}
-                        </Dropdown.Item>
-                      ))}
                     </Dropdown.Menu>
                   }
                 >
@@ -935,6 +858,16 @@ const JSONEditor = ({
           </Divider>
         )}
         {extraFooter && <div className='mt-1'>{extraFooter}</div>}
+
+        {templateStorageKey === MODEL_MAPPING_TEMPLATES_STORAGE_KEY && (
+          <ModelMappingTemplateModal
+            visible={templateManagerVisible}
+            onCancel={() => setTemplateManagerVisible(false)}
+            templates={modelMappingTemplates}
+            onTemplatesChange={handleTemplatesChange}
+            initialMapping={templateSeed}
+          />
+        )}
       </Card>
     </Form.Slot>
   );

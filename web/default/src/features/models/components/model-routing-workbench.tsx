@@ -635,8 +635,10 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     useState<Channel | null>(null)
   const [isUpdatingRoutingOverride, setIsUpdatingRoutingOverride] =
     useState(false)
-  const [restoreRoutingOverrideOpen, setRestoreRoutingOverrideOpen] =
-    useState(false)
+  // 'all' clears every override from the header button; a single override comes
+  // from the per-override button in the banner list.
+  const [restoreRoutingOverrideTarget, setRestoreRoutingOverrideTarget] =
+    useState<ModelRoutingOverride | 'all' | null>(null)
   const [providerDefaultSelections, setProviderDefaultSelections] =
     useState<StoredProviderDefaultSelections>(() =>
       readStoredProviderDefaultSelections()
@@ -1062,9 +1064,14 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
   }
 
   const handleRestoreRoutingOverride = async () => {
+    const target = restoreRoutingOverrideTarget
+    if (!target) return
+
     setIsUpdatingRoutingOverride(true)
     try {
-      const response = await deleteModelRoutingOverride()
+      const response = await deleteModelRoutingOverride(
+        target === 'all' ? undefined : target.channel_id
+      )
       if (!response.success) {
         throw new Error(
           response.message || t('Failed to update temporary routing mode')
@@ -1074,7 +1081,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
         channelsQueryKeys.routingOverride(),
         normalizeModelRoutingOverrides(response.data)
       )
-      setRestoreRoutingOverrideOpen(false)
+      setRestoreRoutingOverrideTarget(null)
       toast.success(t('Normal routing restored'))
     } catch (error) {
       toast.error(
@@ -1620,7 +1627,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                   type='button'
                   variant='outline'
                   size='sm'
-                  onClick={() => setRestoreRoutingOverrideOpen(true)}
+                  onClick={() => setRestoreRoutingOverrideTarget('all')}
                   disabled={!canEditRouting || isUpdatingRoutingOverride}
                 >
                   <HugeiconsIcon icon={UndoIcon} data-icon='inline-start' />
@@ -1646,38 +1653,65 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
 
           {routingOverrides.length > 0 ? (
             <div className='bg-muted/30 space-y-2 border-b px-3 py-2 text-sm'>
-              {routingOverrides.map((routingOverride) => (
-                <div key={routingOverride.channel_id}>
-                  <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
-                    <StatusBadge
-                      label={t('Temporary single-channel mode')}
-                      variant='warning'
-                      size='sm'
-                      copyable={false}
-                    />
-                    <span className='min-w-0 truncate font-medium'>
-                      {routingOverride.channel_name ||
-                        `#${routingOverride.channel_id}`}
-                    </span>
-                    <span className='text-muted-foreground font-mono text-xs'>
-                      ID:{routingOverride.channel_id}
-                    </span>
-                    <span className='text-muted-foreground text-xs'>
-                      {t('{{count}} covered model(s)', {
-                        count: routingOverride.model_count,
-                      })}
-                    </span>
-                    <span className='text-muted-foreground text-xs'>
-                      {t('Covered groups')}: {routingOverride.groups.join(', ')}
-                    </span>
+              {routingOverrides.map((routingOverride) => {
+                const overrideLabel =
+                  routingOverride.channel_name ||
+                  `#${routingOverride.channel_id}`
+                return (
+                  <div
+                    key={routingOverride.channel_id}
+                    className='flex items-start gap-2'
+                  >
+                    <div className='min-w-0 flex-1'>
+                      <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
+                        <StatusBadge
+                          label={t('Temporary single-channel mode')}
+                          variant='warning'
+                          size='sm'
+                          copyable={false}
+                        />
+                        <span className='min-w-0 truncate font-medium'>
+                          {overrideLabel}
+                        </span>
+                        <span className='text-muted-foreground font-mono text-xs'>
+                          ID:{routingOverride.channel_id}
+                        </span>
+                        <span className='text-muted-foreground text-xs'>
+                          {t('{{count}} covered model(s)', {
+                            count: routingOverride.model_count,
+                          })}
+                        </span>
+                        <span className='text-muted-foreground text-xs'>
+                          {t('Covered groups')}:{' '}
+                          {routingOverride.groups.join(', ')}
+                        </span>
+                      </div>
+                      <div className='text-muted-foreground mt-1 text-xs'>
+                        {t(
+                          'Automatic requests for every covered model use only this channel. Requests that explicitly specify a channel are unaffected.'
+                        )}
+                      </div>
+                    </div>
+                    {/* Per-override restore: the header button clears every
+                        override at once, and a channel that does not serve the
+                        selected model has no table row to act on. */}
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='icon-sm'
+                      className='shrink-0'
+                      title={t('Restore normal routing')}
+                      aria-label={`${t('Restore normal routing')}: ${overrideLabel}`}
+                      disabled={!canEditRouting || isUpdatingRoutingOverride}
+                      onClick={() =>
+                        setRestoreRoutingOverrideTarget(routingOverride)
+                      }
+                    >
+                      <HugeiconsIcon icon={UndoIcon} />
+                    </Button>
                   </div>
-                  <div className='text-muted-foreground mt-1 text-xs'>
-                    {t(
-                      'Automatic requests for every covered model use only this channel. Requests that explicitly specify a channel are unaffected.'
-                    )}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           ) : null}
 
@@ -2175,22 +2209,36 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
         handleConfirm={handleConfirmRoutingOverride}
       />
       <ConfirmDialog
-        open={restoreRoutingOverrideOpen}
+        open={restoreRoutingOverrideTarget !== null}
         onOpenChange={(open) => {
-          if (!isUpdatingRoutingOverride) setRestoreRoutingOverrideOpen(open)
+          if (!open && !isUpdatingRoutingOverride)
+            setRestoreRoutingOverrideTarget(null)
         }}
         title={t('Restore normal routing?')}
-        desc={t(
-          'All temporary routing rules for channel "{{channel}}" and its models will be removed. Existing channel statuses, priorities, weights, and affinity data will remain unchanged.',
-          {
-            channel: routingOverrides
-              .map(
-                (override) =>
-                  override.channel_name || `#${override.channel_id}`
+        desc={
+          restoreRoutingOverrideTarget === 'all'
+            ? t(
+                'All temporary routing rules for channel "{{channel}}" and its models will be removed. Existing channel statuses, priorities, weights, and affinity data will remain unchanged.',
+                {
+                  channel: routingOverrides
+                    .map(
+                      (override) =>
+                        override.channel_name || `#${override.channel_id}`
+                    )
+                    .join(', '),
+                }
               )
-              .join(', '),
-          }
-        )}
+            : t(
+                'The temporary routing rule for channel "{{channel}}" and its models will be removed. Existing channel statuses, priorities, weights, and affinity data will remain unchanged.',
+                {
+                  channel:
+                    restoreRoutingOverrideTarget === null
+                      ? ''
+                      : restoreRoutingOverrideTarget.channel_name ||
+                        `#${restoreRoutingOverrideTarget.channel_id}`,
+                }
+              )
+        }
         confirmText={t('Restore normal routing')}
         isLoading={isUpdatingRoutingOverride}
         handleConfirm={handleRestoreRoutingOverride}

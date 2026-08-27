@@ -1015,18 +1015,21 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     });
   };
 
-  const handleRestoreRoutingOverride = () => {
+  // Without an argument this clears every override, matching the header button.
+  // The banner list passes one override so a single temporary target can be
+  // released even when its channel serves none of the selected model's rows.
+  const handleRestoreRoutingOverride = (override) => {
     if (routingOverride.length === 0) return;
+
+    const targets = override ? [override] : routingOverride;
 
     Modal.confirm({
       title: t('恢复正常路由？'),
       content: t(
         '临时路由目标“{{channel}}”及其模型规则将被移除。现有渠道状态、优先级、权重和亲和性数据不会改变。',
         {
-          channel: routingOverride
-            .map(
-              (override) => override.channel_name || `#${override.channel_id}`,
-            )
+          channel: targets
+            .map((item) => item.channel_name || `#${item.channel_id}`)
             .join(', '),
         },
       ),
@@ -1035,7 +1038,10 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
       onOk: async () => {
         setRoutingOverrideUpdating(true);
         try {
-          const res = await API.delete('/api/channel/model_routing_override');
+          const res = await API.delete(
+            '/api/channel/model_routing_override',
+            override ? { params: { channel_id: override.channel_id } } : {},
+          );
           const { success, message } = res.data || {};
           if (!success) {
             throw new Error(message || t('更新临时路由模式失败'));
@@ -1665,7 +1671,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                     size='small'
                     icon={<IconUndo />}
                     loading={routingOverrideUpdating}
-                    onClick={handleRestoreRoutingOverride}
+                    onClick={() => handleRestoreRoutingOverride()}
                   >
                     {t('恢复正常路由')}
                   </Button>
@@ -1685,36 +1691,57 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
           </div>
           {routingOverride.length > 0 ? (
             <div className='space-y-2 border-b border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)] px-3 py-2'>
-              {routingOverride.map((override) => (
-                <div key={override.channel_id}>
-                  <div className='flex flex-wrap items-center gap-2'>
-                    <Tag color='orange' shape='circle' size='small'>
-                      {t('临时单渠道模式')}
-                    </Tag>
-                    <Text strong ellipsis>
-                      {override.channel_name || `#${override.channel_id}`}
-                    </Text>
-                    <Text type='tertiary' size='small'>
-                      ID:{override.channel_id}
-                    </Text>
-                    <Text type='tertiary' size='small'>
-                      {t('{{count}} 个覆盖模型', {
-                        count: override.model_count,
-                      })}
-                    </Text>
-                    <Text type='tertiary' size='small'>
-                      {t('覆盖分组')}: {override.groups.join(', ')}
-                    </Text>
+              {routingOverride.map((override) => {
+                const overrideLabel =
+                  override.channel_name || `#${override.channel_id}`;
+                return (
+                  <div
+                    key={override.channel_id}
+                    className='flex items-start gap-2'
+                  >
+                    <div className='min-w-0 flex-1'>
+                      <div className='flex flex-wrap items-center gap-2'>
+                        <Tag color='orange' shape='circle' size='small'>
+                          {t('临时单渠道模式')}
+                        </Tag>
+                        <Text strong ellipsis>
+                          {overrideLabel}
+                        </Text>
+                        <Text type='tertiary' size='small'>
+                          ID:{override.channel_id}
+                        </Text>
+                        <Text type='tertiary' size='small'>
+                          {t('{{count}} 个覆盖模型', {
+                            count: override.model_count,
+                          })}
+                        </Text>
+                        <Text type='tertiary' size='small'>
+                          {t('覆盖分组')}: {override.groups.join(', ')}
+                        </Text>
+                      </div>
+                      <div className='mt-1'>
+                        <Text type='tertiary' size='small'>
+                          {t(
+                            '所有覆盖模型的自动请求仅使用此渠道；显式指定渠道的请求不受影响。',
+                          )}
+                        </Text>
+                      </div>
+                    </div>
+                    <Tooltip content={t('恢复正常路由')}>
+                      <Button
+                        theme='borderless'
+                        type='tertiary'
+                        size='small'
+                        className='shrink-0'
+                        icon={<IconUndo />}
+                        aria-label={`${t('恢复正常路由')}: ${overrideLabel}`}
+                        disabled={routingOverrideUpdating}
+                        onClick={() => handleRestoreRoutingOverride(override)}
+                      />
+                    </Tooltip>
                   </div>
-                  <div className='mt-1'>
-                    <Text type='tertiary' size='small'>
-                      {t(
-                        '所有覆盖模型的自动请求仅使用此渠道；显式指定渠道的请求不受影响。',
-                      )}
-                    </Text>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : null}
           <div className='min-h-0 flex-1 overflow-auto p-2'>

@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { Analytics02Icon, LockIcon, UndoIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import {
   Gauge,
   Loader2,
@@ -1942,9 +1943,21 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                                 copyable={false}
                                 className='w-9 shrink-0 justify-center'
                               />
-                              <span className='text-muted-foreground shrink-0 font-mono text-xs'>
+                              {/* channelId alone is ignored by the channels
+                                  table unless the global filter matches it,
+                                  so send both. */}
+                              <Link
+                                to='/channels'
+                                search={{
+                                  channelId: channel.id,
+                                  filter: String(channel.id),
+                                }}
+                                className='text-muted-foreground hover:text-foreground shrink-0 font-mono text-xs underline-offset-2 hover:underline'
+                                title={t('Open in channel list')}
+                                aria-label={`${t('Open in channel list')}: ${channel.name}`}
+                              >
                                 ID:{channel.id}
-                              </span>
+                              </Link>
                               {routeRoleLabelKey ? (
                                 <StatusBadge
                                   label={t(routeRoleLabelKey)}

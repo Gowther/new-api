@@ -1304,6 +1304,7 @@
     "在此输入系统名称": "Enter the system name here",
     "在此输入隐私政策内容，支持 Markdown & HTML 代码": "Enter privacy policy content here, supports Markdown & HTML code",
     "在此输入首页内容，支持 Markdown & HTML 代码，设置后首页的状态信息将不再显示。如果输入的是一个链接，则会使用该链接作为 iframe 的 src 属性，这允许你设置任意网页作为首页": "Enter the home page content here, supports Markdown",
+    "在渠道列表中打开": "Open in channel list",
     "在默认列表基础上新增一个分组": "Add a new group to the default list",
     "场景：站点提供两个价格档位，用户可以按需选择": "Scenario: site offers two pricing tiers, users can choose as needed",
     "场景：站点有 standard 和 premium 两个用户可选分组。希望 vip 用户额外看到 exclusive 分组，同时不再看到 standard 分组": "Scenario: site has standard and premium as selectable groups. Want vip users to see exclusive but not standard",

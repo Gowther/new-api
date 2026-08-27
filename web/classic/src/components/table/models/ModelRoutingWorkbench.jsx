@@ -46,6 +46,7 @@ import {
   IconUndo,
 } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
 import { ChannelRemarkTooltip } from '../../common/ChannelRemarkTooltip';
 import { CHANNEL_OPTIONS } from '../../../constants';
@@ -538,6 +539,7 @@ const fetchModelRoutingOverride = async () => {
 
 const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [vendors, setVendors] = useState([]);
@@ -1280,9 +1282,20 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                   {routingRank === undefined ? '—' : `#${routingRank}`}
                 </Tag>
               </span>
-              <span className='shrink-0 font-mono text-xs text-[var(--semi-color-text-2)]'>
+              {/* useChannelsData derives its search keyword from channel_id,
+                  so the id alone is enough to land on that one channel. */}
+              <button
+                type='button'
+                className='shrink-0 cursor-pointer border-none bg-transparent p-0 font-mono text-xs text-[var(--semi-color-text-2)] underline-offset-2 hover:text-[var(--semi-color-text-0)] hover:underline'
+                title={t('在渠道列表中打开')}
+                aria-label={`${t('在渠道列表中打开')}: ${record.name}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  navigate(`/console/channel?channel_id=${record.id}`);
+                }}
+              >
                 ID:{record.id}
-              </span>
+              </button>
               {routeRoleLabel ? (
                 <span className='inline-flex shrink-0'>
                   <Tag

@@ -335,6 +335,27 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         </Tooltip>
       )}
 
+      {canEditSensitive && (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant='ghost'
+                size='icon-sm'
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleCopy()
+                }}
+                aria-label={t('Copy Channel')}
+              />
+            }
+          >
+            <Copy className='size-4' />
+          </TooltipTrigger>
+          <TooltipContent>{t('Copy Channel')}</TooltipContent>
+        </Tooltip>
+      )}
+
       <Tooltip>
         <TooltipTrigger
           render={
@@ -460,16 +481,8 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
 
           <DropdownMenuSeparator />
 
-          {/* Copy Channel */}
-          <DropdownMenuItem
-            disabled={!canEditSensitive}
-            onClick={canEditSensitive ? handleCopy : undefined}
-          >
-            {t('Copy Channel')}
-            <DropdownMenuShortcut>
-              <Copy size={16} />
-            </DropdownMenuShortcut>
-          </DropdownMenuItem>
+          {/* Copy sits in the action row above; without permission it is hidden
+              there, so keep the explanation reachable here. */}
           {!canEditSensitive && (
             <DropdownMenuItem disabled className='text-xs normal-case'>
               {t('No permission to perform this action')}

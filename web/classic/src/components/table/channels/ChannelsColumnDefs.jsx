@@ -48,6 +48,7 @@ import {
   IconTreeTriangleDown,
   IconMore,
   IconAlertTriangle,
+  IconCopy,
 } from '@douyinfe/semi-icons';
 import { FaRandom } from 'react-icons/fa';
 import { ChannelRemarkTooltip } from '../../common/ChannelRemarkTooltip';
@@ -740,18 +741,6 @@ export const getChannelsColumns = ({
                 });
               },
             },
-            {
-              node: 'item',
-              name: t('复制'),
-              type: 'tertiary',
-              onClick: () => {
-                Modal.confirm({
-                  title: t('确定是否要复制此渠道？'),
-                  content: t('复制渠道的所有信息'),
-                  onOk: () => copySelectedChannel(record),
-                });
-              },
-            },
           ];
 
           if (isRoot()) {
@@ -901,6 +890,23 @@ export const getChannelsColumns = ({
                   {t('编辑')}
                 </Button>
               )}
+
+              <Tooltip content={t('复制')}>
+                <Button
+                  theme='borderless'
+                  type='tertiary'
+                  size='small'
+                  icon={<IconCopy />}
+                  aria-label={`${t('复制')}: ${record.name}`}
+                  onClick={() => {
+                    Modal.confirm({
+                      title: t('确定是否要复制此渠道？'),
+                      content: t('复制渠道的所有信息'),
+                      onOk: () => copySelectedChannel(record),
+                    });
+                  }}
+                />
+              </Tooltip>
 
               <Dropdown
                 trigger='click'

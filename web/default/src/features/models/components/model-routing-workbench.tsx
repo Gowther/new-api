@@ -21,6 +21,7 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
+  Copy,
   Gauge,
   Loader2,
   Pencil,
@@ -84,6 +85,7 @@ import {
   updateChannelStatus,
 } from '@/features/channels/api'
 import { ChannelsProvider } from '@/features/channels/components/channels-provider'
+import { CopyChannelDialog } from '@/features/channels/components/dialogs/copy-channel-dialog'
 import { ChannelMutateDrawer } from '@/features/channels/components/drawers/channel-mutate-drawer'
 import {
   CHANNEL_STATUS,
@@ -627,6 +629,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
   const [editingChannel, setEditingChannel] = useState<Channel | null>(null)
   const [channelEditorOpen, setChannelEditorOpen] = useState(false)
   const [deletingChannel, setDeletingChannel] = useState<Channel | null>(null)
+  const [copyingChannel, setCopyingChannel] = useState<Channel | null>(null)
   const [isDeletingChannel, setIsDeletingChannel] = useState(false)
   const [testingChannelIds, setTestingChannelIds] = useState<
     Record<number, boolean>
@@ -1022,6 +1025,13 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
   const handleDeleteDialogOpenChange = (open: boolean) => {
     if (open || isDeletingChannel) return
     setDeletingChannel(null)
+  }
+
+  const handleCopyDialogOpenChange = (open: boolean) => {
+    if (open) return
+    setCopyingChannel(null)
+    // A copy is a new channel, so the routing table has to pick it up.
+    void channelsQuery.refetch()
   }
 
   const handleRoutingOverrideDialogOpenChange = (open: boolean) => {
@@ -1725,11 +1735,11 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
               <EmptyState title={t('No channels support this model')} />
             )}
             {!isLoading && selectedModel && channelsForModel.length > 0 && (
-              <Table className='min-w-[60rem] table-fixed'>
+              <Table className='min-w-[62rem] table-fixed'>
                 <TableHeader>
                   <TableRow>
                     <TableHead className='w-80'>{t('Channel')}</TableHead>
-                    <TableHead className='w-44'>{t('Actions')}</TableHead>
+                    <TableHead className='w-52'>{t('Actions')}</TableHead>
                     <TableHead className='w-28'>{t('Type')}</TableHead>
                     <TableHead className='w-36'>{t('Status')}</TableHead>
                     <TableHead className='bg-background sticky right-0 w-52'>
@@ -1978,7 +1988,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className='w-44'>
+                        <TableCell className='w-52'>
                           <div className='flex items-center gap-1'>
                             <TooltipProvider delay={100}>
                               <Tooltip>
@@ -2081,6 +2091,19 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                             >
                               <Pencil className='size-4' />
                             </Button>
+                            {canEditSensitive && (
+                              <Button
+                                type='button'
+                                variant='ghost'
+                                size='icon-sm'
+                                className='shrink-0'
+                                title={t('Copy Channel')}
+                                aria-label={`${t('Copy Channel')}: ${channel.name}`}
+                                onClick={() => setCopyingChannel(channel)}
+                              >
+                                <Copy className='size-4' />
+                              </Button>
+                            )}
                             <Button
                               type='button'
                               variant='ghost'
@@ -2189,6 +2212,11 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
           open={channelEditorOpen}
           currentRow={editingChannel}
           onOpenChange={handleChannelEditorOpenChange}
+        />
+        <CopyChannelDialog
+          open={copyingChannel !== null}
+          currentRow={copyingChannel}
+          onOpenChange={handleCopyDialogOpenChange}
         />
       </ChannelsProvider>
       <ConfirmDialog

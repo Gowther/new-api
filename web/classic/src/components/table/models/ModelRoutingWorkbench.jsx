@@ -557,6 +557,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   const [editingChannel, setEditingChannel] = useState({ id: undefined });
   const [showEditChannel, setShowEditChannel] = useState(false);
   const [deletingChannelId, setDeletingChannelId] = useState(null);
+  const [copyingChannelId, setCopyingChannelId] = useState(null);
   const [testingChannelIds, setTestingChannelIds] = useState({});
   const [routingOverride, setRoutingOverride] = useState([]);
   const [routingOverrideLoading, setRoutingOverrideLoading] = useState(false);
@@ -1104,6 +1105,37 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     });
   };
 
+  const handleCopyChannel = (channel) => {
+    Modal.confirm({
+      title: t('确定是否要复制此渠道？'),
+      content: t('复制渠道的所有信息'),
+      okText: t('复制'),
+      cancelText: t('取消'),
+      onOk: async () => {
+        setCopyingChannelId(channel.id);
+        try {
+          const res = await API.post(`/api/channel/copy/${channel.id}`);
+          const { success, message } = res.data || {};
+          if (!success) {
+            showError(message || t('渠道复制失败'));
+            return;
+          }
+          showSuccess(t('渠道复制成功'));
+          // The copy is a new channel, so the routing table has to reload.
+          await refreshRoutingData();
+        } catch (error) {
+          showError(
+            error?.response?.data?.message ||
+              error.message ||
+              t('渠道复制失败'),
+          );
+        } finally {
+          setCopyingChannelId(null);
+        }
+      },
+    });
+  };
+
   const handleTestChannel = async (channel) => {
     let shouldStart = false;
     setTestingChannelIds((prev) => {
@@ -1321,7 +1353,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     {
       title: t('操作'),
       dataIndex: 'actions',
-      width: 190,
+      width: 225,
       render: (_, record) => {
         const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
         const isOverrideTarget = routingOverride.some(
@@ -1374,6 +1406,17 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
               aria-label={t('编辑')}
               onClick={() => openChannelEditor(record)}
             />
+            <Tooltip content={t('复制')}>
+              <Button
+                theme='borderless'
+                type='tertiary'
+                size='small'
+                icon={<IconCopy />}
+                aria-label={`${t('复制')}: ${record.name}`}
+                loading={copyingChannelId === record.id}
+                onClick={() => handleCopyChannel(record)}
+              />
+            </Tooltip>
             <Button
               type='danger'
               size='small'
@@ -1795,7 +1838,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                 }}
                 pagination={false}
                 size='small'
-                scroll={{ x: 1000 }}
+                scroll={{ x: 1035 }}
                 onRow={(record) => {
                   const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
                   const isTarget = record.id === targetChannelId;

@@ -28,23 +28,30 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 import { handleCopyChannel } from '../../lib'
+import type { Channel } from '../../types'
 import { useChannels } from '../channels-provider'
 
 type CopyChannelDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Overrides the provider's row, for callers outside the channels table that
+   *  drive this dialog directly. Matches ChannelMutateDrawer's prop. */
+  currentRow?: Channel | null
 }
 
 export function CopyChannelDialog({
   open,
   onOpenChange,
+  currentRow: currentRowProp,
 }: CopyChannelDialogProps) {
   const { t } = useTranslation()
-  const { currentRow } = useChannels()
+  const { currentRow: contextRow } = useChannels()
   const queryClient = useQueryClient()
   const [suffix, setSuffix] = useState('_copy')
   const [resetBalance, setResetBalance] = useState(true)
   const [isCopying, setIsCopying] = useState(false)
+
+  const currentRow = currentRowProp ?? contextRow
 
   if (!currentRow) return null
 

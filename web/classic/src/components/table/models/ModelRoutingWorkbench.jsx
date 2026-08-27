@@ -31,6 +31,8 @@ import {
   InputNumber,
   List,
   Modal,
+  Radio,
+  RadioGroup,
   Spin,
   Switch,
   Table,
@@ -555,8 +557,11 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   const [vendors, setVendors] = useState([]);
   const [models, setModels] = useState([]);
   const [channels, setChannels] = useState([]);
-  const [providerSearch, setProviderSearch] = useState('');
-  const [modelSearch, setModelSearch] = useState('');
+  // One search above all three columns, in place of the old per-column filters.
+  // 'model' matches model names; 'channel' matches channel name or id and then
+  // resolves to the models those channels serve.
+  const [searchMode, setSearchMode] = useState('model');
+  const [searchQuery, setSearchQuery] = useState('');
   const [showAllModels, setShowAllModels] = useState(() =>
     readStoredShowAllModels(),
   );
@@ -693,13 +698,67 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     return targetModel ? getRoutingSelectionFromModel(targetModel) : null;
   }, [targetModelName, visibleModels]);
 
+  const trimmedQuery = searchQuery.trim().toLowerCase();
+  const isSearching = trimmedQuery !== '';
+
+  // Channel search resolves to models through the channel's model list, so both
+  // modes end up expressed as a set of model names.
+  const searchMatch = useMemo(() => {
+    if (!isSearching) return { modelNames: null, channelIds: null };
+
+    if (searchMode === 'model') {
+      const modelNames = new Set();
+      visibleModels.forEach((model) => {
+        if (model.model_name.toLowerCase().includes(trimmedQuery)) {
+          modelNames.add(model.model_name);
+        }
+      });
+      return { modelNames, channelIds: null };
+    }
+
+    const channelIds = new Set();
+    const servedModels = new Set();
+    channels.forEach((channel) => {
+      const matchesName = channel.name?.toLowerCase().includes(trimmedQuery);
+      const matchesId = String(channel.id).includes(trimmedQuery);
+      if (!matchesName && !matchesId) return;
+      channelIds.add(channel.id);
+      splitCsv(channel.models).forEach((modelName) =>
+        servedModels.add(modelName),
+      );
+    });
+    // Intersect with the visible catalog so the model column never lists a name
+    // the routing view has no model record for.
+    const modelNames = new Set();
+    visibleModels.forEach((model) => {
+      if (servedModels.has(model.model_name)) modelNames.add(model.model_name);
+    });
+    return { modelNames, channelIds };
+  }, [channels, isSearching, searchMode, trimmedQuery, visibleModels]);
+
+  const matchedModels = useMemo(() => {
+    if (!searchMatch.modelNames) return null;
+    return visibleModels
+      .filter((model) => searchMatch.modelNames.has(model.model_name))
+      .sort((a, b) => a.model_name.localeCompare(b.model_name));
+  }, [searchMatch, visibleModels]);
+
+  // While searching, the provider column narrows to the vendors that own the
+  // matches, counted by matches rather than by their whole catalog.
   const filteredProviders = useMemo(() => {
-    const search = providerSearch.trim().toLowerCase();
-    if (!search) return providerOptions;
-    return providerOptions.filter((provider) =>
-      provider.label.toLowerCase().includes(search),
-    );
-  }, [providerOptions, providerSearch]);
+    if (!matchedModels) return providerOptions;
+    const matchCounts = new Map();
+    matchedModels.forEach((model) => {
+      const key = getProviderKey(model);
+      matchCounts.set(key, (matchCounts.get(key) || 0) + 1);
+    });
+    return providerOptions
+      .filter((provider) => matchCounts.has(provider.key))
+      .map((provider) => ({
+        ...provider,
+        modelCount: matchCounts.get(provider.key) || 0,
+      }));
+  }, [matchedModels, providerOptions]);
 
   const selectedProvider = useMemo(() => {
     if (!selectedProviderKey) return null;
@@ -717,13 +776,56 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
       .sort((a, b) => a.model_name.localeCompare(b.model_name));
   }, [selectedProviderKey, visibleModels]);
 
+  // Searching lists the matches for the selected vendor; the vendor itself is
+  // kept in sync with the selected model, so this still reads as one vendor's
+  // models rather than a flat cross-vendor list.
   const filteredModels = useMemo(() => {
-    const search = modelSearch.trim().toLowerCase();
-    if (!search) return providerModels;
-    return providerModels.filter((model) =>
-      model.model_name.toLowerCase().includes(search),
+    if (!matchedModels) return providerModels;
+    if (!selectedProviderKey) return matchedModels;
+    return matchedModels.filter(
+      (model) => getProviderKey(model) === selectedProviderKey,
     );
-  }, [modelSearch, providerModels]);
+  }, [matchedModels, providerModels, selectedProviderKey]);
+
+  // Matches hidden purely because they have no enabled channel. Without this the
+  // search looks broken for a model the user knows exists.
+  const hiddenMatchCount = useMemo(() => {
+    if (!isSearching || showAllModels) return 0;
+
+    // Channel mode dead-ends the same way when a matched channel is itself
+    // disabled and its models have no other enabled channel.
+    let matchesName;
+    if (searchMode === 'model') {
+      matchesName = (model) =>
+        model.model_name.toLowerCase().includes(trimmedQuery);
+    } else {
+      const servedModels = new Set();
+      channels.forEach((channel) => {
+        const nameHit = channel.name?.toLowerCase().includes(trimmedQuery);
+        const idHit = String(channel.id).includes(trimmedQuery);
+        if (!nameHit && !idHit) return;
+        splitCsv(channel.models).forEach((modelName) =>
+          servedModels.add(modelName),
+        );
+      });
+      matchesName = (model) => servedModels.has(model.model_name);
+    }
+
+    let count = 0;
+    models.forEach((model) => {
+      if (!matchesName(model)) return;
+      if (!enabledChannelCountsByModel.has(model.model_name)) count += 1;
+    });
+    return count;
+  }, [
+    channels,
+    enabledChannelCountsByModel,
+    isSearching,
+    models,
+    searchMode,
+    showAllModels,
+    trimmedQuery,
+  ]);
 
   const selectedModel = useMemo(() => {
     if (!selectedModelName) return null;
@@ -778,6 +880,23 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     setSelectedProviderKey(targetRoutingSelection.providerKey);
     setSelectedModelName(targetRoutingSelection.modelName);
   }, [targetRoutingSelection]);
+
+  // Jump to the first match, unless the current selection is already one of
+  // them. Provider and model move together: the fallback effects below replace
+  // any model that is not in the selected provider's list, which would undo a
+  // cross-vendor jump made one state at a time.
+  useEffect(() => {
+    if (!matchedModels || matchedModels.length === 0) return;
+    if (
+      selectedModelName &&
+      matchedModels.some((model) => model.model_name === selectedModelName)
+    ) {
+      return;
+    }
+    const [first] = matchedModels;
+    setSelectedProviderKey(getProviderKey(first));
+    setSelectedModelName(first.model_name);
+  }, [matchedModels, selectedModelName]);
 
   useEffect(() => {
     if (selectedProviderKey) {
@@ -866,7 +985,14 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   const handleProviderSelect = (providerKey) => {
     setSelectedProviderKey(providerKey);
     setSelectedModelName(null);
-    setModelSearch('');
+  };
+
+  // Provider and model move together: the fallback effect drops any model that
+  // is not in the selected provider's list, so a match from another vendor has
+  // to bring its vendor along.
+  const handleModelSelect = (model) => {
+    setSelectedProviderKey(getProviderKey(model));
+    setSelectedModelName(model.model_name);
   };
 
   const handleShowAllModelsChange = (checked) => {
@@ -1585,17 +1711,45 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
         </div>
       </div>
 
+      {/* One search across all three columns. Model mode matches model names;
+          channel mode matches a channel and resolves to the models it serves. */}
+      <div className='flex flex-wrap items-center gap-2'>
+        <RadioGroup
+          type='button'
+          value={searchMode}
+          onChange={(event) => setSearchMode(event?.target?.value ?? event)}
+        >
+          <Radio value='model'>{t('按模型')}</Radio>
+          <Radio value='channel'>{t('按渠道')}</Radio>
+        </RadioGroup>
+        <Input
+          prefix={<IconSearch />}
+          placeholder={
+            searchMode === 'model'
+              ? t('搜索全部模型...')
+              : t('按名称或 ID 搜索渠道...')
+          }
+          value={searchQuery}
+          onChange={setSearchQuery}
+          showClear
+          className='min-w-0 flex-1 sm:!max-w-sm'
+        />
+        {isSearching ? (
+          <Text type='tertiary' size='small'>
+            {t('匹配 {{count}} 个模型', { count: matchedModels?.length || 0 })}
+          </Text>
+        ) : null}
+      </div>
+
       <div className='grid flex-1 grid-cols-1 gap-3 xl:grid-cols-[280px_320px_minmax(0,1fr)]'>
         <section className='flex min-h-[360px] flex-col rounded border border-[var(--semi-color-border)] bg-[var(--semi-color-bg-0)]'>
           <div className='border-b border-[var(--semi-color-border)] p-3'>
-            <Text strong>{t('供应商')}</Text>
-            <Input
-              prefix={<IconSearch />}
-              placeholder={t('搜索供应商...')}
-              value={providerSearch}
-              onChange={setProviderSearch}
-              style={{ marginTop: 8 }}
-            />
+            <div className='flex items-center justify-between gap-2'>
+              <Text strong>{t('供应商')}</Text>
+              <Tag color='grey' shape='circle' size='small'>
+                {filteredProviders.length}
+              </Tag>
+            </div>
           </div>
           <div className='min-h-0 flex-1 overflow-y-auto p-2'>
             {loading ? (
@@ -1656,7 +1810,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                   aria-label={t('全部模型')}
                 />
                 <Tag color='grey' shape='circle' size='small'>
-                  {providerModels.length}
+                  {filteredModels.length}
                 </Tag>
                 <Button
                   theme={isSelectedDefaultModel ? 'solid' : 'borderless'}
@@ -1670,13 +1824,21 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                 />
               </div>
             </div>
-            <Input
-              prefix={<IconSearch />}
-              placeholder={t('搜索模型...')}
-              value={modelSearch}
-              onChange={setModelSearch}
-              style={{ marginTop: 8 }}
-            />
+            {/* Matches excluded only by the enabled-channel filter, with the way
+                to reveal them, so a search for a known model is not just empty. */}
+            {hiddenMatchCount > 0 ? (
+              <Button
+                theme='borderless'
+                type='tertiary'
+                size='small'
+                className='!mt-2 !px-0'
+                onClick={() => handleShowAllModelsChange(true)}
+              >
+                {t('有 {{count}} 个匹配模型没有启用的渠道，显示全部模型。', {
+                  count: hiddenMatchCount,
+                })}
+              </Button>
+            ) : null}
           </div>
           <div className='min-h-0 flex-1 overflow-y-auto p-2'>
             {loading ? (
@@ -1690,7 +1852,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                 dataSource={filteredModels}
                 renderItem={(model) => (
                   <List.Item
-                    onClick={() => setSelectedModelName(model.model_name)}
+                    onClick={() => handleModelSelect(model)}
                     style={{
                       cursor: 'pointer',
                       backgroundColor:
@@ -1914,16 +2076,23 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
 
                   const boxShadow = [];
                   if (accent) boxShadow.push(`inset 4px 0 0 ${accent}`);
-                  if (isTarget) {
+                  // A channel-mode search keeps every channel serving the model,
+                  // so the ones it matched are marked to stay findable among them.
+                  const isSearchMatch = Boolean(
+                    searchMatch.channelIds?.has(record.id),
+                  );
+
+                  if (isTarget || isSearchMatch) {
                     boxShadow.push('inset 0 0 0 1px var(--semi-color-warning)');
                   }
 
                   return {
                     'data-routing-channel-id': record.id,
                     style: {
-                      background: isTarget
-                        ? 'var(--semi-color-warning-light-default)'
-                        : background,
+                      background:
+                        isTarget || isSearchMatch
+                          ? 'var(--semi-color-warning-light-default)'
+                          : background,
                       boxShadow: boxShadow.join(', ') || undefined,
                     },
                   };

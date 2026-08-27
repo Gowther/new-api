@@ -66,6 +66,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Tooltip,
   TooltipContent,
@@ -135,6 +136,8 @@ type ProviderOption = {
   modelCount: number
   vendor?: PricingVendor
 }
+
+type RoutingSearchMode = 'model' | 'channel'
 
 type RoutingField = 'priority' | 'weight'
 
@@ -611,8 +614,11 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     ADMIN_PERMISSION_RESOURCES.CHANNEL,
     ADMIN_PERMISSION_ACTIONS.WRITE
   )
-  const [providerSearch, setProviderSearch] = useState('')
-  const [modelSearch, setModelSearch] = useState('')
+  // One search above all three columns, in place of the old per-column filters.
+  // 'model' matches model names; 'channel' matches channel name or id and then
+  // resolves to the models those channels serve.
+  const [searchMode, setSearchMode] = useState<RoutingSearchMode>('model')
+  const [searchQuery, setSearchQuery] = useState('')
   const [showAllModels, setShowAllModels] = useState(() =>
     readStoredShowAllModels()
   )
@@ -752,13 +758,73 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     return options
   }, [models, t, vendors])
 
-  const filteredProviders = useMemo(() => {
-    const search = providerSearch.trim().toLowerCase()
-    if (!search) return providerOptions
-    return providerOptions.filter((provider) =>
-      provider.label.toLowerCase().includes(search)
-    )
-  }, [providerOptions, providerSearch])
+  const trimmedQuery = searchQuery.trim().toLowerCase()
+  const isSearching = trimmedQuery !== ''
+
+  // Channel search resolves to models through the channel's model list, so both
+  // modes end up expressed as a set of model names.
+  const searchMatch = useMemo(() => {
+    if (!isSearching) {
+      return { modelNames: null, channelIds: null } as {
+        modelNames: Set<string> | null
+        channelIds: Set<number> | null
+      }
+    }
+
+    if (searchMode === 'model') {
+      const modelNames = new Set<string>()
+      for (const model of models) {
+        if (model.model_name.toLowerCase().includes(trimmedQuery)) {
+          modelNames.add(model.model_name)
+        }
+      }
+      return { modelNames, channelIds: null }
+    }
+
+    const channelIds = new Set<number>()
+    const servedModels = new Set<string>()
+    for (const channel of channels) {
+      const matchesName = channel.name?.toLowerCase().includes(trimmedQuery)
+      const matchesId = String(channel.id).includes(trimmedQuery)
+      if (!matchesName && !matchesId) continue
+      channelIds.add(channel.id)
+      for (const modelName of splitCsv(channel.models)) {
+        servedModels.add(modelName)
+      }
+    }
+    // Intersect with the visible catalog so the model column never lists a name
+    // the routing view has no model record for.
+    const modelNames = new Set<string>()
+    for (const model of models) {
+      if (servedModels.has(model.model_name)) modelNames.add(model.model_name)
+    }
+    return { modelNames, channelIds }
+  }, [channels, isSearching, models, searchMode, trimmedQuery])
+
+  const matchedModels = useMemo(() => {
+    if (!searchMatch.modelNames) return null
+    const matched = searchMatch.modelNames
+    return models
+      .filter((model) => matched.has(model.model_name))
+      .sort((a, b) => a.model_name.localeCompare(b.model_name))
+  }, [models, searchMatch])
+
+  // While searching, the provider column narrows to the vendors that own the
+  // matches, counted by matches rather than by their whole catalog.
+  const visibleProviders = useMemo(() => {
+    if (!matchedModels) return providerOptions
+    const matchCounts = new Map<string, number>()
+    for (const model of matchedModels) {
+      const key = getProviderKey(model)
+      matchCounts.set(key, (matchCounts.get(key) ?? 0) + 1)
+    }
+    return providerOptions
+      .filter((provider) => matchCounts.has(provider.key))
+      .map((provider) => ({
+        ...provider,
+        modelCount: matchCounts.get(provider.key) ?? 0,
+      }))
+  }, [matchedModels, providerOptions])
 
   const selectedProvider = useMemo(() => {
     if (!selectedProviderKey) return null
@@ -776,13 +842,56 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
       .sort((a, b) => a.model_name.localeCompare(b.model_name))
   }, [models, selectedProviderKey])
 
-  const filteredModels = useMemo(() => {
-    const search = modelSearch.trim().toLowerCase()
-    if (!search) return providerModels
-    return providerModels.filter((model) =>
-      model.model_name.toLowerCase().includes(search)
+  // Searching lists the matches for the selected vendor; the vendor itself is
+  // kept in sync with the selected model, so this still reads as one vendor's
+  // models rather than a flat cross-vendor list.
+  const visibleModels = useMemo(() => {
+    if (!matchedModels) return providerModels
+    if (!selectedProviderKey) return matchedModels
+    return matchedModels.filter(
+      (model) => getProviderKey(model) === selectedProviderKey
     )
-  }, [modelSearch, providerModels])
+  }, [matchedModels, providerModels, selectedProviderKey])
+
+  // Matches hidden purely because they have no enabled channel. Without this the
+  // search looks broken for a model the user knows exists.
+  const hiddenMatchCount = useMemo(() => {
+    if (!isSearching || showAllModels) return 0
+
+    // Channel mode dead-ends the same way when a matched channel is itself
+    // disabled and its models have no other enabled channel.
+    let matchesName: (model: RoutingModel) => boolean
+    if (searchMode === 'model') {
+      matchesName = (model) =>
+        model.model_name.toLowerCase().includes(trimmedQuery)
+    } else {
+      const servedModels = new Set<string>()
+      for (const channel of channels) {
+        const nameHit = channel.name?.toLowerCase().includes(trimmedQuery)
+        const idHit = String(channel.id).includes(trimmedQuery)
+        if (!nameHit && !idHit) continue
+        for (const modelName of splitCsv(channel.models)) {
+          servedModels.add(modelName)
+        }
+      }
+      matchesName = (model) => servedModels.has(model.model_name)
+    }
+
+    let count = 0
+    for (const model of routingCatalog.models) {
+      if (!matchesName(model)) continue
+      if (!enabledChannelCountsByModel.has(model.model_name)) count += 1
+    }
+    return count
+  }, [
+    channels,
+    enabledChannelCountsByModel,
+    isSearching,
+    routingCatalog.models,
+    searchMode,
+    showAllModels,
+    trimmedQuery,
+  ])
 
   const selectedModel = useMemo(() => {
     if (!selectedModelName) return null
@@ -854,6 +963,24 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     setSelectedProviderKey(targetRoutingSelection.providerKey)
     setSelectedModelName(targetRoutingSelection.modelName)
   }, [targetRoutingSelection])
+
+  // Jump to the first match, unless the current selection is already one of
+  // them. Provider and model move together: the fallback effects below replace
+  // any model that is not in the selected provider's list, which would undo a
+  // cross-vendor jump made one state at a time.
+  useEffect(() => {
+    if (!matchedModels) return
+    if (matchedModels.length === 0) return
+    if (
+      selectedModelName &&
+      matchedModels.some((model) => model.model_name === selectedModelName)
+    ) {
+      return
+    }
+    const [first] = matchedModels
+    setSelectedProviderKey(getProviderKey(first))
+    setSelectedModelName(first.model_name)
+  }, [matchedModels, selectedModelName])
 
   useEffect(() => {
     if (selectedProviderKey && providerOptions.length > 0) {
@@ -958,8 +1085,15 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
 
   const handleProviderSelect = (providerKey: string) => {
     setSelectedProviderKey(providerKey)
-    setModelSearch('')
     setSelectedModelName(null)
+  }
+
+  // Provider and model move together: the fallback effect drops any model that
+  // is not in the selected provider's list, so a match from another vendor has
+  // to bring its vendor along.
+  const handleModelSelect = (model: RoutingModel) => {
+    setSelectedProviderKey(getProviderKey(model))
+    setSelectedModelName(model.model_name)
   }
 
   const handleShowAllModelsChange = (checked: boolean) => {
@@ -1375,29 +1509,73 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
         </div>
       </div>
 
+      {/* One search across all three columns. Model mode matches model names;
+          channel mode matches a channel and resolves to the models it serves. */}
+      <div className='flex flex-wrap items-center gap-2'>
+        <Tabs
+          value={searchMode}
+          onValueChange={(value) => setSearchMode(value as RoutingSearchMode)}
+        >
+          <TabsList>
+            <TabsTrigger value='model'>{t('By model')}</TabsTrigger>
+            <TabsTrigger value='channel'>{t('By channel')}</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <div className='relative min-w-0 flex-1 sm:max-w-sm'>
+          <Search className='text-muted-foreground pointer-events-none absolute top-2.5 left-2.5 size-4' />
+          <Input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder={
+              searchMode === 'model'
+                ? t('Search all models...')
+                : t('Search channels by name or ID...')
+            }
+            className='pl-8'
+            aria-label={
+              searchMode === 'model'
+                ? t('Search all models...')
+                : t('Search channels by name or ID...')
+            }
+          />
+        </div>
+        {isSearching ? (
+          <>
+            <span className='text-muted-foreground text-xs tabular-nums'>
+              {t('{{count}} matched model(s)', {
+                count: matchedModels?.length ?? 0,
+              })}
+            </span>
+            <Button
+              type='button'
+              variant='ghost'
+              size='sm'
+              onClick={() => setSearchQuery('')}
+            >
+              {t('Clear')}
+            </Button>
+          </>
+        ) : null}
+      </div>
+
       <div className='grid min-h-0 flex-1 gap-3 lg:grid-cols-[17rem_20rem_minmax(0,1fr)]'>
         <section className='bg-background flex min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-lg border'>
           <div className='border-b p-3'>
-            <div className='mb-2 text-sm font-medium'>{t('Vendors')}</div>
-            <div className='relative'>
-              <Search className='text-muted-foreground pointer-events-none absolute top-2.5 left-2.5 size-4' />
-              <Input
-                value={providerSearch}
-                onChange={(event) => setProviderSearch(event.target.value)}
-                placeholder={t('Search vendors...')}
-                className='pl-8'
-                aria-label={t('Search vendors...')}
-              />
+            <div className='flex items-center justify-between gap-2 text-sm font-medium'>
+              <span>{t('Vendors')}</span>
+              <span className='text-muted-foreground text-xs tabular-nums'>
+                {visibleProviders.length}
+              </span>
             </div>
           </div>
           <ScrollArea className='min-h-0 flex-1'>
             {isLoading && <LoadingState />}
-            {!isLoading && filteredProviders.length === 0 && (
+            {!isLoading && visibleProviders.length === 0 && (
               <EmptyState title={t('No vendors found')} />
             )}
-            {!isLoading && filteredProviders.length > 0 && (
+            {!isLoading && visibleProviders.length > 0 && (
               <div className='space-y-1 p-2'>
-                {filteredProviders.map((provider) => (
+                {visibleProviders.map((provider) => (
                   <button
                     type='button'
                     key={provider.key}
@@ -1452,7 +1630,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                   aria-label={t('All Models')}
                 />
                 <span className='text-muted-foreground text-xs tabular-nums'>
-                  {providerModels.length}
+                  {visibleModels.length}
                 </span>
                 <Button
                   type='button'
@@ -1476,25 +1654,29 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                 </Button>
               </div>
             </div>
-            <div className='relative'>
-              <Search className='text-muted-foreground pointer-events-none absolute top-2.5 left-2.5 size-4' />
-              <Input
-                value={modelSearch}
-                onChange={(event) => setModelSearch(event.target.value)}
-                placeholder={t('Search models...')}
-                className='pl-8'
-                aria-label={t('Search models...')}
-              />
-            </div>
+            {/* Matches excluded only by the enabled-channel filter, with the way
+                to reveal them, so a search for a known model is not just empty. */}
+            {hiddenMatchCount > 0 ? (
+              <button
+                type='button'
+                onClick={() => handleShowAllModelsChange(true)}
+                className='text-muted-foreground hover:text-foreground mt-2 text-left text-xs underline-offset-2 hover:underline'
+              >
+                {t(
+                  '{{count}} matched model(s) have no enabled channel. Show all models.',
+                  { count: hiddenMatchCount }
+                )}
+              </button>
+            ) : null}
           </div>
           <ScrollArea className='min-h-0 flex-1'>
             {isLoading && <LoadingState />}
-            {!isLoading && filteredModels.length === 0 && (
+            {!isLoading && visibleModels.length === 0 && (
               <EmptyState title={t('No models found')} />
             )}
-            {!isLoading && filteredModels.length > 0 && (
+            {!isLoading && visibleModels.length > 0 && (
               <div className='space-y-1 p-2'>
-                {filteredModels.map((model) => {
+                {visibleModels.map((model) => {
                   const isSelected = selectedModelName === model.model_name
 
                   return (
@@ -1509,7 +1691,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                     >
                       <button
                         type='button'
-                        onClick={() => setSelectedModelName(model.model_name)}
+                        onClick={() => handleModelSelect(model)}
                         className='flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left text-sm'
                       >
                         <span className='bg-muted/40 flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full'>
@@ -1860,7 +2042,11 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                             channel.status !== CHANNEL_STATUS.MANUAL_DISABLED &&
                             channel.status !== CHANNEL_STATUS.AUTO_DISABLED &&
                             'bg-muted/40 hover:bg-muted/50',
-                          props.targetChannelId === channel.id &&
+                          // A channel-mode search keeps every channel serving
+                          // the model, so the ones it matched are marked to stay
+                          // findable among them.
+                          (props.targetChannelId === channel.id ||
+                            searchMatch.channelIds?.has(channel.id)) &&
                             'bg-warning/10 ring-warning/40 ring-1 ring-inset'
                         )}
                       >

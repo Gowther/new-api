@@ -560,8 +560,10 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   // One search above all three columns, in place of the old per-column filters.
   // 'model' matches model names; 'channel' matches channel name or id and then
   // resolves to the models those channels serve.
-  const [searchMode, setSearchMode] = useState('model');
+  const [searchMode, setSearchMode] = useState('channel');
   const [searchQuery, setSearchQuery] = useState('');
+  // Which query the auto-jump has already been applied for.
+  const appliedSearchTokenRef = useRef(null);
   const [showAllModels, setShowAllModels] = useState(() =>
     readStoredShowAllModels(),
   );
@@ -881,12 +883,23 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     setSelectedModelName(targetRoutingSelection.modelName);
   }, [targetRoutingSelection]);
 
-  // Jump to the first match, unless the current selection is already one of
-  // them. Provider and model move together: the fallback effects below replace
-  // any model that is not in the selected provider's list, which would undo a
-  // cross-vendor jump made one state at a time.
+  // Jump to the first match once per query, not whenever the selection happens
+  // to sit outside the match set. Without the token, clicking a vendor clears
+  // the model, this effect sees a stale selection and snaps back to the first
+  // match's vendor, so only that one vendor ever appeared clickable.
   useEffect(() => {
-    if (!matchedModels || matchedModels.length === 0) return;
+    if (!matchedModels) {
+      appliedSearchTokenRef.current = null;
+      return;
+    }
+    if (matchedModels.length === 0) return;
+
+    const token = `${searchMode}:${trimmedQuery}`;
+    if (appliedSearchTokenRef.current === token) return;
+    appliedSearchTokenRef.current = token;
+
+    // Typing further into a query that still matches the current model should
+    // not move the selection.
     if (
       selectedModelName &&
       matchedModels.some((model) => model.model_name === selectedModelName)
@@ -896,7 +909,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     const [first] = matchedModels;
     setSelectedProviderKey(getProviderKey(first));
     setSelectedModelName(first.model_name);
-  }, [matchedModels, selectedModelName]);
+  }, [matchedModels, searchMode, selectedModelName, trimmedQuery]);
 
   useEffect(() => {
     if (selectedProviderKey) {
@@ -984,7 +997,13 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
 
   const handleProviderSelect = (providerKey) => {
     setSelectedProviderKey(providerKey);
-    setSelectedModelName(null);
+    // While searching, land on that vendor's first match. Clearing the model
+    // would let the fallback effect pick its first model overall, which the
+    // column is not even showing.
+    const firstMatch = matchedModels?.find(
+      (model) => getProviderKey(model) === providerKey,
+    );
+    setSelectedModelName(firstMatch?.model_name || null);
   };
 
   // Provider and model move together: the fallback effect drops any model that

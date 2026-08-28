@@ -2652,6 +2652,10 @@ const EditChannelModal = (props) => {
       } else {
         showSuccess(t('渠道创建成功！'));
         setInputs(originInputs);
+        // Let callers follow the channel they just created. Read from
+        // localInputs, not normalizedModels: confirming the missing-mapping
+        // prompt above can add models to what actually gets submitted.
+        props.onCreated?.(localInputs.models || []);
       }
       props.refresh();
       props.handleClose();
@@ -2922,7 +2926,9 @@ const EditChannelModal = (props) => {
   return (
     <>
       <SideSheet
-        placement={isEdit ? 'right' : 'left'}
+        // Create slides in from the left because the channel list's add button
+        // sits there; callers whose button sits on the right pass 'right'.
+        placement={props.placement || (isEdit ? 'right' : 'left')}
         title={
           <div className='flex items-center justify-between w-full'>
             <Space>

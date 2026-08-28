@@ -564,6 +564,9 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   const [searchQuery, setSearchQuery] = useState('');
   // Which query the auto-jump has already been applied for.
   const appliedSearchTokenRef = useRef(null);
+  // Holds the channel list as it was when the create finished, so the jump can
+  // tell "the catalog has not caught up yet" from "this model is unknown".
+  const [pendingCreated, setPendingCreated] = useState(null);
   const [showAllModels, setShowAllModels] = useState(() =>
     readStoredShowAllModels(),
   );
@@ -883,6 +886,44 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     setSelectedModelName(targetRoutingSelection.modelName);
   }, [targetRoutingSelection]);
 
+  // Follow a channel created from here: land on the vendor and model it serves.
+  // Waits for the reloaded channel list, since a model whose only channel is the
+  // new one is not in the catalog until then.
+  useEffect(() => {
+    if (!pendingCreated) return;
+    if (pendingCreated.models.length === 0) {
+      setPendingCreated(null);
+      return;
+    }
+
+    const wanted = new Set(pendingCreated.models);
+    const candidates = visibleModels.filter((model) =>
+      wanted.has(model.model_name),
+    );
+    if (candidates.length === 0) {
+      // Give up only once the reload has landed: until then the model may be
+      // missing simply because the new channel is its only one.
+      if (channels !== pendingCreated.channelsAtQueue) setPendingCreated(null);
+      return;
+    }
+
+    // Several vendors can serve one channel's models; take the first as the
+    // vendor column orders them, then that vendor's first model by name.
+    const candidateKeys = new Set(candidates.map(getProviderKey));
+    const firstProvider = providerOptions.find((provider) =>
+      candidateKeys.has(provider.key),
+    );
+    const providerKey = firstProvider?.key || getProviderKey(candidates[0]);
+    const [target] = candidates
+      .filter((model) => getProviderKey(model) === providerKey)
+      .sort((a, b) => a.model_name.localeCompare(b.model_name));
+
+    setSearchQuery('');
+    setSelectedProviderKey(providerKey);
+    setSelectedModelName(target.model_name);
+    setPendingCreated(null);
+  }, [channels, pendingCreated, providerOptions, visibleModels]);
+
   // Jump to the first match once per query, not whenever the selection happens
   // to sit outside the match set. Without the token, clicking a vendor clears
   // the model, this effect sees a stale selection and snaps back to the first
@@ -994,6 +1035,12 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     });
     return () => window.cancelAnimationFrame(frame);
   }, [channelsForModel, selectedModelName, targetChannelId, targetModelName]);
+
+  // A new channel's models are only selectable once the reloaded channel list
+  // has put them in the catalog, so the jump is queued and applied by an effect.
+  const handleChannelCreated = (createdModels) => {
+    setPendingCreated({ models: createdModels, channelsAtQueue: channels });
+  };
 
   const handleProviderSelect = (providerKey) => {
     setSelectedProviderKey(providerKey);
@@ -2126,6 +2173,9 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
         visible={showEditChannel}
         handleClose={closeChannelEditor}
         editingChannel={editingChannel}
+        // The add button sits on the right here, unlike the channel list.
+        placement='right'
+        onCreated={handleChannelCreated}
       />
       <ModelTestModal
         showModelTestModal={testingChannel !== null}

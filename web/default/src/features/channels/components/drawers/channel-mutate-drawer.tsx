@@ -212,6 +212,9 @@ type ChannelMutateDrawerProps = {
   onOpenChange: (open: boolean) => void
   currentRow?: Channel | null
   initialValues?: Partial<ChannelFormValues>
+  /** Models of the channel that was just created, for callers that want to
+   *  follow it. Not fired when editing. */
+  onCreated?: (models: string[]) => void
 }
 
 type ModelMappingGuardrail = {
@@ -610,6 +613,7 @@ export function ChannelMutateDrawer({
   onOpenChange,
   currentRow,
   initialValues,
+  onCreated,
 }: ChannelMutateDrawerProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
@@ -1686,18 +1690,29 @@ export function ChannelMutateDrawer({
   )
 
   // Handle successful submission
-  const handleSuccess = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
-    queryClient.invalidateQueries({ queryKey: ['playground-models'] })
-    queryClient.invalidateQueries({ queryKey: ['playground-model-channels'] })
-    if (channelId) {
-      queryClient.invalidateQueries({
-        queryKey: channelsQueryKeys.detail(channelId),
-      })
-    }
-    onOpenChange(false)
-    setOpen(null)
-  }, [channelId, queryClient, onOpenChange, setOpen])
+  const handleSuccess = useCallback(
+    (values: ChannelFormValues) => {
+      if (!isEditing) {
+        onCreated?.(
+          values.models
+            .split(',')
+            .map((model) => model.trim())
+            .filter(Boolean)
+        )
+      }
+      queryClient.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: ['playground-models'] })
+      queryClient.invalidateQueries({ queryKey: ['playground-model-channels'] })
+      if (channelId) {
+        queryClient.invalidateQueries({
+          queryKey: channelsQueryKeys.detail(channelId),
+        })
+      }
+      onOpenChange(false)
+      setOpen(null)
+    },
+    [channelId, isEditing, onCreated, queryClient, onOpenChange, setOpen]
+  )
 
   // Show missing models confirmation dialog
   const confirmMissingModelMappings = useCallback(

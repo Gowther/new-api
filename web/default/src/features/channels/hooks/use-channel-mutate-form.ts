@@ -40,7 +40,8 @@ type UseChannelMutateFormParams = {
   currentRow?: Channel | null
   isEditing: boolean
   isMultiKeyChannel: boolean
-  onSuccess: () => void
+  /** Receives the submitted values so callers can act on what was just saved. */
+  onSuccess: (values: ChannelFormValues) => void
 }
 
 const SENSITIVE_UPDATE_FIELDS = [
@@ -132,9 +133,9 @@ export function useChannelMutateForm(props: UseChannelMutateFormParams) {
       }
       return SUCCESS_MESSAGES.CREATED
     },
-    onSuccess: (messageKey) => {
+    onSuccess: (messageKey, values) => {
       toast.success(t(messageKey))
-      props.onSuccess()
+      props.onSuccess(values)
     },
     onError: (error: unknown) => {
       toast.error(getErrorMessage(error) || t(ERROR_MESSAGES.CREATE_FAILED))

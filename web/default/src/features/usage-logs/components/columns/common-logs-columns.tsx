@@ -55,7 +55,7 @@ import {
 } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-import { LOG_TYPE_ALL_VALUE } from '../../constants'
+import { LOG_TYPE_ALL_VALUE, LOG_TYPE_ENUM } from '../../constants'
 import type { UsageLog } from '../../data/schema'
 import {
   formatModelName,
@@ -974,6 +974,9 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const [dialogOpen, setDialogOpen] = useState(false)
         const log = row.original
         const other = parseLogOther(log.other)
+        // Error messages are the thing people paste elsewhere, so they get a
+        // copy button in the row. The dialog keeps its own copy for the rest.
+        const isError = log.type === LOG_TYPE_ENUM.ERROR
 
         const segments = buildDetailSegments(log, other, t, isAdmin)
         const primary = segments[0]
@@ -1005,22 +1008,31 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         }
 
         return (
-          <>
+          <div className='flex max-w-[200px] min-w-0 items-center gap-1'>
             <button
               type='button'
-              className='group flex max-w-[200px] items-center gap-1 text-left text-xs'
+              className='group flex min-w-0 flex-1 items-center gap-1 text-left text-xs'
               onClick={() => setDialogOpen(true)}
               title={t('Click to view full details')}
             >
               {detailContent}
             </button>
+            {isError && log.content ? (
+              <CopyButton
+                value={log.content}
+                size='icon'
+                tooltip={t('Copy error message')}
+                className='size-6 shrink-0'
+                iconClassName='size-3'
+              />
+            ) : null}
             <DetailsDialog
               log={log}
               isAdmin={isAdmin}
               open={dialogOpen}
               onOpenChange={setDialogOpen}
             />
-          </>
+          </div>
         )
       },
       size: 180,

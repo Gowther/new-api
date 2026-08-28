@@ -1106,8 +1106,12 @@ export const getLogsColumns = ({
           t,
         );
 
+        // Error messages are the thing people paste elsewhere, so they get a
+        // copy button in the row. The expanded detail row is unchanged.
+        const isError = record.type === 5;
+
         if (!detailSummary) {
-          return (
+          const paragraph = (
             <Typography.Paragraph
               ellipsis={{
                 rows: 2,
@@ -1120,6 +1124,17 @@ export const getLogsColumns = ({
             >
               {text}
             </Typography.Paragraph>
+          );
+
+          if (!isError || !text) {
+            return paragraph;
+          }
+
+          return (
+            <div className='flex min-w-0 items-start gap-1'>
+              <div className='min-w-0 flex-1'>{paragraph}</div>
+              <CopyTextButton text={text} copyText={copyText} t={t} />
+            </div>
           );
         }
 

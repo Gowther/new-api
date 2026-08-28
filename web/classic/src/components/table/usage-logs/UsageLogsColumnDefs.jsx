@@ -650,20 +650,18 @@ export const getLogsColumns = ({
 
         const channelInfo = (
           <span style={{ position: 'relative', display: 'inline-block' }}>
-            <Tooltip content={record.channel_name || t('未知渠道')}>
-              <span style={{ display: 'inline-flex', alignItems: 'center' }}>
-                <Tag
-                  color={colors[parseInt(text) % colors.length]}
-                  shape='circle'
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    applyColumnFilter?.('channel', text);
-                  }}
-                >
-                  {text}
-                </Tag>
-              </span>
-            </Tooltip>
+            <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+              <Tag
+                color={colors[parseInt(text) % colors.length]}
+                shape='circle'
+                onClick={(event) => {
+                  event.stopPropagation();
+                  applyColumnFilter?.('channel', text);
+                }}
+              >
+                {text}
+              </Tag>
+            </span>
             {record.channel_remark && (
               <span
                 aria-label={t('备注')}
@@ -727,29 +725,53 @@ export const getLogsColumns = ({
           </span>
         );
 
-        return isAdminUser &&
-          (record.type === 0 ||
+        if (
+          !isAdminUser ||
+          !(
+            record.type === 0 ||
             record.type === 2 ||
             record.type === 5 ||
-            record.type === 6) ? (
-          <Space>
-            {record.channel_remark ? (
-              <ChannelRemarkTooltip
-                remark={record.channel_remark}
-                title={record.channel_name || t('未知渠道')}
-              >
-                {channelInfo}
-              </ChannelRemarkTooltip>
-            ) : (
-              channelInfo
-            )}
-            {isMultiKey && (
-              <Tag color='white' shape='circle'>
-                {multiKeyIndex}
-              </Tag>
-            )}
-          </Space>
-        ) : null;
+            record.type === 6
+          )
+        ) {
+          return null;
+        }
+
+        // Two lines: the id keeps the first one with the action icons, and the
+        // name gets its own so it no longer hides in a tooltip. Rows are already
+        // multi-line because of the details column, so this costs no height.
+        return (
+          <div className='flex min-w-0 flex-col gap-0.5'>
+            <Space>
+              {record.channel_remark ? (
+                <ChannelRemarkTooltip
+                  remark={record.channel_remark}
+                  title={record.channel_name || t('未知渠道')}
+                >
+                  {channelInfo}
+                </ChannelRemarkTooltip>
+              ) : (
+                channelInfo
+              )}
+              {isMultiKey && (
+                <Tag color='white' shape='circle'>
+                  {multiKeyIndex}
+                </Tag>
+              )}
+            </Space>
+            {record.channel_name ? (
+              <Tooltip content={record.channel_name}>
+                <Typography.Text
+                  type='tertiary'
+                  size='small'
+                  className='block max-w-[160px] truncate'
+                >
+                  {record.channel_name}
+                </Typography.Text>
+              </Tooltip>
+            ) : null}
+          </div>
+        );
       },
     },
     {

@@ -875,14 +875,15 @@ const EditChannelModal = (props) => {
 
   const applyClipboardConfig = (config) => {
     if (!config) return;
-    setInputs((prev) => ({
-      ...prev,
-      key: config.key,
-      base_url: config.url,
-    }));
+    // name/remark 是可选字段，缺省时不要用空串覆盖用户已经填好的内容
+    const patch = { key: config.key, base_url: config.url };
+    if (config.name) patch.name = config.name;
+    if (config.remark) patch.remark = config.remark;
+    setInputs((prev) => ({ ...prev, ...patch }));
     if (formApiRef.current) {
-      formApiRef.current.setValue('key', config.key);
-      formApiRef.current.setValue('base_url', config.url);
+      Object.entries(patch).forEach(([field, value]) => {
+        formApiRef.current.setValue(field, value);
+      });
     }
     setClipboardConfig(null);
     showSuccess(t('连接信息已填入'));

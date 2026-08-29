@@ -97,36 +97,57 @@ export function getServerAddress() {
 
 export const CHANNEL_CONN_CLIPBOARD_TYPE = 'newapi_channel_conn';
 
+/** 与 Channel.Name / Channel.Remark 的列宽保持一致，避免粘贴出来的值提交时被后端拒掉 */
+const CHANNEL_CONN_NAME_MAX = 191;
+const CHANNEL_CONN_REMARK_MAX = 255;
+
 /**
  * @param {string} key - 完整的 API key（含 sk- 前缀）
  * @param {string} url - 服务器地址
+ * @param {{ name?: string, remark?: string }} [extra] - 可选的名称与备注
  * @returns {string} JSON 格式的连接字符串
  */
-export function encodeChannelConnectionString(key, url) {
-  return JSON.stringify({
+export function encodeChannelConnectionString(key, url, extra = {}) {
+  const payload = {
     _type: CHANNEL_CONN_CLIPBOARD_TYPE,
     key,
     url,
-  });
+  };
+  if (extra.name) payload.name = extra.name;
+  if (extra.remark) payload.remark = extra.remark;
+  return JSON.stringify(payload);
 }
 
 /**
+ * 解析剪贴板里的渠道连接信息。
+ *
+ * url 允许缺省或为空串：只给密钥、让渠道类型自带的官方地址生效是常见用法。
+ * name / remark 是可选扩展，老格式（只有 key/url）照样能解析。
+ *
  * @param {string} text - 剪贴板文本
- * @returns {{ key: string, url: string } | null}
+ * @returns {{ key: string, url: string, name?: string, remark?: string } | null}
  */
 export function parseChannelConnectionString(text) {
   if (!text || typeof text !== 'string') return null;
   try {
     const parsed = JSON.parse(text.trim());
     if (
-      parsed &&
-      typeof parsed === 'object' &&
-      parsed._type === CHANNEL_CONN_CLIPBOARD_TYPE &&
-      typeof parsed.key === 'string' &&
-      typeof parsed.url === 'string'
+      !parsed ||
+      typeof parsed !== 'object' ||
+      parsed._type !== CHANNEL_CONN_CLIPBOARD_TYPE ||
+      typeof parsed.key !== 'string' ||
+      (parsed.url !== undefined && typeof parsed.url !== 'string')
     ) {
-      return { key: parsed.key, url: parsed.url };
+      return null;
     }
+    const config = { key: parsed.key, url: parsed.url || '' };
+    if (typeof parsed.name === 'string' && parsed.name.trim()) {
+      config.name = parsed.name.trim().slice(0, CHANNEL_CONN_NAME_MAX);
+    }
+    if (typeof parsed.remark === 'string' && parsed.remark.trim()) {
+      config.remark = parsed.remark.slice(0, CHANNEL_CONN_REMARK_MAX);
+    }
+    return config;
   } catch {
     // not valid JSON
   }

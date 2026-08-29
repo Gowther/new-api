@@ -24,6 +24,7 @@ import {
   Boxes,
   CheckCircle2,
   Circle,
+  ClipboardPaste,
   HelpCircle,
   KeyRound,
   Loader2,
@@ -149,6 +150,8 @@ import {
   CHANNEL_TYPE_ADVANCED_CUSTOM,
   channelFormSchema,
   channelsQueryKeys,
+  parseChannelConnectionString,
+  type ChannelConnectionConfig,
   getAdvancedCustomStats,
   transformFormDataToCreatePayload,
   transformFormDataToUpdatePayload,
@@ -746,6 +749,63 @@ export function ChannelMutateDrawer({
     resolver: zodResolver(channelFormSchema),
     defaultValues: CHANNEL_FORM_DEFAULT_VALUES,
   })
+
+  const [clipboardConfig, setClipboardConfig] =
+    useState<ChannelConnectionConfig | null>(null)
+
+  const applyClipboardConfig = useCallback(
+    (config: ChannelConnectionConfig) => {
+      form.setValue('key', config.key, { shouldDirty: true })
+      form.setValue('base_url', config.url, { shouldDirty: true })
+      // name/remark are optional; don't clear what the user already typed
+      if (config.name) form.setValue('name', config.name, { shouldDirty: true })
+      if (config.remark) {
+        form.setValue('remark', config.remark, { shouldDirty: true })
+      }
+      setClipboardConfig(null)
+      toast.success(t('Connection info filled in'))
+    },
+    [form, t]
+  )
+
+  const readClipboardConfig = useCallback(async () => {
+    if (!navigator.clipboard?.readText) {
+      toast.error(t('Unable to read the clipboard'))
+      return
+    }
+    try {
+      const config = parseChannelConnectionString(
+        await navigator.clipboard.readText()
+      )
+      if (config) applyClipboardConfig(config)
+      else toast.info(t('No connection info found in the clipboard'))
+    } catch {
+      toast.error(t('Unable to read the clipboard'))
+    }
+  }, [applyClipboardConfig, t])
+
+  // Offer clipboard connection info when opening the drawer to create a channel
+  useEffect(() => {
+    if (!open || isEditing) {
+      setClipboardConfig(null)
+      return
+    }
+    if (!navigator.clipboard?.readText) return
+    let cancelled = false
+    navigator.clipboard
+      .readText()
+      .then((text) => {
+        if (cancelled) return
+        const config = parseChannelConnectionString(text)
+        if (config) setClipboardConfig(config)
+      })
+      .catch(() => {
+        // clipboard permission denied — the manual paste button still works
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open, isEditing])
 
   // Watch form values for conditional rendering
   const multiKeyMode = form.watch('multi_key_mode')
@@ -2197,6 +2257,19 @@ export function ChannelMutateDrawer({
                     'Add a new channel by providing the necessary information.'
                   )}
             </SheetDescription>
+            {!isEditing && (
+              <div className='flex justify-start'>
+                <Button
+                  type='button'
+                  size='sm'
+                  variant='outline'
+                  onClick={() => void readClipboardConfig()}
+                >
+                  <ClipboardPaste />
+                  {t('Paste config from clipboard')}
+                </Button>
+              </div>
+            )}
           </SheetHeader>
 
           {sensitiveLocked && (
@@ -2208,6 +2281,31 @@ export function ChannelMutateDrawer({
                 {t(
                   'You can still edit non-sensitive operations fields such as models, groups, priority, and weight.'
                 )}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {!isEditing && clipboardConfig && (
+            <Alert>
+              <AlertDescription className='flex flex-wrap items-center justify-between gap-2'>
+                <span>{t('Detected connection info in the clipboard')}</span>
+                <span className='flex gap-2'>
+                  <Button
+                    type='button'
+                    size='sm'
+                    onClick={() => applyClipboardConfig(clipboardConfig)}
+                  >
+                    {t('Fill in')}
+                  </Button>
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='ghost'
+                    onClick={() => setClipboardConfig(null)}
+                  >
+                    {t('Dismiss')}
+                  </Button>
+                </span>
               </AlertDescription>
             </Alert>
           )}

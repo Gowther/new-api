@@ -257,16 +257,20 @@ func TestSetChannelModelRoutingOverrideRejectsUnsupportedOrDisabledChannel(t *te
 
 func TestModelRoutingOverrideCleanupLifecycle(t *testing.T) {
 	db := setupModelRoutingOverrideTestDB(t)
+	// Temporary routing fails closed, so leaving the rule on a channel that
+	// stopped serving would take its models down until someone intervened.
+	// Both kinds of disable release it.
 	channel := createRoutingTestChannel(t, db, 61, "cleanup-model", "default")
 	enableRoutingOverride(t, channel.Id)
-
 	assert.True(t, UpdateChannelStatus(channel.Id, "", common.ChannelStatusAutoDisabled, "automatic failure"))
 	_, found, err := GetModelRoutingOverrideTarget("cleanup-model")
 	require.NoError(t, err)
-	assert.True(t, found, "automatic disable must preserve temporary mode")
+	assert.False(t, found, "automatic disable must release temporary mode")
 
+	channel = createRoutingTestChannel(t, db, 64, "manual-cleanup-model", "default")
+	enableRoutingOverride(t, channel.Id)
 	assert.True(t, UpdateChannelStatus(channel.Id, "", common.ChannelStatusManuallyDisabled, "manual operation"))
-	_, found, err = GetModelRoutingOverrideTarget("cleanup-model")
+	_, found, err = GetModelRoutingOverrideTarget("manual-cleanup-model")
 	require.NoError(t, err)
 	assert.False(t, found)
 
@@ -311,6 +315,77 @@ func TestFailedManualDisablePreservesModelRoutingOverride(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, found)
 	assert.Equal(t, channel.Id, channelID)
+}
+
+func createMultiKeyRoutingTestChannel(t *testing.T, db *gorm.DB, id int, models string) Channel {
+	t.Helper()
+	channel := Channel{
+		Id:     id,
+		Name:   "multi-key routing target",
+		Key:    "first-key\nsecond-key",
+		Status: common.ChannelStatusEnabled,
+		Models: models,
+		Group:  "default",
+		ChannelInfo: ChannelInfo{
+			IsMultiKey:   true,
+			MultiKeySize: 2,
+		},
+	}
+	require.NoError(t, db.Create(&channel).Error)
+	require.NoError(t, channel.UpdateAbilities(nil))
+	return channel
+}
+
+// Disabling one key of a multi-key target leaves the channel serving, so the
+// rule stands; losing the last key takes the channel down and releases it. Both
+// entry points decide on the channel's resulting status, not on the status asked
+// for a single key.
+func TestMultiKeyAutoDisableReleasesModelRoutingOverrideOnceChannelStops(t *testing.T) {
+	for _, testCase := range []struct {
+		name     string
+		disable  func(t *testing.T, channelID int, keyIndex int, usingKey string)
+		channels [2]int
+	}{
+		{
+			name:     "by key index",
+			channels: [2]int{71, 72},
+			disable: func(t *testing.T, channelID int, keyIndex int, _ string) {
+				t.Helper()
+				require.True(t, UpdateChannelStatusByKeyIndex(channelID, keyIndex, common.ChannelStatusAutoDisabled, "upstream failure"))
+			},
+		},
+		{
+			name:     "by using key",
+			channels: [2]int{73, 74},
+			disable: func(t *testing.T, channelID int, _ int, usingKey string) {
+				t.Helper()
+				require.True(t, UpdateChannelStatus(channelID, usingKey, common.ChannelStatusAutoDisabled, "upstream failure"))
+			},
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			db := setupModelRoutingOverrideTestDB(t)
+			channel := createMultiKeyRoutingTestChannel(t, db, testCase.channels[0], "cascade-model")
+			enableRoutingOverride(t, channel.Id)
+
+			testCase.disable(t, channel.Id, 0, "first-key")
+			serving, err := GetChannelById(channel.Id, false)
+			require.NoError(t, err)
+			require.Equal(t, common.ChannelStatusEnabled, serving.Status)
+			channelID, found, err := GetModelRoutingOverrideTarget("cascade-model")
+			require.NoError(t, err)
+			require.True(t, found, "one failed key must not release a channel that still serves")
+			assert.Equal(t, channel.Id, channelID)
+
+			testCase.disable(t, channel.Id, 1, "second-key")
+			stopped, err := GetChannelById(channel.Id, false)
+			require.NoError(t, err)
+			require.Equal(t, common.ChannelStatusAutoDisabled, stopped.Status)
+			_, found, err = GetModelRoutingOverrideTarget("cascade-model")
+			require.NoError(t, err)
+			assert.False(t, found)
+		})
+	}
 }
 
 func TestRepeatedManualDisableClearsStaleModelRoutingOverride(t *testing.T) {

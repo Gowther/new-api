@@ -378,7 +378,7 @@ func migrateLegacyModelRoutingOverrides() error {
 	}
 	channel, err := GetChannelById(targetChannelID, false)
 	if errors.Is(err, gorm.ErrRecordNotFound) ||
-		(err == nil && channel.Status == common.ChannelStatusManuallyDisabled) {
+		(err == nil && channelStatusStopsServing(channel.Status)) {
 		if err := DB.Transaction(func(tx *gorm.DB) error {
 			return deleteLegacyModelRoutingOverrides(tx)
 		}); err != nil {
@@ -394,8 +394,7 @@ func migrateLegacyModelRoutingOverrides() error {
 		return err
 	}
 
-	enabledOnly := channel.Status != common.ChannelStatusAutoDisabled
-	normalized, err := buildChannelModelRoutingOverrides(targetChannelID, enabledOnly)
+	normalized, err := buildChannelModelRoutingOverrides(targetChannelID, true)
 	if err != nil {
 		if err := legacyQuery.Update("scope", modelRoutingOverrideScopeChannel).Error; err != nil {
 			return err

@@ -650,10 +650,16 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
   const [isDeletingChannel, setIsDeletingChannel] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const routingPrompt = useRoutingOverridePrompt()
-  // Set by the temporary-mode banner to bring its channel's row into view. It
-  // behaves like targetChannelId, except it comes from inside the workbench, and
-  // it lasts until the operator moves through the columns themselves.
+  // Set by the temporary-mode banner to mark its channel's row. It behaves like
+  // targetChannelId, except it comes from inside the workbench, and it lasts
+  // until the operator moves through the columns themselves.
   const [focusedChannelId, setFocusedChannelId] = useState<number | null>(null)
+  // The row to scroll to, consumed once. Kept apart from the marks above because
+  // those persist: an effect that scrolls for as long as a channel stays marked
+  // re-runs on every routingChanges edit and drags the table away mid-keystroke.
+  const [pendingScrollChannelId, setPendingScrollChannelId] = useState<
+    number | null
+  >(props.targetChannelId ?? null)
   const [isUpdatingRoutingOverride, setIsUpdatingRoutingOverride] =
     useState(false)
   // 'all' clears every override from the header button; a single override comes
@@ -1109,35 +1115,46 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     )
   }, [selectedRoutingSelection])
 
-  // A deep link and the temporary-mode banner both land on one channel's row.
+  // A deep link and the temporary-mode banner both mark one channel's row.
   const spotlightChannelId = props.targetChannelId ?? focusedChannelId
 
+  // A deep link arriving later asks for its own scroll.
   useEffect(() => {
-    if (!spotlightChannelId) return
+    if (props.targetChannelId) setPendingScrollChannelId(props.targetChannelId)
+  }, [props.targetChannelId])
+
+  useEffect(() => {
+    if (!pendingScrollChannelId) return
     // Only the deep link has a model to wait for; the banner sets both at once.
     if (
-      props.targetChannelId &&
+      props.targetChannelId === pendingScrollChannelId &&
       props.targetModelName &&
       selectedModelName !== props.targetModelName
     ) {
       return
     }
-    if (!channelsForModel.some((channel) => channel.id === spotlightChannelId)) {
+    // The row appears once a model the channel serves is selected. Until then
+    // there is nothing to scroll to, so the request waits rather than expires.
+    if (
+      !channelsForModel.some((channel) => channel.id === pendingScrollChannelId)
+    ) {
       return
     }
 
     const frame = window.requestAnimationFrame(() => {
       document
-        .querySelector(`#routing-channel-${spotlightChannelId}`)
+        .querySelector(`#routing-channel-${pendingScrollChannelId}`)
         ?.scrollIntoView({ block: 'center' })
     })
+    // Scrolling is a one-time answer to the request; the mark outlives it.
+    setPendingScrollChannelId(null)
     return () => window.cancelAnimationFrame(frame)
   }, [
     channelsForModel,
+    pendingScrollChannelId,
     props.targetChannelId,
     props.targetModelName,
     selectedModelName,
-    spotlightChannelId,
   ])
 
   const refreshRoutingData = useCallback(async () => {
@@ -1203,6 +1220,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     setSelectedProviderKey(providerKey)
     setSelectedModelName(target.model_name)
     setFocusedChannelId(override.channel_id)
+    setPendingScrollChannelId(override.channel_id)
   }
 
   const handleShowAllModelsChange = (checked: boolean) => {

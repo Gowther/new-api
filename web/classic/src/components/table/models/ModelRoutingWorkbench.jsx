@@ -571,10 +571,16 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   // Holds the channel list as it was when the create finished, so the jump can
   // tell "the catalog has not caught up yet" from "this model is unknown".
   const [pendingCreated, setPendingCreated] = useState(null);
-  // Set by the temporary-mode banner to bring its channel's row into view. It
-  // behaves like targetChannelId, except it comes from inside the workbench, and
-  // it lasts until the operator moves through the columns themselves.
+  // Set by the temporary-mode banner to mark its channel's row. It behaves like
+  // targetChannelId, except it comes from inside the workbench, and it lasts
+  // until the operator moves through the columns themselves.
   const [focusedChannelId, setFocusedChannelId] = useState(null);
+  // The row to scroll to, consumed once. Kept apart from the marks above because
+  // those persist: an effect that scrolls for as long as a channel stays marked
+  // re-runs on every routingChanges edit and drags the table away mid-keystroke.
+  const [pendingScrollChannelId, setPendingScrollChannelId] = useState(
+    targetChannelId || null,
+  );
   const [showAllModels, setShowAllModels] = useState(() =>
     readStoredShowAllModels(),
   );
@@ -1029,35 +1035,44 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     );
   }, [selectedRoutingSelection]);
 
-  // A deep link and the temporary-mode banner both land on one channel's row.
+  // A deep link and the temporary-mode banner both mark one channel's row.
   const spotlightChannelId = targetChannelId || focusedChannelId;
 
+  // A deep link arriving later asks for its own scroll.
   useEffect(() => {
-    if (!spotlightChannelId) return;
+    if (targetChannelId) setPendingScrollChannelId(targetChannelId);
+  }, [targetChannelId]);
+
+  useEffect(() => {
+    if (!pendingScrollChannelId) return;
     // Only the deep link has a model to wait for; the banner sets both at once.
     if (
-      targetChannelId &&
+      targetChannelId === pendingScrollChannelId &&
       targetModelName &&
       selectedModelName !== targetModelName
     ) {
       return;
     }
+    // The row appears once a model the channel serves is selected. Until then
+    // there is nothing to scroll to, so the request waits rather than expires.
     if (
-      !channelsForModel.some((channel) => channel.id === spotlightChannelId)
+      !channelsForModel.some((channel) => channel.id === pendingScrollChannelId)
     ) {
       return;
     }
 
     const frame = window.requestAnimationFrame(() => {
       document
-        .querySelector(`[data-routing-channel-id="${spotlightChannelId}"]`)
+        .querySelector(`[data-routing-channel-id="${pendingScrollChannelId}"]`)
         ?.scrollIntoView({ block: 'center' });
     });
+    // Scrolling is a one-time answer to the request; the mark outlives it.
+    setPendingScrollChannelId(null);
     return () => window.cancelAnimationFrame(frame);
   }, [
     channelsForModel,
+    pendingScrollChannelId,
     selectedModelName,
-    spotlightChannelId,
     targetChannelId,
     targetModelName,
   ]);
@@ -1123,6 +1138,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     setSelectedProviderKey(providerKey);
     setSelectedModelName(target.model_name);
     setFocusedChannelId(override.channel_id);
+    setPendingScrollChannelId(override.channel_id);
   };
 
   const handleShowAllModelsChange = (checked) => {

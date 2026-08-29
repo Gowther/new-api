@@ -650,6 +650,10 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
   const [isDeletingChannel, setIsDeletingChannel] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const routingPrompt = useRoutingOverridePrompt()
+  // Set by the temporary-mode banner to bring its channel's row into view. It
+  // behaves like targetChannelId, except it comes from inside the workbench, and
+  // it lasts until the operator moves through the columns themselves.
+  const [focusedChannelId, setFocusedChannelId] = useState<number | null>(null)
   const [isUpdatingRoutingOverride, setIsUpdatingRoutingOverride] =
     useState(false)
   // 'all' clears every override from the header button; a single override comes
@@ -1105,20 +1109,26 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     )
   }, [selectedRoutingSelection])
 
+  // A deep link and the temporary-mode banner both land on one channel's row.
+  const spotlightChannelId = props.targetChannelId ?? focusedChannelId
+
   useEffect(() => {
-    if (!props.targetChannelId) return
-    if (props.targetModelName && selectedModelName !== props.targetModelName) {
+    if (!spotlightChannelId) return
+    // Only the deep link has a model to wait for; the banner sets both at once.
+    if (
+      props.targetChannelId &&
+      props.targetModelName &&
+      selectedModelName !== props.targetModelName
+    ) {
       return
     }
-    if (
-      !channelsForModel.some((channel) => channel.id === props.targetChannelId)
-    ) {
+    if (!channelsForModel.some((channel) => channel.id === spotlightChannelId)) {
       return
     }
 
     const frame = window.requestAnimationFrame(() => {
       document
-        .querySelector(`#routing-channel-${props.targetChannelId}`)
+        .querySelector(`#routing-channel-${spotlightChannelId}`)
         ?.scrollIntoView({ block: 'center' })
     })
     return () => window.cancelAnimationFrame(frame)
@@ -1127,6 +1137,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     props.targetChannelId,
     props.targetModelName,
     selectedModelName,
+    spotlightChannelId,
   ])
 
   const refreshRoutingData = useCallback(async () => {
@@ -1138,6 +1149,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
   }, [channelsQuery, pricingQuery, routingOverrideQuery])
 
   const handleProviderSelect = (providerKey: string) => {
+    setFocusedChannelId(null)
     setSelectedProviderKey(providerKey)
     // While searching, land on that vendor's first match. Clearing the model
     // would let the fallback effect pick its first model overall, which the
@@ -1152,8 +1164,45 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
   // is not in the selected provider's list, so a match from another vendor has
   // to bring its vendor along.
   const handleModelSelect = (model: RoutingModel) => {
+    setFocusedChannelId(null)
     setSelectedProviderKey(getProviderKey(model))
     setSelectedModelName(model.model_name)
+  }
+
+  // Jump from the temporary-mode banner to the pinned channel's row. The channel
+  // only has a row while a model it serves is selected, so this picks one of its
+  // covered models the way following a newly created channel does: the first
+  // vendor as the vendor column orders them, then that vendor's first model by
+  // name. Clearing the search keeps the model visible in its vendor context.
+  const focusRoutingOverrideChannel = (override: ModelRoutingOverride) => {
+    const covered = new Set(override.models)
+    let candidates = models.filter((model) => covered.has(model.model_name))
+    if (candidates.length === 0) {
+      // A covered model with no enabled channel is filtered out of the model
+      // column, and the fallback effect would drop the selection right back. It
+      // happens when the channel is pinned but its ability for that model is
+      // off, so reveal it rather than letting the click do nothing.
+      candidates = routingCatalog.models.filter((model) =>
+        covered.has(model.model_name)
+      )
+      if (candidates.length === 0) return
+      setShowAllModels(true)
+      writeStoredShowAllModels(true)
+    }
+
+    const candidateKeys = new Set(candidates.map(getProviderKey))
+    const firstProvider = providerOptions.find((provider) =>
+      candidateKeys.has(provider.key)
+    )
+    const providerKey = firstProvider?.key ?? getProviderKey(candidates[0])
+    const [target] = candidates
+      .filter((model) => getProviderKey(model) === providerKey)
+      .sort((a, b) => a.model_name.localeCompare(b.model_name))
+
+    setSearchQuery('')
+    setSelectedProviderKey(providerKey)
+    setSelectedModelName(target.model_name)
+    setFocusedChannelId(override.channel_id)
   }
 
   const handleShowAllModelsChange = (checked: boolean) => {
@@ -1870,18 +1919,17 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                           copyable={false}
                         />
                         {/* The pinned channel need not serve the selected model,
-                            so the banner is the only way to reach it from here.
-                            channelId alone is ignored by the channels table
-                            unless the global filter matches it, so send both. */}
-                        <Link
-                          to='/channels'
-                          search={{
-                            channelId: routingOverride.channel_id,
-                            filter: String(routingOverride.channel_id),
-                          }}
-                          className='flex min-w-0 items-center gap-2 underline-offset-2 hover:underline'
-                          title={t('Open in channel list')}
-                          aria-label={`${t('Open in channel list')}: ${overrideLabel}`}
+                            so without this the table below may not even list it.
+                            Selecting one of its covered models brings its row
+                            into view. */}
+                        <button
+                          type='button'
+                          className='flex min-w-0 items-center gap-2 rounded-sm underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
+                          title={t('Show this channel in the routing table')}
+                          aria-label={`${t('Show this channel in the routing table')}: ${overrideLabel}`}
+                          onClick={() =>
+                            focusRoutingOverrideChannel(routingOverride)
+                          }
                         >
                           <span className='min-w-0 truncate font-medium'>
                             {overrideLabel}
@@ -1889,7 +1937,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                           <span className='text-muted-foreground font-mono text-xs'>
                             ID:{routingOverride.channel_id}
                           </span>
-                        </Link>
+                        </button>
                         <span className='text-muted-foreground text-xs'>
                           {t('{{count}} covered model(s)', {
                             count: routingOverride.model_count,
@@ -2094,7 +2142,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                           // A channel-mode search keeps every channel serving
                           // the model, so the ones it matched are marked to stay
                           // findable among them.
-                          (props.targetChannelId === channel.id ||
+                          (spotlightChannelId === channel.id ||
                             searchMatch.channelIds?.has(channel.id)) &&
                             'bg-warning/10 ring-warning/40 ring-1 ring-inset'
                         )}
@@ -2365,10 +2413,10 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                                 channel.status !==
                                   CHANNEL_STATUS.AUTO_DISABLED &&
                                 'bg-muted/40 hover:bg-muted/50',
-                              props.targetChannelId === channel.id &&
+                              spotlightChannelId === channel.id &&
                                 'bg-warning/10',
                               channel.status === CHANNEL_STATUS.ENABLED &&
-                                props.targetChannelId !== channel.id &&
+                                spotlightChannelId !== channel.id &&
                                 'hover:bg-muted/50'
                             )}
                           >

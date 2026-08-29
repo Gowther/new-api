@@ -1289,6 +1289,7 @@
     "在此输入隐私政策内容，支持 Markdown & HTML 代码": "Введите здесь содержимое политики конфиденциальности, поддерживается Markdown & HTML код",
     "在此输入首页内容，支持 Markdown & HTML 代码，设置后首页的状态信息将不再显示。如果输入的是一个链接，则会使用该链接作为 iframe 的 src 属性，这允许你设置任意网页作为首页": "Введите здесь содержание главной страницы, поддерживается код Markdown и HTML. После настройки информация о состоянии на главной странице больше не будет отображаться. Если введена ссылка, она будет использована как атрибут src для iframe, что позволяет установить любую веб-страницу как главную страницу",
     "在渠道列表中打开": "Открыть в списке каналов",
+    "在路由表中定位该渠道": "Показать этот канал в таблице маршрутизации",
     "在默认列表基础上新增一个分组": "Add a new group to the default list",
     "场景：站点提供两个价格档位，用户可以按需选择": "Scenario: site offers two pricing tiers, users can choose as needed",
     "场景：站点有 standard 和 premium 两个用户可选分组。希望 vip 用户额外看到 exclusive 分组，同时不再看到 standard 分组": "Scenario: site has standard and premium as selectable groups. Want vip users to see exclusive but not standard",

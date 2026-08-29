@@ -571,6 +571,10 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   // Holds the channel list as it was when the create finished, so the jump can
   // tell "the catalog has not caught up yet" from "this model is unknown".
   const [pendingCreated, setPendingCreated] = useState(null);
+  // Set by the temporary-mode banner to bring its channel's row into view. It
+  // behaves like targetChannelId, except it comes from inside the workbench, and
+  // it lasts until the operator moves through the columns themselves.
+  const [focusedChannelId, setFocusedChannelId] = useState(null);
   const [showAllModels, setShowAllModels] = useState(() =>
     readStoredShowAllModels(),
   );
@@ -1025,20 +1029,38 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     );
   }, [selectedRoutingSelection]);
 
+  // A deep link and the temporary-mode banner both land on one channel's row.
+  const spotlightChannelId = targetChannelId || focusedChannelId;
+
   useEffect(() => {
-    if (!targetChannelId) return;
-    if (targetModelName && selectedModelName !== targetModelName) return;
-    if (!channelsForModel.some((channel) => channel.id === targetChannelId)) {
+    if (!spotlightChannelId) return;
+    // Only the deep link has a model to wait for; the banner sets both at once.
+    if (
+      targetChannelId &&
+      targetModelName &&
+      selectedModelName !== targetModelName
+    ) {
+      return;
+    }
+    if (
+      !channelsForModel.some((channel) => channel.id === spotlightChannelId)
+    ) {
       return;
     }
 
     const frame = window.requestAnimationFrame(() => {
       document
-        .querySelector(`[data-routing-channel-id="${targetChannelId}"]`)
+        .querySelector(`[data-routing-channel-id="${spotlightChannelId}"]`)
         ?.scrollIntoView({ block: 'center' });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [channelsForModel, selectedModelName, targetChannelId, targetModelName]);
+  }, [
+    channelsForModel,
+    selectedModelName,
+    spotlightChannelId,
+    targetChannelId,
+    targetModelName,
+  ]);
 
   // A new channel's models are only selectable once the reloaded channel list
   // has put them in the catalog, so the jump is queued and applied by an effect.
@@ -1047,6 +1069,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   };
 
   const handleProviderSelect = (providerKey) => {
+    setFocusedChannelId(null);
     setSelectedProviderKey(providerKey);
     // While searching, land on that vendor's first match. Clearing the model
     // would let the fallback effect pick its first model overall, which the
@@ -1061,8 +1084,45 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   // is not in the selected provider's list, so a match from another vendor has
   // to bring its vendor along.
   const handleModelSelect = (model) => {
+    setFocusedChannelId(null);
     setSelectedProviderKey(getProviderKey(model));
     setSelectedModelName(model.model_name);
+  };
+
+  // Jump from the temporary-mode banner to the pinned channel's row. The channel
+  // only has a row while a model it serves is selected, so this picks one of its
+  // covered models the way following a newly created channel does: the first
+  // vendor as the vendor column orders them, then that vendor's first model by
+  // name. Clearing the search keeps the model visible in its vendor context.
+  const focusRoutingOverrideChannel = (override) => {
+    const covered = new Set(override.models || []);
+    let candidates = visibleModels.filter((model) =>
+      covered.has(model.model_name),
+    );
+    if (candidates.length === 0) {
+      // A covered model with no enabled channel is filtered out of the model
+      // column, and the fallback effect would drop the selection right back. It
+      // happens when the channel is pinned but its ability for that model is
+      // off, so reveal it rather than letting the click do nothing.
+      candidates = models.filter((model) => covered.has(model.model_name));
+      if (candidates.length === 0) return;
+      setShowAllModels(true);
+      writeStoredShowAllModels(true);
+    }
+
+    const candidateKeys = new Set(candidates.map(getProviderKey));
+    const firstProvider = providerOptions.find((provider) =>
+      candidateKeys.has(provider.key),
+    );
+    const providerKey = firstProvider?.key || getProviderKey(candidates[0]);
+    const [target] = candidates
+      .filter((model) => getProviderKey(model) === providerKey)
+      .sort((a, b) => a.model_name.localeCompare(b.model_name));
+
+    setSearchQuery('');
+    setSelectedProviderKey(providerKey);
+    setSelectedModelName(target.model_name);
+    setFocusedChannelId(override.channel_id);
   };
 
   const handleShowAllModelsChange = (checked) => {
@@ -2077,19 +2137,15 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                           {t('临时单渠道模式')}
                         </Tag>
                         {/* The pinned channel need not serve the selected model,
-                            so the banner is the only way to reach it from here.
-                            useChannelsData derives its search keyword from
-                            channel_id, so the id alone is enough. */}
+                            so without this the table below may not even list it.
+                            Selecting one of its covered models brings its row
+                            into view. */}
                         <button
                           type='button'
                           className='flex min-w-0 cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-left underline-offset-2 hover:underline'
-                          title={t('在渠道列表中打开')}
-                          aria-label={`${t('在渠道列表中打开')}: ${overrideLabel}`}
-                          onClick={() =>
-                            navigate(
-                              `/console/channel?channel_id=${override.channel_id}`,
-                            )
-                          }
+                          title={t('在路由表中定位该渠道')}
+                          aria-label={`${t('在路由表中定位该渠道')}: ${overrideLabel}`}
+                          onClick={() => focusRoutingOverrideChannel(override)}
                         >
                           <Text strong ellipsis>
                             {overrideLabel}
@@ -2173,7 +2229,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                 scroll={{ x: 1035 }}
                 onRow={(record) => {
                   const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
-                  const isTarget = record.id === targetChannelId;
+                  const isTarget = record.id === spotlightChannelId;
                   let background;
                   let accent;
 

@@ -81,7 +81,6 @@ import {
   getChannels,
   getModelRoutingOverride,
   normalizeModelRoutingOverrides,
-  setModelRoutingOverride,
   updateChannel,
   updateChannelStatus,
 } from '@/features/channels/api'
@@ -89,6 +88,7 @@ import { ChannelsProvider } from '@/features/channels/components/channels-provid
 import { ChannelTestDialog } from '@/features/channels/components/dialogs/channel-test-dialog'
 import { CopyChannelDialog } from '@/features/channels/components/dialogs/copy-channel-dialog'
 import { ChannelMutateDrawer } from '@/features/channels/components/drawers/channel-mutate-drawer'
+import { RoutingOverrideConflictNotice } from '@/features/channels/components/routing-override-conflict-notice'
 import {
   CHANNEL_STATUS,
   CHANNEL_STATUS_CONFIG,
@@ -96,6 +96,7 @@ import {
   ERROR_MESSAGES,
   SUCCESS_MESSAGES,
 } from '@/features/channels/constants'
+import { useRoutingOverridePrompt } from '@/features/channels/hooks/use-routing-override-prompt'
 import { channelsQueryKeys } from '@/features/channels/lib'
 import type {
   Channel,
@@ -648,8 +649,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
   const [testingChannel, setTestingChannel] = useState<Channel | null>(null)
   const [isDeletingChannel, setIsDeletingChannel] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const [routingOverrideCandidate, setRoutingOverrideCandidate] =
-    useState<Channel | null>(null)
+  const routingPrompt = useRoutingOverridePrompt()
   const [isUpdatingRoutingOverride, setIsUpdatingRoutingOverride] =
     useState(false)
   // 'all' clears every override from the header button; a single override comes
@@ -1231,46 +1231,6 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     setCopyingChannel(null)
     // A copy is a new channel, so the routing table has to pick it up.
     void channelsQuery.refetch()
-  }
-
-  const handleRoutingOverrideDialogOpenChange = (open: boolean) => {
-    if (open || isUpdatingRoutingOverride) return
-    setRoutingOverrideCandidate(null)
-  }
-
-  const handleConfirmRoutingOverride = async () => {
-    if (!routingOverrideCandidate) return
-
-    setIsUpdatingRoutingOverride(true)
-    try {
-      const isActive = isRoutingOverrideTarget(routingOverrideCandidate.id)
-      const response = isActive
-        ? await deleteModelRoutingOverride(routingOverrideCandidate.id)
-        : await setModelRoutingOverride(routingOverrideCandidate.id)
-      if (!response.success) {
-        throw new Error(
-          response.message || t('Failed to update temporary routing mode')
-        )
-      }
-      queryClient.setQueryData(
-        channelsQueryKeys.routingOverride(),
-        normalizeModelRoutingOverrides(response.data)
-      )
-      setRoutingOverrideCandidate(null)
-      toast.success(
-        isActive
-          ? t('Normal routing restored')
-          : t('Temporary single-channel mode enabled')
-      )
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : t('Failed to update temporary routing mode')
-      )
-    } finally {
-      setIsUpdatingRoutingOverride(false)
-    }
   }
 
   const handleRestoreRoutingOverride = async () => {
@@ -1863,7 +1823,11 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                   variant='outline'
                   size='sm'
                   onClick={() => setRestoreRoutingOverrideTarget('all')}
-                  disabled={!canEditRouting || isUpdatingRoutingOverride}
+                  disabled={
+                    !canEditRouting ||
+                    isUpdatingRoutingOverride ||
+                    routingPrompt.isSubmitting
+                  }
                 >
                   <HugeiconsIcon icon={UndoIcon} data-icon='inline-start' />
                   <span className='max-sm:hidden'>
@@ -1905,12 +1869,27 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                           size='sm'
                           copyable={false}
                         />
-                        <span className='min-w-0 truncate font-medium'>
-                          {overrideLabel}
-                        </span>
-                        <span className='text-muted-foreground font-mono text-xs'>
-                          ID:{routingOverride.channel_id}
-                        </span>
+                        {/* The pinned channel need not serve the selected model,
+                            so the banner is the only way to reach it from here.
+                            channelId alone is ignored by the channels table
+                            unless the global filter matches it, so send both. */}
+                        <Link
+                          to='/channels'
+                          search={{
+                            channelId: routingOverride.channel_id,
+                            filter: String(routingOverride.channel_id),
+                          }}
+                          className='flex min-w-0 items-center gap-2 underline-offset-2 hover:underline'
+                          title={t('Open in channel list')}
+                          aria-label={`${t('Open in channel list')}: ${overrideLabel}`}
+                        >
+                          <span className='min-w-0 truncate font-medium'>
+                            {overrideLabel}
+                          </span>
+                          <span className='text-muted-foreground font-mono text-xs'>
+                            ID:{routingOverride.channel_id}
+                          </span>
+                        </Link>
                         <span className='text-muted-foreground text-xs'>
                           {t('{{count}} covered model(s)', {
                             count: routingOverride.model_count,
@@ -1937,7 +1916,11 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                       className='shrink-0'
                       title={t('Restore normal routing')}
                       aria-label={`${t('Restore normal routing')}: ${overrideLabel}`}
-                      disabled={!canEditRouting || isUpdatingRoutingOverride}
+                      disabled={
+                        !canEditRouting ||
+                        isUpdatingRoutingOverride ||
+                        routingPrompt.isSubmitting
+                      }
                       onClick={() =>
                         setRestoreRoutingOverrideTarget(routingOverride)
                       }
@@ -2270,10 +2253,17 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                                         !canEditRouting ||
                                         (!isEnabled &&
                                           !isRoutingOverrideTarget(channel.id)) ||
-                                        isUpdatingRoutingOverride
+                                        isUpdatingRoutingOverride ||
+                                        routingPrompt.isSubmitting
                                       }
                                       onClick={() =>
-                                        setRoutingOverrideCandidate(channel)
+                                        routingPrompt.open({
+                                          id: channel.id,
+                                          name: channel.name,
+                                          isActive: isRoutingOverrideTarget(
+                                            channel.id
+                                          ),
+                                        })
                                       }
                                     />
                                   }
@@ -2453,34 +2443,51 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
         />
       </ChannelsProvider>
       <ConfirmDialog
-        open={routingOverrideCandidate !== null}
-        onOpenChange={handleRoutingOverrideDialogOpenChange}
+        open={routingPrompt.target !== null}
+        onOpenChange={(open) => {
+          if (!open && !routingPrompt.isSubmitting) routingPrompt.close()
+        }}
         title={
-          routingOverrideCandidate &&
-          isRoutingOverrideTarget(routingOverrideCandidate.id)
+          routingPrompt.target?.isActive
             ? t('Restore normal routing?')
             : t('Enable temporary single-channel mode?')
         }
         desc={
-          routingOverrideCandidate &&
-          isRoutingOverrideTarget(routingOverrideCandidate.id)
-            ? t(
-                'The temporary routing rule for channel "{{channel}}" and its models will be removed. Existing channel statuses, priorities, weights, and affinity data will remain unchanged.',
-                { channel: routingOverrideCandidate?.name ?? '' }
-              )
-            : t(
-                'All enabled models on channel "{{channel}}" will temporarily use only this channel in its supported groups. Explicit channel selection is unaffected.',
-                { channel: routingOverrideCandidate?.name ?? '' }
-              )
+          <div className='space-y-3'>
+            <div>
+              {routingPrompt.target?.isActive
+                ? t(
+                    'The temporary routing rule for channel "{{channel}}" and its models will be removed. Existing channel statuses, priorities, weights, and affinity data will remain unchanged.',
+                    { channel: routingPrompt.target?.name ?? '' }
+                  )
+                : t(
+                    'All enabled models on channel "{{channel}}" will temporarily use only this channel in its supported groups. Explicit channel selection is unaffected.',
+                    { channel: routingPrompt.target?.name ?? '' }
+                  )}
+            </div>
+            {routingPrompt.blockedReason ? (
+              <div className='text-destructive'>
+                {routingPrompt.blockedReason}
+              </div>
+            ) : null}
+            <RoutingOverrideConflictNotice conflicts={routingPrompt.conflicts} />
+          </div>
         }
         confirmText={
-          routingOverrideCandidate &&
-          isRoutingOverrideTarget(routingOverrideCandidate.id)
+          routingPrompt.target?.isActive
             ? t('Restore normal routing')
-            : t('Enable temporary mode')
+            : routingPrompt.conflicts.length > 0
+              ? t('Replace and enable')
+              : t('Enable temporary mode')
         }
-        isLoading={isUpdatingRoutingOverride}
-        handleConfirm={handleConfirmRoutingOverride}
+        destructive={routingPrompt.conflicts.length > 0}
+        disabled={
+          !canEditRouting ||
+          routingPrompt.isChecking ||
+          routingPrompt.blockedReason !== null
+        }
+        isLoading={routingPrompt.isSubmitting}
+        handleConfirm={routingPrompt.confirm}
       />
       <ConfirmDialog
         open={restoreRoutingOverrideTarget !== null}

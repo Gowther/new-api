@@ -43,6 +43,7 @@ var channelPermissionRoutes = []permissionRoute{
 	{method: http.MethodGet, path: "/models_enabled", permission: authz.ChannelRead, handler: controller.EnabledListModels},
 	{method: http.MethodPost, path: "/model_vendor_groups", permission: authz.ChannelRead, handler: controller.PreviewChannelModelVendorGroups},
 	{method: http.MethodGet, path: "/model_routing_override", permission: authz.ChannelRead, handler: controller.GetModelRoutingOverride},
+	{method: http.MethodGet, path: "/model_routing_override/conflicts", permission: authz.ChannelRead, handler: controller.GetModelRoutingOverrideConflicts},
 	{method: http.MethodPut, path: "/model_routing_override", permission: authz.ChannelWrite, handler: controller.SetModelRoutingOverride},
 	{method: http.MethodDelete, path: "/model_routing_override", permission: authz.ChannelWrite, handler: controller.DeleteModelRoutingOverride},
 	{method: http.MethodPost, path: "/model_mapping/preview", permission: authz.ChannelWrite, handler: controller.PreviewChannelModelMappings},

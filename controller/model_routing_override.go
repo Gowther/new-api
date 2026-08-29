@@ -2,6 +2,7 @@ package controller
 
 import (
 	"errors"
+	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -13,8 +14,11 @@ import (
 )
 
 type modelRoutingOverrideRequest struct {
-	Model     string `json:"model"`
-	ChannelId int    `json:"channel_id"`
+	Model string `json:"model"`
+	// ReplaceConflicts carries the operator's confirmation that the channels
+	// reported by a previous preflight or blocked write may be released.
+	ReplaceConflicts bool `json:"replace_conflicts"`
+	ChannelId        int  `json:"channel_id"`
 }
 
 type modelRoutingOverrideResponse struct {
@@ -125,28 +129,63 @@ func GetModelRoutingOverride(c *gin.Context) {
 	common.ApiSuccess(c, responses)
 }
 
+// GetModelRoutingOverrideConflicts reports which temporary targets enabling a
+// channel would release, so the confirmation prompt can name them up front.
+func GetModelRoutingOverrideConflicts(c *gin.Context) {
+	channelID, err := strconv.Atoi(strings.TrimSpace(c.Query("channel_id")))
+	if err != nil || channelID <= 0 {
+		common.ApiError(c, errors.New("invalid channel id"))
+		return
+	}
+	conflicts, err := model.PreviewChannelModelRoutingOverrideConflicts(channelID)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if conflicts == nil {
+		conflicts = []model.ModelRoutingOverrideConflict{}
+	}
+	common.ApiSuccess(c, conflicts)
+}
+
 func SetModelRoutingOverride(c *gin.Context) {
 	req := modelRoutingOverrideRequest{}
 	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	overrides, err := model.SetChannelModelRoutingOverride(req.ChannelId)
+	result, err := model.SetChannelModelRoutingOverride(req.ChannelId, req.ReplaceConflicts)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	response, err := buildModelRoutingOverrideResponse(overrides)
+	// Conflicts that were not confirmed leave the rules untouched. Report them
+	// alongside the message so the client can ask for confirmation instead of
+	// only showing a failure, including when a preflight missed a late change.
+	if !result.Applied {
+		c.JSON(http.StatusOK, gin.H{
+			"success":   false,
+			"message":   model.ModelRoutingOverrideConflictError(result.Conflicts).Error(),
+			"conflicts": result.Conflicts,
+		})
+		return
+	}
+	response, err := buildModelRoutingOverrideResponse(result.Overrides)
 	if err != nil {
 		common.ApiError(c, err)
 		return
+	}
+	releasedChannelIDs := make([]string, 0, len(result.Conflicts))
+	for _, conflict := range result.Conflicts {
+		releasedChannelIDs = append(releasedChannelIDs, strconv.Itoa(conflict.ChannelId))
 	}
 	recordManageAudit(c, "channel.routing_override_set", map[string]interface{}{
-		"channel_id":   response.ChannelId,
-		"channel_name": response.ChannelName,
-		"models":       strings.Join(response.Models, ","),
-		"model_count":  response.ModelCount,
-		"groups":       strings.Join(response.Groups, ","),
+		"channel_id":        response.ChannelId,
+		"channel_name":      response.ChannelName,
+		"models":            strings.Join(response.Models, ","),
+		"model_count":       response.ModelCount,
+		"groups":            strings.Join(response.Groups, ","),
+		"released_channels": strings.Join(releasedChannelIDs, ","),
 	})
 	allOverrides, err := model.GetAllModelRoutingOverrides()
 	if err != nil {

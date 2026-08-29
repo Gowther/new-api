@@ -72,6 +72,10 @@ import {
 } from '../../../helpers';
 import EditChannelModal from '../channels/modals/EditChannelModal';
 import ModelTestModal from '../channels/modals/ModelTestModal';
+import {
+  fetchRoutingOverrideConflicts,
+  renderRoutingOverrideConflicts,
+} from '../channels/routingOverrideConflicts';
 
 const { Text } = Typography;
 
@@ -1177,30 +1181,57 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     }
   };
 
-  const handleEnableRoutingOverride = (channel) => {
+  const handleEnableRoutingOverride = async (channel) => {
     const activeOverride = routingOverride.find(
       (override) => override.channel_id === channel.id,
     );
     const isActive = Boolean(activeOverride);
     if (!isActive && channel.status !== CHANNEL_STATUS.ENABLED) return;
 
+    // Enabling has to name the temporary targets it would release before asking.
+    // Restoring cannot conflict, so it skips the preflight.
+    let conflicts = [];
+    if (!isActive) {
+      setRoutingOverrideUpdating(true);
+      try {
+        conflicts = await fetchRoutingOverrideConflicts(channel.id);
+      } catch (error) {
+        showError(error.message || t('更新临时路由模式失败'));
+        return;
+      } finally {
+        setRoutingOverrideUpdating(false);
+      }
+    }
+
     const currentTargetName = activeOverride
       ? activeOverride.channel_name || `#${activeOverride.channel_id}`
       : channel.name;
     const modelCount = splitCsv(channel.models).length;
+    let okText = t('开启临时模式');
+    if (isActive) {
+      okText = t('恢复正常路由');
+    } else if (conflicts.length > 0) {
+      okText = t('替换并开启');
+    }
 
     Modal.confirm({
       title: isActive ? t('恢复正常路由？') : t('开启临时单渠道模式？'),
-      content: isActive
-        ? t(
-            '临时路由目标“{{channel}}”及其模型规则将被移除。现有渠道状态、优先级、权重和亲和性数据不会改变。',
-            { channel: currentTargetName },
-          )
-        : t(
+      content: isActive ? (
+        t(
+          '临时路由目标“{{channel}}”及其模型规则将被移除。现有渠道状态、优先级、权重和亲和性数据不会改变。',
+          { channel: currentTargetName },
+        )
+      ) : (
+        <div>
+          {t(
             '渠道“{{channel}}”上的 {{count}} 个模型将临时仅使用该渠道；该渠道不支持的模型恢复正常路由。显式指定渠道的请求不受影响。',
             { channel: channel.name, count: modelCount },
-          ),
-      okText: isActive ? t('恢复正常路由') : t('开启临时模式'),
+          )}
+          {renderRoutingOverrideConflicts(conflicts, t)}
+        </div>
+      ),
+      okText,
+      okButtonProps: conflicts.length > 0 ? { type: 'danger' } : undefined,
       cancelText: t('取消'),
       onOk: async () => {
         setRoutingOverrideUpdating(true);
@@ -1211,6 +1242,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
               })
             : await API.put('/api/channel/model_routing_override', {
                 channel_id: channel.id,
+                replace_conflicts: conflicts.length > 0,
               });
           const { success, message, data } = res.data || {};
           if (!success) {
@@ -2044,12 +2076,28 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                         <Tag color='orange' shape='circle' size='small'>
                           {t('临时单渠道模式')}
                         </Tag>
-                        <Text strong ellipsis>
-                          {overrideLabel}
-                        </Text>
-                        <Text type='tertiary' size='small'>
-                          ID:{override.channel_id}
-                        </Text>
+                        {/* The pinned channel need not serve the selected model,
+                            so the banner is the only way to reach it from here.
+                            useChannelsData derives its search keyword from
+                            channel_id, so the id alone is enough. */}
+                        <button
+                          type='button'
+                          className='flex min-w-0 cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-left underline-offset-2 hover:underline'
+                          title={t('在渠道列表中打开')}
+                          aria-label={`${t('在渠道列表中打开')}: ${overrideLabel}`}
+                          onClick={() =>
+                            navigate(
+                              `/console/channel?channel_id=${override.channel_id}`,
+                            )
+                          }
+                        >
+                          <Text strong ellipsis>
+                            {overrideLabel}
+                          </Text>
+                          <Text type='tertiary' size='small'>
+                            ID:{override.channel_id}
+                          </Text>
+                        </button>
                         <Text type='tertiary' size='small'>
                           {t('{{count}} 个覆盖模型', {
                             count: override.model_count,

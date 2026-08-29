@@ -42,6 +42,16 @@ func setupModelRoutingOverrideTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
+// enableRoutingOverride applies temporary routing without confirming any
+// replacement, asserting the channel was free of conflicts.
+func enableRoutingOverride(t *testing.T, channelID int) []ModelRoutingOverride {
+	t.Helper()
+	result, err := SetChannelModelRoutingOverride(channelID, false)
+	require.NoError(t, err)
+	require.True(t, result.Applied, "expected no conflicts, got %+v", result.Conflicts)
+	return result.Overrides
+}
+
 func createRoutingTestChannel(t *testing.T, db *gorm.DB, id int, models string, groups string) Channel {
 	t.Helper()
 	channel := Channel{
@@ -62,8 +72,7 @@ func TestModelRoutingOverrideLifecycle(t *testing.T) {
 	channelA := createRoutingTestChannel(t, db, 41, "model-a,shared-model", "default,premium")
 	channelB := createRoutingTestChannel(t, db, 42, "shared-model,model-b", "default")
 
-	overrides, err := SetChannelModelRoutingOverride(channelA.Id)
-	require.NoError(t, err)
+	overrides := enableRoutingOverride(t, channelA.Id)
 	assert.Len(t, overrides, 4)
 	for _, override := range overrides {
 		assert.Equal(t, channelA.Id, override.ChannelId)
@@ -76,9 +85,7 @@ func TestModelRoutingOverrideLifecycle(t *testing.T) {
 		assert.True(t, found)
 		assert.Equal(t, channelA.Id, channelID)
 	}
-	refreshed, err := SetChannelModelRoutingOverride(channelA.Id)
-	require.NoError(t, err)
-	assert.Len(t, refreshed, 4)
+	assert.Len(t, enableRoutingOverride(t, channelA.Id), 4)
 
 	// A channel status/ability outage does not silently leave temporary mode.
 	require.NoError(t, UpdateAbilityStatus(channelA.Id, false))
@@ -87,9 +94,11 @@ func TestModelRoutingOverrideLifecycle(t *testing.T) {
 	assert.True(t, found)
 	assert.Equal(t, channelA.Id, channelID)
 
-	// Overlapping models are rejected and the existing channel remains active.
-	_, err = SetChannelModelRoutingOverride(channelB.Id)
-	require.ErrorContains(t, err, "temporary routing conflicts")
+	// Overlapping models block the write and the existing channel stays active.
+	result, err := SetChannelModelRoutingOverride(channelB.Id, false)
+	require.NoError(t, err)
+	assert.False(t, result.Applied)
+	assert.Empty(t, result.Overrides)
 	channelID, found, err = GetModelRoutingOverrideTarget("shared-model")
 	require.NoError(t, err)
 	assert.True(t, found)
@@ -97,9 +106,7 @@ func TestModelRoutingOverrideLifecycle(t *testing.T) {
 
 	// A disjoint channel can be enabled alongside the existing target.
 	channelC := createRoutingTestChannel(t, db, 43, "model-b", "default")
-	overrides, err = SetChannelModelRoutingOverride(channelC.Id)
-	require.NoError(t, err)
-	assert.Len(t, overrides, 1)
+	assert.Len(t, enableRoutingOverride(t, channelC.Id), 1)
 	channelID, found, err = GetModelRoutingOverrideTarget("model-a")
 	require.NoError(t, err)
 	assert.True(t, found)
@@ -140,15 +147,21 @@ func TestModelRoutingOverrideLifecycle(t *testing.T) {
 	assert.False(t, found)
 }
 
-func TestModelRoutingOverrideRejectsNormalizedModelConflicts(t *testing.T) {
+func TestModelRoutingOverrideReportsNormalizedModelConflicts(t *testing.T) {
 	db := setupModelRoutingOverrideTestDB(t)
 	wildcardChannel := createRoutingTestChannel(t, db, 44, "gpt-4-gizmo-*", "default")
 	variantChannel := createRoutingTestChannel(t, db, 45, "gpt-4-gizmo-alpha", "default")
 
-	_, err := SetChannelModelRoutingOverride(wildcardChannel.Id)
+	enableRoutingOverride(t, wildcardChannel.Id)
+	// The variant only matches through normalization, so the conflict has to
+	// name the wildcard rule the operator would be releasing.
+	result, err := SetChannelModelRoutingOverride(variantChannel.Id, false)
 	require.NoError(t, err)
-	_, err = SetChannelModelRoutingOverride(variantChannel.Id)
-	require.ErrorContains(t, err, "gpt-4-gizmo-*")
+	assert.False(t, result.Applied)
+	require.Len(t, result.Conflicts, 1)
+	assert.Equal(t, wildcardChannel.Id, result.Conflicts[0].ChannelId)
+	assert.Equal(t, []string{"gpt-4-gizmo-*"}, result.Conflicts[0].Models)
+	require.ErrorContains(t, ModelRoutingOverrideConflictError(result.Conflicts), "gpt-4-gizmo-*")
 
 	channelID, found, err := GetModelRoutingOverrideTarget("gpt-4-gizmo-alpha")
 	require.NoError(t, err)
@@ -156,12 +169,56 @@ func TestModelRoutingOverrideRejectsNormalizedModelConflicts(t *testing.T) {
 	assert.Equal(t, wildcardChannel.Id, channelID)
 }
 
+func TestModelRoutingOverridePreviewsAndReplacesConflicts(t *testing.T) {
+	db := setupModelRoutingOverrideTestDB(t)
+	channelA := createRoutingTestChannel(t, db, 46, "shared-model,only-a", "default")
+	channelB := createRoutingTestChannel(t, db, 47, "shared-model,only-b", "default")
+	disjoint := createRoutingTestChannel(t, db, 48, "only-c", "default")
+
+	enableRoutingOverride(t, channelA.Id)
+
+	conflicts, err := PreviewChannelModelRoutingOverrideConflicts(channelB.Id)
+	require.NoError(t, err)
+	require.Len(t, conflicts, 1)
+	assert.Equal(t, channelA.Id, conflicts[0].ChannelId)
+	assert.Equal(t, channelA.Name, conflicts[0].ChannelName)
+	assert.Equal(t, []string{"shared-model"}, conflicts[0].Models)
+
+	// The preview must not write: A still owns the overlapping model.
+	channelID, found, err := GetModelRoutingOverrideTarget("shared-model")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, channelA.Id, channelID)
+
+	disjointConflicts, err := PreviewChannelModelRoutingOverrideConflicts(disjoint.Id)
+	require.NoError(t, err)
+	assert.Empty(t, disjointConflicts)
+
+	// Confirming the replacement releases A as a whole, including the models it
+	// did not share with B, because temporary routing is channel-wide.
+	result, err := SetChannelModelRoutingOverride(channelB.Id, true)
+	require.NoError(t, err)
+	require.True(t, result.Applied)
+	assert.Len(t, result.Overrides, 2)
+	require.Len(t, result.Conflicts, 1)
+	assert.Equal(t, channelA.Id, result.Conflicts[0].ChannelId)
+
+	for _, modelName := range []string{"shared-model", "only-b"} {
+		channelID, found, err = GetModelRoutingOverrideTarget(modelName)
+		require.NoError(t, err)
+		assert.True(t, found)
+		assert.Equal(t, channelB.Id, channelID)
+	}
+	_, found, err = GetModelRoutingOverrideTarget("only-a")
+	require.NoError(t, err)
+	assert.False(t, found)
+}
+
 func TestModelRoutingOverrideSupportsNormalizedAbilities(t *testing.T) {
 	db := setupModelRoutingOverrideTestDB(t)
 	wildcardChannel := createRoutingTestChannel(t, db, 43, "gpt-4-gizmo-*", "default")
 
-	overrides, err := SetChannelModelRoutingOverride(wildcardChannel.Id)
-	require.NoError(t, err)
+	overrides := enableRoutingOverride(t, wildcardChannel.Id)
 	require.Len(t, overrides, 1)
 	assert.Equal(t, "gpt-4-gizmo-*", overrides[0].Model)
 
@@ -184,20 +241,24 @@ func TestSetChannelModelRoutingOverrideRejectsUnsupportedOrDisabledChannel(t *te
 	db := setupModelRoutingOverrideTestDB(t)
 	channel := Channel{Id: 52, Name: "candidate", Key: "key", Status: common.ChannelStatusEnabled}
 	require.NoError(t, db.Create(&channel).Error)
-	_, err := SetChannelModelRoutingOverride(channel.Id)
+	_, err := SetChannelModelRoutingOverride(channel.Id, false)
+	require.ErrorContains(t, err, "does not have any enabled model ability")
+	// The preflight rejects the same channels, so the prompt never opens on one.
+	_, err = PreviewChannelModelRoutingOverrideConflicts(channel.Id)
 	require.ErrorContains(t, err, "does not have any enabled model ability")
 
 	disabled := createRoutingTestChannel(t, db, 53, "gpt-4.1", "default")
 	require.NoError(t, db.Model(&Channel{}).Where("id = ?", disabled.Id).Update("status", common.ChannelStatusManuallyDisabled).Error)
-	_, err = SetChannelModelRoutingOverride(disabled.Id)
+	_, err = SetChannelModelRoutingOverride(disabled.Id, false)
+	require.ErrorContains(t, err, "target channel is disabled")
+	_, err = PreviewChannelModelRoutingOverrideConflicts(disabled.Id)
 	require.ErrorContains(t, err, "target channel is disabled")
 }
 
 func TestModelRoutingOverrideCleanupLifecycle(t *testing.T) {
 	db := setupModelRoutingOverrideTestDB(t)
 	channel := createRoutingTestChannel(t, db, 61, "cleanup-model", "default")
-	_, err := SetChannelModelRoutingOverride(channel.Id)
-	require.NoError(t, err)
+	enableRoutingOverride(t, channel.Id)
 
 	assert.True(t, UpdateChannelStatus(channel.Id, "", common.ChannelStatusAutoDisabled, "automatic failure"))
 	_, found, err := GetModelRoutingOverrideTarget("cleanup-model")
@@ -210,8 +271,7 @@ func TestModelRoutingOverrideCleanupLifecycle(t *testing.T) {
 	assert.False(t, found)
 
 	channel = createRoutingTestChannel(t, db, 62, "edit-model", "default")
-	_, err = SetChannelModelRoutingOverride(channel.Id)
-	require.NoError(t, err)
+	enableRoutingOverride(t, channel.Id)
 	updated, err := GetChannelById(channel.Id, true)
 	require.NoError(t, err)
 	updated.Models = "edited-model"
@@ -221,8 +281,7 @@ func TestModelRoutingOverrideCleanupLifecycle(t *testing.T) {
 	assert.False(t, found)
 
 	channel = createRoutingTestChannel(t, db, 63, "delete-model", "default")
-	_, err = SetChannelModelRoutingOverride(channel.Id)
-	require.NoError(t, err)
+	enableRoutingOverride(t, channel.Id)
 	require.NoError(t, channel.Delete())
 	_, found, err = GetModelRoutingOverrideTarget("delete-model")
 	require.NoError(t, err)
@@ -245,8 +304,7 @@ func TestFailedManualDisablePreservesModelRoutingOverride(t *testing.T) {
 	}
 	require.NoError(t, db.Create(&channel).Error)
 	require.NoError(t, channel.UpdateAbilities(nil))
-	_, err := SetChannelModelRoutingOverride(channel.Id)
-	require.NoError(t, err)
+	enableRoutingOverride(t, channel.Id)
 
 	assert.False(t, UpdateChannelStatus(channel.Id, "missing-key", common.ChannelStatusManuallyDisabled, "manual operation"))
 	channelID, found, err := GetModelRoutingOverrideTarget("multi-key-model")
@@ -320,8 +378,7 @@ func TestMigrateLegacyModelRoutingOverridesPreservesChannelScopedRules(t *testin
 	db := setupModelRoutingOverrideTestDB(t)
 	legacyChannel := createRoutingTestChannel(t, db, 69, "legacy-model", "default")
 	activeChannel := createRoutingTestChannel(t, db, 70, "active-model", "default")
-	_, err := SetChannelModelRoutingOverride(activeChannel.Id)
-	require.NoError(t, err)
+	enableRoutingOverride(t, activeChannel.Id)
 	require.NoError(t, db.Create(&ModelRoutingOverride{
 		Model:     "legacy-model",
 		Group:     "default",

@@ -141,8 +141,9 @@ func TestUpdateChannelUpstreamModelSettingsClearsTemporaryRoutingOnModelChange(t
 	}
 	require.NoError(t, db.Create(channel).Error)
 	require.NoError(t, channel.UpdateAbilities(nil))
-	_, err := model.SetChannelModelRoutingOverride(channel.Id)
+	result, err := model.SetChannelModelRoutingOverride(channel.Id, false)
 	require.NoError(t, err)
+	require.True(t, result.Applied)
 
 	channel.Models = "new-model"
 	require.NoError(t, updateChannelUpstreamModelSettings(channel, channel.GetOtherSettings(), true))

@@ -20,6 +20,23 @@ type ModelRoutingOverride struct {
 	Scope     string `json:"-" gorm:"type:varchar(16)"`
 }
 
+// ModelRoutingOverrideConflict names a channel whose temporary rules overlap a
+// candidate channel, along with the models they collide on.
+type ModelRoutingOverrideConflict struct {
+	ChannelId   int      `json:"channel_id"`
+	ChannelName string   `json:"channel_name"`
+	Models      []string `json:"models"`
+}
+
+// ModelRoutingOverrideResult reports what a set attempt did. Applied is false
+// only when conflicts blocked the write, in which case nothing was persisted and
+// Conflicts names the channels the caller has to release first.
+type ModelRoutingOverrideResult struct {
+	Applied   bool
+	Overrides []ModelRoutingOverride
+	Conflicts []ModelRoutingOverrideConflict
+}
+
 const modelRoutingOverrideScopeChannel = "channel"
 
 var modelRoutingOverrideCache = map[string]map[string]int{}
@@ -217,59 +234,93 @@ func buildChannelModelRoutingOverrides(channelID int, enabledOnly bool) ([]Model
 	return overrides, nil
 }
 
+// findModelRoutingOverrideConflicts groups the temporary rules overlapping the
+// candidate's model set by the channel that currently owns them, so callers can
+// name the channels that a replacement would release. The reported model names
+// are the ones the existing channels pin, which is what a wildcard rule shows.
 func findModelRoutingOverrideConflicts(
 	tx *gorm.DB,
 	channelID int,
 	overrides []ModelRoutingOverride,
-) error {
+) ([]ModelRoutingOverrideConflict, error) {
 	var existing []ModelRoutingOverride
 	if err := tx.Where("channel_id <> ?", channelID).Find(&existing).Error; err != nil {
-		return err
+		return nil, err
+	}
+	if len(existing) == 0 {
+		return nil, nil
 	}
 
-	conflicts := make(map[string]map[int]struct{})
+	candidateKeys := make(map[string]struct{}, len(overrides))
+	for _, override := range overrides {
+		if key := modelRoutingConflictKey(override.Model); key != "" {
+			candidateKeys[key] = struct{}{}
+		}
+	}
+
+	modelsByChannel := make(map[int]map[string]struct{})
 	for _, override := range existing {
 		key := modelRoutingConflictKey(override.Model)
 		if key == "" {
 			continue
 		}
-		if conflicts[key] == nil {
-			conflicts[key] = make(map[int]struct{})
-		}
-		conflicts[key][override.ChannelId] = struct{}{}
-	}
-
-	conflictingModels := make(map[string][]int)
-	for _, override := range overrides {
-		key := modelRoutingConflictKey(override.Model)
-		channelIDs := conflicts[key]
-		if key == "" || len(channelIDs) == 0 {
+		if _, overlaps := candidateKeys[key]; !overlaps {
 			continue
 		}
-		ids := make([]int, 0, len(channelIDs))
-		for existingChannelID := range channelIDs {
-			ids = append(ids, existingChannelID)
+		if modelsByChannel[override.ChannelId] == nil {
+			modelsByChannel[override.ChannelId] = make(map[string]struct{})
 		}
-		sort.Ints(ids)
-		conflictingModels[key] = ids
+		modelsByChannel[override.ChannelId][override.Model] = struct{}{}
 	}
-	if len(conflictingModels) == 0 {
-		return nil
+	if len(modelsByChannel) == 0 {
+		return nil, nil
 	}
 
-	keys := make([]string, 0, len(conflictingModels))
-	for key := range conflictingModels {
-		keys = append(keys, key)
+	conflictChannelIDs := make([]int, 0, len(modelsByChannel))
+	for conflictChannelID := range modelsByChannel {
+		conflictChannelIDs = append(conflictChannelIDs, conflictChannelID)
 	}
-	sort.Strings(keys)
-	details := make([]string, 0, len(keys))
-	for _, key := range keys {
-		ids := conflictingModels[key]
-		idStrings := make([]string, 0, len(ids))
-		for _, id := range ids {
-			idStrings = append(idStrings, fmt.Sprintf("%d", id))
+	sort.Ints(conflictChannelIDs)
+
+	// Names come from tx in one query: the caller may hold a transaction, and
+	// reaching for another connection there can deadlock a small pool.
+	var conflictChannels []Channel
+	if err := tx.Select("id", "name").
+		Where("id IN ?", conflictChannelIDs).
+		Find(&conflictChannels).Error; err != nil {
+		return nil, err
+	}
+	namesByChannel := make(map[int]string, len(conflictChannels))
+	for _, channel := range conflictChannels {
+		namesByChannel[channel.Id] = channel.Name
+	}
+
+	conflicts := make([]ModelRoutingOverrideConflict, 0, len(conflictChannelIDs))
+	for _, conflictChannelID := range conflictChannelIDs {
+		models := make([]string, 0, len(modelsByChannel[conflictChannelID]))
+		for modelName := range modelsByChannel[conflictChannelID] {
+			models = append(models, modelName)
 		}
-		details = append(details, fmt.Sprintf("%s (channel %s)", key, strings.Join(idStrings, ", ")))
+		sort.Strings(models)
+		conflicts = append(conflicts, ModelRoutingOverrideConflict{
+			ChannelId:   conflictChannelID,
+			ChannelName: namesByChannel[conflictChannelID],
+			Models:      models,
+		})
+	}
+	return conflicts, nil
+}
+
+// ModelRoutingOverrideConflictError renders conflicts as the single-line message
+// used by callers that can only carry an error.
+func ModelRoutingOverrideConflictError(conflicts []ModelRoutingOverrideConflict) error {
+	details := make([]string, 0, len(conflicts))
+	for _, conflict := range conflicts {
+		details = append(details, fmt.Sprintf(
+			"%s (channel %d)",
+			strings.Join(conflict.Models, ", "),
+			conflict.ChannelId,
+		))
 	}
 	return fmt.Errorf(
 		"temporary routing conflicts with existing channel rules: %s",
@@ -373,10 +424,9 @@ func migrateLegacyModelRoutingOverrides() error {
 	return nil
 }
 
-// SetChannelModelRoutingOverride adds or refreshes the temporary routing rules
-// for channelID. A channel may coexist with other temporary targets when its
-// effective model set does not overlap theirs.
-func SetChannelModelRoutingOverride(channelID int) ([]ModelRoutingOverride, error) {
+// buildEligibleChannelModelRoutingOverrides checks that channelID can host
+// temporary routing and returns the rules it would own.
+func buildEligibleChannelModelRoutingOverrides(channelID int) ([]ModelRoutingOverride, error) {
 	if channelID <= 0 {
 		return nil, errors.New("invalid channel id")
 	}
@@ -388,40 +438,91 @@ func SetChannelModelRoutingOverride(channelID int) ([]ModelRoutingOverride, erro
 	if channel.Status != common.ChannelStatusEnabled {
 		return nil, errors.New("the target channel is disabled")
 	}
+	return buildChannelModelRoutingOverrides(channelID, true)
+}
 
-	overrides, err := buildChannelModelRoutingOverrides(channelID, true)
+// PreviewChannelModelRoutingOverrideConflicts reports the channels that enabling
+// temporary routing for channelID would have to release, without writing
+// anything. Callers use it to warn before asking for confirmation.
+func PreviewChannelModelRoutingOverrideConflicts(channelID int) ([]ModelRoutingOverrideConflict, error) {
+	overrides, err := buildEligibleChannelModelRoutingOverrides(channelID)
 	if err != nil {
 		return nil, err
+	}
+	return findModelRoutingOverrideConflicts(DB, channelID, overrides)
+}
+
+// SetChannelModelRoutingOverride adds or refreshes the temporary routing rules
+// for channelID. A channel may coexist with other temporary targets when its
+// effective model set does not overlap theirs. Overlapping targets block the
+// write unless replaceConflicts is set, which releases them first: temporary
+// routing is channel-wide, so a conflicting channel is cleared as a whole rather
+// than trimmed down to a subset of its abilities.
+func SetChannelModelRoutingOverride(channelID int, replaceConflicts bool) (ModelRoutingOverrideResult, error) {
+	overrides, err := buildEligibleChannelModelRoutingOverrides(channelID)
+	if err != nil {
+		return ModelRoutingOverrideResult{}, err
 	}
 
 	modelRoutingOverrideMutationLock.Lock()
 	defer modelRoutingOverrideMutationLock.Unlock()
-	err = DB.Transaction(func(tx *gorm.DB) error {
-		if err := findModelRoutingOverrideConflicts(tx, channelID, overrides); err != nil {
+
+	var conflicts []ModelRoutingOverrideConflict
+	if err := DB.Transaction(func(tx *gorm.DB) error {
+		found, err := findModelRoutingOverrideConflicts(tx, channelID, overrides)
+		if err != nil {
 			return err
+		}
+		conflicts = found
+		if len(conflicts) > 0 {
+			if !replaceConflicts {
+				// Leave the decision to the caller; nothing is persisted.
+				return nil
+			}
+			releasedChannelIDs := make([]int, 0, len(conflicts))
+			for _, conflict := range conflicts {
+				releasedChannelIDs = append(releasedChannelIDs, conflict.ChannelId)
+			}
+			if _, err := deleteModelRoutingOverridesByChannelIDs(tx, releasedChannelIDs); err != nil {
+				return err
+			}
 		}
 		if err := tx.Where("channel_id = ?", channelID).Delete(&ModelRoutingOverride{}).Error; err != nil {
 			return err
 		}
 		return tx.Create(&overrides).Error
-	})
-	if err != nil {
-		return nil, err
+	}); err != nil {
+		return ModelRoutingOverrideResult{}, err
+	}
+	if len(conflicts) > 0 && !replaceConflicts {
+		return ModelRoutingOverrideResult{Conflicts: conflicts}, nil
 	}
 	if err := refreshModelRoutingOverrideCache(); err != nil {
-		return nil, err
+		return ModelRoutingOverrideResult{}, err
 	}
-	return overrides, nil
+	return ModelRoutingOverrideResult{
+		Applied:   true,
+		Overrides: overrides,
+		Conflicts: conflicts,
+	}, nil
 }
 
 // SetModelRoutingOverride is retained for source compatibility with older
-// callers. Temporary routing is now channel-scoped.
+// callers. Temporary routing is now channel-scoped, and conflicts surface as an
+// error because this signature cannot carry them.
 func SetModelRoutingOverride(modelName string, channelID int) ([]ModelRoutingOverride, error) {
 	modelName = strings.TrimSpace(modelName)
 	if modelName == "" || len(modelName) > 255 {
 		return nil, errors.New("invalid model name")
 	}
-	return SetChannelModelRoutingOverride(channelID)
+	result, err := SetChannelModelRoutingOverride(channelID, false)
+	if err != nil {
+		return nil, err
+	}
+	if !result.Applied {
+		return nil, ModelRoutingOverrideConflictError(result.Conflicts)
+	}
+	return result.Overrides, nil
 }
 
 func DeleteModelRoutingOverride(modelName string) (int64, error) {

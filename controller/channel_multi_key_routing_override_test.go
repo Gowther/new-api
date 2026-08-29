@@ -37,8 +37,9 @@ func TestManageMultiKeysManualDisableClearsTemporaryRouting(t *testing.T) {
 	}
 	require.NoError(t, db.Create(&channel).Error)
 	require.NoError(t, channel.UpdateAbilities(nil))
-	_, err := model.SetChannelModelRoutingOverride(channel.Id)
+	result, err := model.SetChannelModelRoutingOverride(channel.Id, false)
 	require.NoError(t, err)
+	require.True(t, result.Applied)
 
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
@@ -64,8 +65,9 @@ func TestManageMultiKeysManualDisableClearsTemporaryRouting(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, found)
 
-	_, err = model.SetChannelModelRoutingOverride(channel.Id)
+	result, err = model.SetChannelModelRoutingOverride(channel.Id, false)
 	require.NoError(t, err)
+	require.True(t, result.Applied)
 	recorder = httptest.NewRecorder()
 	ctx, _ = gin.CreateTestContext(recorder)
 	ctx.Set("id", 1)

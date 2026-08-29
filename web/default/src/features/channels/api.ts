@@ -90,10 +90,25 @@ export type ModelRoutingOverride = {
   groups: string[]
 }
 
+/** A channel whose temporary routing overlaps the candidate's models. */
+export type ModelRoutingOverrideConflict = {
+  channel_id: number
+  channel_name: string
+  models: string[]
+}
+
 export type ModelRoutingOverrideResponse = {
   success: boolean
   message?: string
   data?: ModelRoutingOverride[] | ModelRoutingOverride | null
+  /** Present when overlapping targets blocked the write. */
+  conflicts?: ModelRoutingOverrideConflict[]
+}
+
+export type ModelRoutingOverrideConflictsResponse = {
+  success: boolean
+  message?: string
+  data?: ModelRoutingOverrideConflict[] | null
 }
 
 export function normalizeModelRoutingOverrides(
@@ -178,12 +193,27 @@ export async function getModelRoutingOverride(
   return res.data
 }
 
-export async function setModelRoutingOverride(
+/**
+ * Report the temporary targets that enabling this channel would release, so the
+ * prompt can name them before the operator confirms. Writes nothing.
+ */
+export async function getModelRoutingOverrideConflicts(
   channelId: number
+): Promise<ModelRoutingOverrideConflictsResponse> {
+  const res = await api.get(
+    '/api/channel/model_routing_override/conflicts',
+    channelActionConfig({ params: { channel_id: channelId } })
+  )
+  return res.data
+}
+
+export async function setModelRoutingOverride(
+  channelId: number,
+  replaceConflicts = false
 ): Promise<ModelRoutingOverrideResponse> {
   const res = await api.put(
     '/api/channel/model_routing_override',
-    { channel_id: channelId },
+    { channel_id: channelId, replace_conflicts: replaceConflicts },
     channelActionConfig()
   )
   return res.data
@@ -191,11 +221,7 @@ export async function setModelRoutingOverride(
 
 export async function deleteModelRoutingOverride(
   channelId?: number
-): Promise<{
-  success: boolean
-  message?: string
-  data?: ModelRoutingOverride[] | ModelRoutingOverride | null
-}> {
+): Promise<ModelRoutingOverrideResponse> {
   const res = await api.delete(
     '/api/channel/model_routing_override',
     channelActionConfig(

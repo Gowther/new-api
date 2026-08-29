@@ -64,12 +64,8 @@ import {
 import { ROLE } from '@/lib/roles'
 import { useAuthStore } from '@/stores/auth-store'
 
-import {
-  deleteModelRoutingOverride,
-  normalizeModelRoutingOverrides,
-  setModelRoutingOverride,
-} from '../api'
 import { MODEL_FETCHABLE_TYPES } from '../constants'
+import { useRoutingOverridePrompt } from '../hooks/use-routing-override-prompt'
 import {
   channelsQueryKeys,
   handleDeleteChannel,
@@ -82,6 +78,7 @@ import { parseUpstreamUpdateMeta } from '../lib/upstream-update-utils'
 import type { Channel } from '../types'
 import { ChannelRowActionsLayoutContext } from './channel-row-actions-context'
 import { useChannels } from './channels-provider'
+import { RoutingOverrideConflictNotice } from './routing-override-conflict-notice'
 
 interface DataTableRowActionsProps {
   row: Row<Channel>
@@ -103,10 +100,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
-  const [temporaryRoutingConfirmOpen, setTemporaryRoutingConfirmOpen] =
-    useState(false)
-  const [isUpdatingTemporaryRouting, setIsUpdatingTemporaryRouting] =
-    useState(false)
+  const routingPrompt = useRoutingOverridePrompt()
 
   const isEnabled = isChannelEnabled(channel)
   const isMultiKey = isMultiKeyChannel(channel)
@@ -202,47 +196,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
     }
   }
 
-  const handleTemporaryRoutingConfirm = async () => {
-    if (!canEditRouting) return
-    setIsUpdatingTemporaryRouting(true)
-    try {
-      if (isTemporaryRoutingTarget) {
-        const response = await deleteModelRoutingOverride(channel.id)
-        if (!response.success) {
-          throw new Error(
-            response.message || t('Failed to update temporary routing mode')
-          )
-        }
-        queryClient.setQueryData(
-          channelsQueryKeys.routingOverride(),
-          normalizeModelRoutingOverrides(response.data)
-        )
-        toast.success(t('Normal routing restored'))
-      } else {
-        const response = await setModelRoutingOverride(channel.id)
-        if (!response.success) {
-          throw new Error(
-            response.message || t('Failed to update temporary routing mode')
-          )
-        }
-        queryClient.setQueryData(
-          channelsQueryKeys.routingOverride(),
-          normalizeModelRoutingOverrides(response.data)
-        )
-        toast.success(t('Temporary single-channel mode enabled'))
-      }
-      setTemporaryRoutingConfirmOpen(false)
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : t('Failed to update temporary routing mode')
-      )
-    } finally {
-      setIsUpdatingTemporaryRouting(false)
-    }
-  }
-
   let statusIcon = <Power className='size-4' />
   if (isTogglingStatus) {
     statusIcon = <Loader2 className='size-4 animate-spin' />
@@ -250,6 +203,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
     statusIcon = <PowerOff className='size-4' />
   }
 
+  const hasRoutingConflicts = routingPrompt.conflicts.length > 0
   let temporaryRoutingLabel = t('Use this channel temporarily for all models')
   let temporaryRoutingIcon = <LockKeyhole />
   let temporaryRoutingTitle = t('Enable temporary single-channel mode?')
@@ -257,7 +211,9 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
     'Automatic requests for the {{count}} model(s) on channel "{{channel}}" will use only this channel in its supported groups. Explicit channel selection is unaffected.',
     { count: channelModelCount, channel: channel.name }
   )
-  let temporaryRoutingConfirmText = t('Enable temporary mode')
+  let temporaryRoutingConfirmText = hasRoutingConflicts
+    ? t('Replace and enable')
+    : t('Enable temporary mode')
 
   if (isTemporaryRoutingTarget) {
     temporaryRoutingLabel = t('Restore normal routing')
@@ -467,12 +423,16 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             disabled={
               !canEditRouting ||
               routingOverrideLoading ||
-              isUpdatingTemporaryRouting ||
+              routingPrompt.isSubmitting ||
               (!isTemporaryRoutingTarget && !isEnabled)
             }
             onSelect={(event) => {
               event.preventDefault()
-              setTemporaryRoutingConfirmOpen(true)
+              routingPrompt.open({
+                id: channel.id,
+                name: channel.name,
+                isActive: isTemporaryRoutingTarget,
+              })
             }}
           >
             {temporaryRoutingLabel}
@@ -552,17 +512,33 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         }}
       />
       <ConfirmDialog
-        open={temporaryRoutingConfirmOpen}
+        open={routingPrompt.target !== null}
         onOpenChange={(open) => {
-          if (!isUpdatingTemporaryRouting) {
-            setTemporaryRoutingConfirmOpen(open)
-          }
+          if (!open && !routingPrompt.isSubmitting) routingPrompt.close()
         }}
         title={temporaryRoutingTitle}
-        desc={temporaryRoutingDescription}
+        desc={
+          <div className='space-y-3'>
+            <div>{temporaryRoutingDescription}</div>
+            {routingPrompt.blockedReason ? (
+              <div className='text-destructive'>
+                {routingPrompt.blockedReason}
+              </div>
+            ) : null}
+            <RoutingOverrideConflictNotice conflicts={routingPrompt.conflicts} />
+          </div>
+        }
         confirmText={temporaryRoutingConfirmText}
-        isLoading={isUpdatingTemporaryRouting}
-        handleConfirm={handleTemporaryRoutingConfirm}
+        destructive={hasRoutingConflicts}
+        // The preflight decides whether this is a plain enable or a replacement,
+        // so confirm stays out of reach until it answers.
+        disabled={
+          !canEditRouting ||
+          routingPrompt.isChecking ||
+          routingPrompt.blockedReason !== null
+        }
+        isLoading={routingPrompt.isSubmitting}
+        handleConfirm={routingPrompt.confirm}
       />
     </div>
   )

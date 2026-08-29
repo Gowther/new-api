@@ -40,6 +40,10 @@ import { useChannelUpstreamUpdates } from './useChannelUpstreamUpdates';
 import { parseUpstreamUpdateMeta } from './upstreamUpdateUtils';
 import { Modal, Button } from '@douyinfe/semi-ui';
 import { openCodexUsageModal } from '../../components/table/channels/modals/CodexUsageModal';
+import {
+  fetchRoutingOverrideConflicts,
+  renderRoutingOverrideConflicts,
+} from '../../components/table/channels/routingOverrideConflicts';
 
 const fetchModelRoutingOverride = async () => {
   const res = await API.get('/api/channel/model_routing_override', {
@@ -604,38 +608,63 @@ export const useChannelsData = () => {
     }
   };
 
-  const toggleRoutingOverride = (channel) => {
+  const toggleRoutingOverride = async (channel) => {
     if (!channel || channel.children !== undefined) return;
 
-    const isCurrentTarget = routingOverride.some(
-      (override) => override.channel_id === channel.id,
-    );
-    if (!isCurrentTarget && channel.status !== 1) return;
-
-    const channelModelCount = getChannelModelCount(channel);
     const activeOverride = routingOverride.find(
       (override) => override.channel_id === channel.id,
     );
+    const isCurrentTarget = activeOverride !== undefined;
+    if (!isCurrentTarget && channel.status !== 1) return;
+
+    // Enabling has to name the temporary targets it would release before asking.
+    // Restoring cannot conflict, so it skips the preflight.
+    let conflicts = [];
+    if (!isCurrentTarget) {
+      setRoutingOverrideUpdating(true);
+      try {
+        conflicts = await fetchRoutingOverrideConflicts(channel.id);
+      } catch (error) {
+        showError(error.message || t('更新临时路由模式失败'));
+        return;
+      } finally {
+        setRoutingOverrideUpdating(false);
+      }
+    }
+
+    const channelModelCount = getChannelModelCount(channel);
     const currentTargetName = activeOverride
       ? activeOverride.channel_name || `#${activeOverride.channel_id}`
       : channel.name;
     const title = isCurrentTarget
       ? t('恢复正常路由？')
       : t('开启临时单渠道模式？');
-    const content = isCurrentTarget
-      ? t(
-          '临时路由目标“{{channel}}”及其模型规则将被移除。现有渠道状态、优先级、权重和亲和性数据不会改变。',
-          { channel: currentTargetName },
-        )
-      : t(
+    const content = isCurrentTarget ? (
+      t(
+        '临时路由目标“{{channel}}”及其模型规则将被移除。现有渠道状态、优先级、权重和亲和性数据不会改变。',
+        { channel: currentTargetName },
+      )
+    ) : (
+      <div>
+        {t(
           '渠道“{{channel}}”上的 {{count}} 个模型将临时仅使用该渠道；该渠道不支持的模型恢复正常路由。显式指定渠道的请求不受影响。',
           { channel: channel.name, count: channelModelCount },
-        );
+        )}
+        {renderRoutingOverrideConflicts(conflicts, t)}
+      </div>
+    );
+    let okText = t('开启临时模式');
+    if (isCurrentTarget) {
+      okText = t('恢复正常路由');
+    } else if (conflicts.length > 0) {
+      okText = t('替换并开启');
+    }
 
     Modal.confirm({
       title,
       content,
-      okText: isCurrentTarget ? t('恢复正常路由') : t('开启临时模式'),
+      okText,
+      okButtonProps: conflicts.length > 0 ? { type: 'danger' } : undefined,
       cancelText: t('取消'),
       onOk: async () => {
         setRoutingOverrideUpdating(true);
@@ -646,6 +675,7 @@ export const useChannelsData = () => {
               })
             : await API.put('/api/channel/model_routing_override', {
                 channel_id: channel.id,
+                replace_conflicts: conflicts.length > 0,
               });
           const { success, message, data } = res?.data || {};
           if (!success) {

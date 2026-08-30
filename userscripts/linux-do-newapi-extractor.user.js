@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Linux.do → new-api 渠道提取器
 // @namespace    https://linux.do/
-// @version      0.3.5
+// @version      0.3.6
 // @description  解析 linux.do 楼层里的 API 地址与密钥（明文 / Base64 / 多重 Base64 / URL-safe / URL+Key 合并编码 / JSON 配置 / 仅密钥官方直连），一键复制成 new-api「添加渠道」可识别的剪贴板配置
 // @author       shiki
 // @match        https://linux.do/*
@@ -56,6 +56,12 @@
  *   · 只给密钥、地址省略走官方：仅当前缀能确定厂商时才填官方地址并标记「官方直连」。
  *     认得出的（sk-ant- / sk-proj- / AIza / xai- …）直接给地址；认不出厂商的裸密钥
  *     （OpenCode 的 sk- 加 64 位、各中转站）地址一律留空，不猜 —— 猜错的地址比空地址难查
+ *   · 站内自建中转 hub.linux.do：密钥形如 ah- 加 64 位十六进制。这个前缀在 new-api 里
+ *     没有对应渠道类型，地址留空会让 new-api 拿默认渠道类型的官方地址去请求，等于把
+ *     密钥发给不相干的上游，所以地址由脚本按前缀补上，徽标写「已补网关地址」。
+ *     这个地址也压过「同楼就近扫到的地址」——那只是就近猜的，猜到别的中转站上就把
+ *     密钥发错了地方。帖子里给的是镜像域名时会被盖掉，在地址下拉的「本帖扫到的地址」
+ *     里选回来即可
  *   · 插了中文干扰字的密钥：sk-0ZHm删IbHa除UNbcT我… 这种靠人眼读掉中文的反爬写法，
  *     自动剔掉中文再还原。明文、Base64 密文本身、以及解到第 1/2/3 层才出现中文的，
  *     每一层都会剔一次。剔了什么会写在卡片徽标和提示行里，方便核对
@@ -90,9 +96,15 @@
      * 这里刻意不用后行断言 (?<!...)：正则字面量里的不支持语法会在解析期
      * 直接抛 SyntaxError，整个脚本一行都执行不到（Safari < 16.4、部分脚本猫
      * 内核都会踩）。用「捕获边界字符 + 手动回退 lastIndex」等价实现。
+     *
+     * TLD 里带 do 是为了站内自建的中转（hub.linux.do），帖子里多半不写 https://。
+     * 看着像会把满页的 linux.do 链接一起捞进来，其实进不来：裸域名还要过
+     * bareHostLooksLikeApi，linux.do / www.linux.do / connect.linux.do 都不像
+     * API 端点，只有 hub. 这类前缀能过；带路径的（linux.do/t/123）由
+     * BLOCKED_URL_RE 再兜一道。
      */
     const BARE_HOST_RE =
-      /(^|[^\w.@\/-])((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:com|cn|net|org|io|ai|dev|app|xyz|top|site|fun|cc|me|co|vip|tech|online|space|store|icu|link|live|pro|work|run|club|world|now|sh|gg|one|plus|cloud|api|de|us|uk|jp|ru|eu|tv|info|biz|edu|gov|moe|zone|host|press|wiki|team|group|center|company|network|systems|tools|ninja|red|blue|pink|black|white|green|art|design|studio|agency|digital|solutions|services|support|email|chat|life|love|fans|shop|mall|market|game|games|video|music|photo|news|blog|page|web|net\.cn|com\.cn|org\.cn|gov\.cn|edu\.cn|co\.uk|co\.jp|com\.hk|com\.tw)(?::\d{2,5})?(?:\/[^\s"'`<>()\[\]{}|\\，。；、：！？（）【】《》「」]*)?)/gi;
+      /(^|[^\w.@\/-])((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:com|cn|net|org|io|ai|dev|do|app|xyz|top|site|fun|cc|me|co|vip|tech|online|space|store|icu|link|live|pro|work|run|club|world|now|sh|gg|one|plus|cloud|api|de|us|uk|jp|ru|eu|tv|info|biz|edu|gov|moe|zone|host|press|wiki|team|group|center|company|network|systems|tools|ninja|red|blue|pink|black|white|green|art|design|studio|agency|digital|solutions|services|support|email|chat|life|love|fans|shop|mall|market|game|games|video|music|photo|news|blog|page|web|net\.cn|com\.cn|org\.cn|gov\.cn|edu\.cn|co\.uk|co\.jp|com\.hk|com\.tw)(?::\d{2,5})?(?:\/[^\s"'`<>()\[\]{}|\\，。；、：！？（）【】《》「」]*)?)/gi;
 
     const BLOCKED_URL_RE =
       /(?:^|\/\/)(?:[^/]*\.)?(?:linux\.do|discourse\.org|github\.com|githubusercontent\.com|gravatar\.com|google\.com|bing\.com|baidu\.com|zhihu\.com|bilibili\.com|youtube\.com|twitter\.com|x\.com|t\.me|telegram\.me|qq\.com|weixin\.qq\.com|docs?\.[^/]+)\/|\/(?:u|t|c|latest|top|badges|search|g|uploads|assets|images?|avatar)\/|user_avatar|letter_avatar|\.(?:png|jpe?g|gif|webp|svg|ico|css|js|woff2?|ttf|mp4|mp3|wav|zip|tar|gz|pdf)(?:[?#]|$)/i;
@@ -214,7 +226,15 @@
 
     /* ───────── 密钥 ───────── */
 
-    // 已知供应商前缀 → 官方地址省略时的渠道类型提示
+    /*
+     * 已知供应商前缀 → 地址省略时怎么补。两种补法，语义不同，别混：
+     *
+     *   official: new-api 自己有这个渠道类型，地址可以留空由它填。脚本只在备注里
+     *             写「官方直连」做个记录，不往地址栏塞值。
+     *   gateway:  前缀唯一对应一个第三方网关，而 new-api 没有对应渠道类型 ——
+     *             地址留空会让 new-api 拿别的渠道类型的官方地址去请求（默认落到
+     *             OpenAI），密钥就发给了不该发的人。这类必须由脚本把地址填出来。
+     */
     const KEY_PREFIX_HINTS = [
       { re: /^sk-ant-[A-Za-z0-9_\-]{20,}$/, vendor: 'Anthropic', official: 'https://api.anthropic.com' },
       { re: /^sk-proj-[A-Za-z0-9_\-]{20,}$/, vendor: 'OpenAI', official: 'https://api.openai.com' },
@@ -226,6 +246,13 @@
       { re: /^(?:r8_)[A-Za-z0-9]{30,}$/, vendor: 'Replicate', official: 'https://api.replicate.com' },
       { re: /^(?:hf_)[A-Za-z0-9]{30,}$/, vendor: 'HuggingFace', official: 'https://api-inference.huggingface.co' },
       { re: /^(?:tvly|tgp_v1)-[A-Za-z0-9_\-]{20,}$/, vendor: 'Together', official: 'https://api.together.xyz' },
+      /*
+       * linux.do 站内自建的中转，密钥形如 ah- 加 64 位小写十六进制。
+       * 卡 hex 而不是 [A-Za-z0-9]：`ah-` 是个太普通的字母组合，开区间会把
+       * 「ah-hahahaha…」这类正文吃进来当密钥；hex 一卡，字母表里只剩 a-f，
+       * 正常英文词过不了。长度写 {32,} 留点余量，样本只见过 64 位。
+       */
+      { re: /^ah-[0-9a-f]{32,}$/i, vendor: 'LinuxDo Hub', official: '', gateway: 'https://hub.linux.do' },
       /*
        * OpenAI 旧格式密钥是「sk- 加正好 48 位」，所以这里是 {48} 而不是 {48,}。
        * 写成开区间会把所有更长的裸 sk- 密钥一起吃掉（OpenCode 的是 sk- 加 64 位，
@@ -243,8 +270,15 @@
     }
 
     // 正文里找带前缀的明文密钥
+    /*
+     * 这里只管「像不像密钥的开头」，一律写宽。`ah-` 这种普通字母组合可能把
+     * 「ah-hahahaha…」之类的正文捞进来，但那条候选拿不到 vendor 也拿不到 gateway
+     * （KEY_PREFIX_HINTS 那边卡了 hex），最多在面板上多出一张空厂商的卡，
+     * 不会把密钥发到错地址。收窄反而会漏 —— 前缀后面紧跟换行或干扰字时，
+     * 任何「下一个字符必须是 hex」的断言都会让 SPLIT/NOISY 两条路径直接不匹配。
+     */
     const KEY_PREFIX_SRC =
-      '(?:sk-ant-|sk-proj-|sk-or-v1-|sk-|pk-|AIza|xai-|gsk_|r8_|hf_|tvly-|tgp_v1-|nvapi-|nv-|ghp_|github_pat_|glpat-|dop_v1_|fk[0-9]*-|cpk_|csk-)';
+      '(?:sk-ant-|sk-proj-|sk-or-v1-|sk-|pk-|AIza|xai-|gsk_|r8_|hf_|tvly-|tgp_v1-|nvapi-|nv-|ghp_|github_pat_|glpat-|dop_v1_|fk[0-9]*-|cpk_|csk-|ah-)';
     const PREFIX_KEY_RE = new RegExp('\\b' + KEY_PREFIX_SRC + '[A-Za-z0-9_\\-]{14,}', 'g');
 
     /*
@@ -758,7 +792,22 @@
       const seen = new Set();
       for (const r of raw) {
         if (!r.key || isFragment(r.key) || truncated.has(r.key)) continue;
+        const hint = keyPrefixHint(r.key);
         let url = r.url;
+        /*
+         * 地址来源按可信度排：① 跟密钥结构上成对的（JSON 同层字段、合并编码同一段密文）
+         * ② 前缀唯一对应的网关 ③ 楼层里就近的地址。
+         *
+         * 网关压过 ③ 而不是反过来。③ 的全部依据只是「这一楼里离得最近」，没有距离上限，
+         * 一楼里另外提了个中转站，ah- 密钥就会被配到那个站去 —— 等于把密钥发给不相干的
+         * 上游。而 ② 是密钥形状定死的，hub 的密钥发回 hub 最多是入口选得不对。
+         *
+         * 代价是帖子里给了镜像域名时会被网关盖掉。这个换不掉：明文密钥一律不带 url
+         * （见 analyzeText 第 2 条），「同一行的地址」和「隔了三行的地址」在这里是同一个
+         * 就近猜测，代码分不出哪个是这条密钥的。需要镜像的话，帖子里扫到的地址都在
+         * 地址下拉的「本帖扫到的地址」分组里，选一下就好。
+         */
+        if (!url && hint && hint.gateway) url = hint.gateway;
         if (!url && pool.length) {
           let best = null;
           let bestD = Infinity;
@@ -772,8 +821,9 @@
           if (best) url = best.url;
         }
 
-        const hint = keyPrefixHint(r.key);
         const official = !url && !!hint && !!hint.official;
+        // 地址是脚本按前缀补的、不是帖子里写的，徽标要说出来，好让人核对
+        const gatewayFilled = !r.url && !!hint && !!hint.gateway && url === hint.gateway;
         const sig = JSON.stringify([url, r.key]);
         if (seen.has(sig)) continue;
         seen.add(sig);
@@ -783,7 +833,11 @@
           url: url || '',
           key: r.key,
           method:
-            r.method + (split ? ' · 已拼合换行' : '') + (noise ? ' · 已剔干扰字' : '') + (official ? ' · 官方直连' : ''),
+            r.method +
+            (split ? ' · 已拼合换行' : '') +
+            (noise ? ' · 已剔干扰字' : '') +
+            (official ? ' · 官方直连' : '') +
+            (gatewayFilled ? ' · 已补网关地址' : ''),
           official,
           vendor: hint ? hint.vendor : '',
           // 剔掉的干扰字，界面上要能看到剔了什么，好让人核对
@@ -929,6 +983,7 @@
       { name: 'Together', url: 'https://api.together.xyz' },
       { name: 'Replicate', url: 'https://api.replicate.com' },
       { name: 'HuggingFace', url: 'https://api-inference.huggingface.co' },
+      { name: 'LinuxDo Hub', url: 'https://hub.linux.do' },
     ];
 
     /** 一行一条「名称|地址」；只写地址就拿域名当名称。空行和 # 注释跳过 */
@@ -1039,7 +1094,7 @@
   /* ═══════════════════════════════ 页面部分 ═══════════════════════════════ */
 
   const TAG = '[ld→newapi]';
-  const VERSION = '0.3.5'; // 与文件头 @version 保持一致
+  const VERSION = '0.3.6'; // 与文件头 @version 保持一致
   const LS_TARGET = 'ld-napi-target-url';
   const LS_PRESETS = 'ld-napi-url-presets';
   /*

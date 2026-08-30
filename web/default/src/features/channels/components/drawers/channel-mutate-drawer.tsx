@@ -790,6 +790,9 @@ export function ChannelMutateDrawer({
       setClipboardConfig(null)
       return
     }
+    // A caller that already prefilled a key handed us that connection info, so
+    // offering the clipboard again would just repeat what is in the form.
+    if (initialValues?.key) return
     if (!navigator.clipboard?.readText) return
     let cancelled = false
     navigator.clipboard
@@ -805,7 +808,7 @@ export function ChannelMutateDrawer({
     return () => {
       cancelled = true
     }
-  }, [open, isEditing])
+  }, [open, isEditing, initialValues?.key])
 
   // Watch form values for conditional rendering
   const multiKeyMode = form.watch('multi_key_mode')

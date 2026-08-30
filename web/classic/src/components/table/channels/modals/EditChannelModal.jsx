@@ -1891,17 +1891,20 @@ const EditChannelModal = (props) => {
         setSplitByModelVendor(false);
         setModelVendorGroups([]);
         formApiRef.current?.setValues(nextValues);
-        try {
-          navigator?.clipboard
-            ?.readText()
-            ?.then((text) => {
-              const parsed = parseChannelConnectionString(text);
-              if (parsed) {
-                setClipboardConfig(parsed);
-              }
-            })
-            .catch(() => {});
-        } catch {}
+        // 调用方已经预填了 key，说明连接信息就是它给的，再提示剪贴板只会重复表单里的内容
+        if (!props.initialValues?.key) {
+          try {
+            navigator?.clipboard
+              ?.readText()
+              ?.then((text) => {
+                const parsed = parseChannelConnectionString(text);
+                if (parsed) {
+                  setClipboardConfig(parsed);
+                }
+              })
+              .catch(() => {});
+          } catch {}
+        }
       }
       fetchModelGroups();
       // 重置手动输入模式状态

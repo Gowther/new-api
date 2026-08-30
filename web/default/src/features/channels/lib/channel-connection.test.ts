@@ -21,6 +21,7 @@ import { describe, test } from 'node:test'
 
 import {
   CHANNEL_CONN_CLIPBOARD_TYPE,
+  channelConnectionPasteClaim,
   encodeChannelConnectionString,
   parseChannelConnectionString,
 } from './channel-connection.ts'
@@ -114,5 +115,60 @@ describe('channel connection clipboard payload', () => {
       parseChannelConnectionString(conn({ key: 'sk', url: 9 })),
       null
     )
+  })
+})
+
+describe('claiming a console-wide paste for channel creation', () => {
+  const payload = encodeChannelConnectionString(
+    'sk-abc',
+    'https://api.example.com'
+  )
+  /** A paste target that reports matching the given selectors and nothing else. */
+  const target = (matches: string[] = [], isContentEditable = false) => ({
+    isContentEditable,
+    closest: (selector: string) =>
+      matches.some((match) => selector.includes(match)) ? {} : null,
+  })
+
+  test('claims connection info pasted outside any field', () => {
+    assert.deepEqual(channelConnectionPasteClaim(payload, target()), {
+      key: 'sk-abc',
+      url: 'https://api.example.com',
+    })
+    // A paste can land on the document itself, with no element to inspect.
+    assert.deepEqual(channelConnectionPasteClaim(payload, null), {
+      key: 'sk-abc',
+      url: 'https://api.example.com',
+    })
+  })
+
+  test('leaves a paste aimed at a field the user is typing in', () => {
+    assert.equal(channelConnectionPasteClaim(payload, target(['input'])), null)
+    assert.equal(
+      channelConnectionPasteClaim(payload, target(['textarea'])),
+      null
+    )
+    assert.equal(
+      channelConnectionPasteClaim(payload, target(['contenteditable'])),
+      null
+    )
+    assert.equal(channelConnectionPasteClaim(payload, target([], true)), null)
+  })
+
+  test('stays out of an open dialog, which offers the clipboard itself', () => {
+    assert.equal(
+      channelConnectionPasteClaim(payload, target(['role="dialog"'])),
+      null
+    )
+    assert.equal(
+      channelConnectionPasteClaim(payload, target(['role="alertdialog"'])),
+      null
+    )
+  })
+
+  test('ignores a paste that is not connection info', () => {
+    assert.equal(channelConnectionPasteClaim('just some text', target()), null)
+    assert.equal(channelConnectionPasteClaim('', target()), null)
+    assert.equal(channelConnectionPasteClaim(undefined, target()), null)
   })
 })

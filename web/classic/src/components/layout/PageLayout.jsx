@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 import HeaderBar from './headerbar';
 import { Layout } from '@douyinfe/semi-ui';
+import ChannelPasteListener from './ChannelPasteListener';
 import SiderBar from './SiderBar';
 import App from '../../App';
 import FooterBar from './Footer';
@@ -238,6 +239,7 @@ const PageLayout = () => {
           )}
         </Layout>
       </Layout>
+      <ChannelPasteListener />
       <ToastContainer />
     </Layout>
   );

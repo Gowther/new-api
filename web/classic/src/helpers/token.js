@@ -101,6 +101,9 @@ export const CHANNEL_CONN_CLIPBOARD_TYPE = 'newapi_channel_conn';
 const CHANNEL_CONN_NAME_MAX = 191;
 const CHANNEL_CONN_REMARK_MAX = 255;
 
+/** 渠道在渠道管理页之外被创建时广播，让已经挂载的渠道表刷新 */
+export const CHANNEL_CREATED_EVENT = 'newapi:channel-created';
+
 /**
  * @param {string} key - 完整的 API key（含 sk- 前缀）
  * @param {string} url - 服务器地址
@@ -116,6 +119,54 @@ export function encodeChannelConnectionString(key, url, extra = {}) {
   if (extra.name) payload.name = extra.name;
   if (extra.remark) payload.remark = extra.remark;
   return JSON.stringify(payload);
+}
+
+/**
+ * 只在读剪贴板不会打断用户时去读。
+ *
+ * readText() 可能弹权限框，而「切回标签页时突然弹权限框」正是最该避免的打断，
+ * 所以没授权就不读，也不主动要。授权是靠点弹窗里那个粘贴按钮拿到的，
+ * 拿到之后这里就能静默读出内容。
+ *
+ * 读不到就返回 null：没授权、浏览器没有这个权限项（Firefox）、页面不在焦点。
+ *
+ * @returns {Promise<string | null>}
+ */
+export async function readClipboardWhenAllowed() {
+  if (!navigator?.clipboard?.readText) return null;
+  try {
+    const status = await navigator.permissions.query({
+      name: 'clipboard-read',
+    });
+    if (status.state !== 'granted') return null;
+    return await navigator.clipboard.readText();
+  } catch {
+    // 这个浏览器没有 clipboard-read 权限项，或者这次读被拒了
+    return null;
+  }
+}
+
+/**
+ * 粘贴不该变成新建渠道的地方：用户正在输入的字段，以及任何已打开的弹窗
+ * （编辑渠道弹窗本身就带了剪贴板入口）
+ */
+const PASTE_OPT_OUT_SELECTOR =
+  'input, textarea, [contenteditable="true"], [role="dialog"], [role="alertdialog"]';
+
+/**
+ * 判断控制台里的一次粘贴该不该变成预填好的新建渠道表单。
+ *
+ * 抢走一次粘贴就打断了用户手上的事，所以只有剪贴板里确实是连接信息、
+ * 且这次粘贴没落在输入框或弹窗里时才认。
+ *
+ * @param {string} text - 剪贴板文本
+ * @param {{ isContentEditable?: boolean, closest?: (selector: string) => unknown } | null} target - 粘贴事件的目标元素
+ * @returns {{ key: string, url: string, name?: string, remark?: string } | null}
+ */
+export function channelConnectionPasteClaim(text, target) {
+  if (target?.isContentEditable) return null;
+  if (target?.closest?.(PASTE_OPT_OUT_SELECTOR)) return null;
+  return parseChannelConnectionString(text);
 }
 
 /**

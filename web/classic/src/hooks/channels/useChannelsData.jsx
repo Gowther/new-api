@@ -28,6 +28,7 @@ import {
   loadChannelModels,
   copy,
   toBoolean,
+  CHANNEL_CREATED_EVENT,
 } from '../../helpers';
 import {
   CHANNEL_OPTIONS,
@@ -557,6 +558,19 @@ export const useChannelsData = () => {
   };
 
   const upstreamUpdates = useChannelUpstreamUpdates({ t, refresh });
+
+  // 渠道也可以在本页之外创建（例如全局粘贴连接信息），那时这张表已经挂载了，
+  // 需要被动收到通知才能显示新渠道。
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+  useEffect(() => {
+    const onChannelCreated = () => {
+      refreshRef.current();
+    };
+    window.addEventListener(CHANNEL_CREATED_EVENT, onChannelCreated);
+    return () =>
+      window.removeEventListener(CHANNEL_CREATED_EVENT, onChannelCreated);
+  }, []);
 
   // Channel management
   const manageChannel = async (id, action, record, value) => {

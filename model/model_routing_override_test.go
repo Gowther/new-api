@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,6 +41,18 @@ func setupModelRoutingOverrideTestDB(t *testing.T) *gorm.DB {
 		_ = sqlDB.Close()
 	})
 	return db
+}
+
+// setReleaseRoutingOverrideOnAutoDisable pins the operator's choice about what
+// an automatic disable does to a temporary rule for the length of one test.
+func setReleaseRoutingOverrideOnAutoDisable(t *testing.T, release bool) {
+	t.Helper()
+	setting := operation_setting.GetMonitorSetting()
+	original := setting.ReleaseRoutingOverrideOnAutoDisable
+	setting.ReleaseRoutingOverrideOnAutoDisable = release
+	t.Cleanup(func() {
+		operation_setting.GetMonitorSetting().ReleaseRoutingOverrideOnAutoDisable = original
+	})
 }
 
 // enableRoutingOverride applies temporary routing without confirming any
@@ -257,20 +270,15 @@ func TestSetChannelModelRoutingOverrideRejectsUnsupportedOrDisabledChannel(t *te
 
 func TestModelRoutingOverrideCleanupLifecycle(t *testing.T) {
 	db := setupModelRoutingOverrideTestDB(t)
-	// Temporary routing fails closed, so leaving the rule on a channel that
-	// stopped serving would take its models down until someone intervened.
-	// Both kinds of disable release it.
-	channel := createRoutingTestChannel(t, db, 61, "cleanup-model", "default")
-	enableRoutingOverride(t, channel.Id)
-	assert.True(t, UpdateChannelStatus(channel.Id, "", common.ChannelStatusAutoDisabled, "automatic failure"))
-	_, found, err := GetModelRoutingOverrideTarget("cleanup-model")
-	require.NoError(t, err)
-	assert.False(t, found, "automatic disable must release temporary mode")
-
-	channel = createRoutingTestChannel(t, db, 64, "manual-cleanup-model", "default")
+	// A manual disable is a deliberate act on the channel, so it releases the
+	// rule even under the policy that keeps automatic disables pinned. Editing
+	// the channel's models out from under the rule, or deleting the channel,
+	// releases it too.
+	setReleaseRoutingOverrideOnAutoDisable(t, false)
+	channel := createRoutingTestChannel(t, db, 64, "manual-cleanup-model", "default")
 	enableRoutingOverride(t, channel.Id)
 	assert.True(t, UpdateChannelStatus(channel.Id, "", common.ChannelStatusManuallyDisabled, "manual operation"))
-	_, found, err = GetModelRoutingOverrideTarget("manual-cleanup-model")
+	_, found, err := GetModelRoutingOverrideTarget("manual-cleanup-model")
 	require.NoError(t, err)
 	assert.False(t, found)
 
@@ -290,6 +298,42 @@ func TestModelRoutingOverrideCleanupLifecycle(t *testing.T) {
 	_, found, err = GetModelRoutingOverrideTarget("delete-model")
 	require.NoError(t, err)
 	assert.False(t, found)
+}
+
+// An automatic disable of the pinned channel is the one case the operator gets
+// to decide, because temporary routing fails closed and the outcomes fail in
+// opposite directions: releasing gives up the pin on a transient upstream error,
+// keeping it takes the covered models down for the length of the outage.
+func TestAutoDisableFollowsReleaseRoutingOverridePolicy(t *testing.T) {
+	for _, testCase := range []struct {
+		name         string
+		release      bool
+		expectPinned bool
+	}{
+		{name: "keeps the rule by default", release: false, expectPinned: true},
+		{name: "releases the rule when configured", release: true, expectPinned: false},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			db := setupModelRoutingOverrideTestDB(t)
+			setReleaseRoutingOverrideOnAutoDisable(t, testCase.release)
+			channel := createRoutingTestChannel(t, db, 61, "cleanup-model", "default")
+			enableRoutingOverride(t, channel.Id)
+
+			assert.True(t, UpdateChannelStatus(channel.Id, "", common.ChannelStatusAutoDisabled, "automatic failure"))
+			channelID, found, err := GetModelRoutingOverrideTarget("cleanup-model")
+			require.NoError(t, err)
+			require.Equal(t, testCase.expectPinned, found)
+			if testCase.expectPinned {
+				assert.Equal(t, channel.Id, channelID)
+			}
+
+			// Whatever the policy decided, a later manual disable still releases.
+			assert.True(t, UpdateChannelStatus(channel.Id, "", common.ChannelStatusManuallyDisabled, "manual operation"))
+			_, found, err = GetModelRoutingOverrideTarget("cleanup-model")
+			require.NoError(t, err)
+			assert.False(t, found)
+		})
+	}
 }
 
 func TestFailedManualDisablePreservesModelRoutingOverride(t *testing.T) {
@@ -337,9 +381,9 @@ func createMultiKeyRoutingTestChannel(t *testing.T, db *gorm.DB, id int, models 
 }
 
 // Disabling one key of a multi-key target leaves the channel serving, so the
-// rule stands; losing the last key takes the channel down and releases it. Both
-// entry points decide on the channel's resulting status, not on the status asked
-// for a single key.
+// rule stands even under the releasing policy; losing the last key takes the
+// channel down and releases it. Both entry points decide on the channel's
+// resulting status, not on the status asked for a single key.
 func TestMultiKeyAutoDisableReleasesModelRoutingOverrideOnceChannelStops(t *testing.T) {
 	for _, testCase := range []struct {
 		name     string
@@ -365,6 +409,7 @@ func TestMultiKeyAutoDisableReleasesModelRoutingOverrideOnceChannelStops(t *test
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			db := setupModelRoutingOverrideTestDB(t)
+			setReleaseRoutingOverrideOnAutoDisable(t, true)
 			channel := createMultiKeyRoutingTestChannel(t, db, testCase.channels[0], "cascade-model")
 			enableRoutingOverride(t, channel.Id)
 

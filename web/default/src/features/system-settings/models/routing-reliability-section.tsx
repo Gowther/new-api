@@ -122,6 +122,7 @@ const routingReliabilitySchema = z
       channel_test_prompts: z.string(),
       channel_test_prompt_mode: z.enum(channelTestPromptModes),
       channel_test_prompt: z.string(),
+      release_routing_override_on_auto_disable: z.boolean(),
     }),
   })
   .superRefine((values, ctx) => {
@@ -182,6 +183,7 @@ type RoutingReliabilitySectionProps = {
     'monitor_setting.channel_test_prompts': string
     'monitor_setting.channel_test_prompt_mode': ChannelTestPromptMode
     'monitor_setting.channel_test_prompt': string
+    'monitor_setting.release_routing_override_on_auto_disable': boolean
   }
 }
 
@@ -203,6 +205,7 @@ type NormalizedRoutingReliabilityValues = {
   'monitor_setting.channel_test_prompts': string
   'monitor_setting.channel_test_prompt_mode': ChannelTestPromptMode
   'monitor_setting.channel_test_prompt': string
+  'monitor_setting.release_routing_override_on_auto_disable': boolean
 }
 
 function normalizeChannelTestMode(value?: string): ChannelTestMode {
@@ -245,6 +248,8 @@ const buildFormDefaults = (
         prompts,
         defaults['monitor_setting.channel_test_prompt']
       ),
+      release_routing_override_on_auto_disable:
+        defaults['monitor_setting.release_routing_override_on_auto_disable'],
     },
   }
 }
@@ -284,6 +289,8 @@ const normalizeDefaults = (
       prompts,
       defaults['monitor_setting.channel_test_prompt']
     ),
+    'monitor_setting.release_routing_override_on_auto_disable':
+      defaults['monitor_setting.release_routing_override_on_auto_disable'],
   }
 }
 
@@ -320,6 +327,8 @@ const normalizeFormValues = (
       prompts,
       values.monitor_setting.channel_test_prompt
     ),
+    'monitor_setting.release_routing_override_on_auto_disable':
+      values.monitor_setting.release_routing_override_on_auto_disable,
   }
 }
 
@@ -730,6 +739,33 @@ export function RoutingReliabilitySection({
                       <FormLabel>{t('Disable on failure')}</FormLabel>
                       <FormDescription>
                         {t('Automatically disable channels when tests fail')}
+                      </FormDescription>
+                    </SettingsSwitchContent>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </SettingsSwitchItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='monitor_setting.release_routing_override_on_auto_disable'
+                render={({ field }) => (
+                  <SettingsSwitchItem>
+                    <SettingsSwitchContent>
+                      <FormLabel>
+                        {t(
+                          'Release temporary single-channel mode on auto-disable'
+                        )}
+                      </FormLabel>
+                      <FormDescription>
+                        {t(
+                          'When an auto-disable takes down a channel pinned by temporary single-channel mode, release the pin and restore normal routing. Off keeps the pin until the channel recovers, which fails requests for the models it covers in the meantime. A manual disable always releases the pin.'
+                        )}
                       </FormDescription>
                     </SettingsSwitchContent>
                     <FormControl>

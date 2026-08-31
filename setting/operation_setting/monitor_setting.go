@@ -18,6 +18,14 @@ type MonitorSetting struct {
 	ChannelTestPrompts     []string `json:"channel_test_prompts"`
 	ChannelTestPromptMode  string   `json:"channel_test_prompt_mode"`
 	ChannelTestPrompt      string   `json:"channel_test_prompt"`
+	// ReleaseRoutingOverrideOnAutoDisable decides what an automatic disable does
+	// to a temporary single-channel rule pointing at the channel. Releasing it
+	// restores normal routing for the models it covered, at the cost of losing
+	// the operator's pin on a transient outage; keeping it holds the pin until
+	// the channel recovers, and because temporary routing fails closed, those
+	// models fail for as long as the outage lasts. A manual disable always
+	// releases the rule regardless of this setting.
+	ReleaseRoutingOverrideOnAutoDisable bool `json:"release_routing_override_on_auto_disable"`
 }
 
 const (
@@ -30,12 +38,13 @@ const (
 
 // 默认配置
 var monitorSetting = MonitorSetting{
-	AutoTestChannelEnabled: false,
-	AutoTestChannelMinutes: 10,
-	ChannelTestMode:        ChannelTestModeScheduledAll,
-	ChannelTestPrompts:     []string{DefaultChannelTestPrompt},
-	ChannelTestPromptMode:  ChannelTestPromptModeFixed,
-	ChannelTestPrompt:      DefaultChannelTestPrompt,
+	AutoTestChannelEnabled:              false,
+	AutoTestChannelMinutes:              10,
+	ChannelTestMode:                     ChannelTestModeScheduledAll,
+	ChannelTestPrompts:                  []string{DefaultChannelTestPrompt},
+	ChannelTestPromptMode:               ChannelTestPromptModeFixed,
+	ChannelTestPrompt:                   DefaultChannelTestPrompt,
+	ReleaseRoutingOverrideOnAutoDisable: false,
 }
 
 func init() {

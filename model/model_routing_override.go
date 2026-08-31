@@ -378,7 +378,7 @@ func migrateLegacyModelRoutingOverrides() error {
 	}
 	channel, err := GetChannelById(targetChannelID, false)
 	if errors.Is(err, gorm.ErrRecordNotFound) ||
-		(err == nil && channelStatusStopsServing(channel.Status)) {
+		(err == nil && disableReleasesModelRoutingOverride(channel.Status)) {
 		if err := DB.Transaction(func(tx *gorm.DB) error {
 			return deleteLegacyModelRoutingOverrides(tx)
 		}); err != nil {

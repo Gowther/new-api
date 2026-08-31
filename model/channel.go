@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/samber/lo"
@@ -947,12 +948,24 @@ func hasEnabledMultiKey(keys []string, statusList map[int]int) bool {
 	return false
 }
 
-// channelStatusStopsServing reports whether a channel in this status has left
-// routing. Temporary single-channel mode fails closed, so a target that stops
-// serving takes its models down with it; both kinds of disable release the rule.
-func channelStatusStopsServing(status int) bool {
-	return status == common.ChannelStatusManuallyDisabled ||
-		status == common.ChannelStatusAutoDisabled
+// disableReleasesModelRoutingOverride reports whether a channel that came to
+// rest in this status gives up its temporary single-channel rule.
+//
+// A manual disable always does: it is a deliberate act on the channel, so the
+// pin has no target left to mean anything about. An automatic disable is a
+// judgment call the operator owns, because temporary routing fails closed and
+// the two outcomes fail in opposite directions -- releasing loses the pin to a
+// transient upstream error, keeping it takes the covered models down for the
+// length of the outage. Any other status is still serving and keeps the rule.
+func disableReleasesModelRoutingOverride(status int) bool {
+	switch status {
+	case common.ChannelStatusManuallyDisabled:
+		return true
+	case common.ChannelStatusAutoDisabled:
+		return operation_setting.GetMonitorSetting().ReleaseRoutingOverrideOnAutoDisable
+	default:
+		return false
+	}
 }
 
 func clearModelRoutingOverrideForDisabledChannel(channelId int) {
@@ -962,17 +975,17 @@ func clearModelRoutingOverrideForDisabledChannel(channelId int) {
 }
 
 func UpdateChannelStatus(channelId int, usingKey string, status int, reason string) bool {
-	changed, stoppedServing := updateChannelStatus(channelId, usingKey, nil, status, reason)
-	shouldClearOverride := stoppedServing
+	changed, resultingStatus := updateChannelStatus(channelId, usingKey, nil, status, reason)
+	shouldClearOverride := changed && disableReleasesModelRoutingOverride(resultingStatus)
 	// A repeated manual disable is a no-op, but it must still repair a stale
 	// temporary rule. Failed multi-key updates do not clear the rule while the
 	// channel itself remains enabled. Automatic disable skips this repair: it
 	// runs on the relay error path, where an error burst would otherwise pay for
 	// a channel read and a rule delete per failed request, and its own
-	// transition already released the rule.
+	// transition already decided the rule's fate.
 	if !changed && status == common.ChannelStatusManuallyDisabled {
 		channel, err := GetChannelById(channelId, false)
-		shouldClearOverride = err == nil && channelStatusStopsServing(channel.Status)
+		shouldClearOverride = err == nil && disableReleasesModelRoutingOverride(channel.Status)
 	}
 	if shouldClearOverride {
 		clearModelRoutingOverrideForDisabledChannel(channelId)
@@ -982,25 +995,26 @@ func UpdateChannelStatus(channelId int, usingKey string, status int, reason stri
 
 // UpdateChannelStatusByKeyIndex updates one multi-key entry by stable key index.
 func UpdateChannelStatusByKeyIndex(channelId int, keyIndex int, status int, reason string) bool {
-	changed, stoppedServing := updateChannelStatus(channelId, "", &keyIndex, status, reason)
-	if stoppedServing {
+	changed, resultingStatus := updateChannelStatus(channelId, "", &keyIndex, status, reason)
+	if changed && disableReleasesModelRoutingOverride(resultingStatus) {
 		clearModelRoutingOverrideForDisabledChannel(channelId)
 	}
 	return changed
 }
 
-// updateChannelStatus reports whether anything changed, and whether the channel
-// itself came out of the update no longer serving. The two differ for multi-key
-// channels: disabling one key changes the channel without taking it out of
-// routing, and only the caller's own status request would suggest otherwise.
-func updateChannelStatus(channelId int, usingKey string, keyIndex *int, status int, reason string) (bool, bool) {
+// updateChannelStatus reports whether anything changed, and the status the
+// channel came to rest in. That status is not the one asked for: disabling one
+// key of a multi-key channel leaves it enabled on its remaining keys, and losing
+// the last key auto-disables the channel whichever kind of disable took the key.
+// Callers deciding anything about the channel as a whole have to read it.
+func updateChannelStatus(channelId int, usingKey string, keyIndex *int, status int, reason string) (bool, int) {
 	if common.MemoryCacheEnabled {
 		channelStatusLock.Lock()
 		defer channelStatusLock.Unlock()
 
 		channelCache, _ := CacheGetChannel(channelId)
 		if channelCache == nil {
-			return false, false
+			return false, common.ChannelStatusUnknown
 		}
 		if channelCache.ChannelInfo.IsMultiKey {
 			// Use per-channel lock to prevent concurrent map read/write with GetNextEnabledKey
@@ -1016,7 +1030,7 @@ func updateChannelStatus(channelId int, usingKey string, keyIndex *int, status i
 			}
 			pollingLock.Unlock()
 			if !updated {
-				return false, false
+				return false, common.ChannelStatusUnknown
 			}
 			if beforeStatus != channelCache.Status {
 				CacheUpdateChannelStatus(channelId, channelCache.Status)
@@ -1024,7 +1038,7 @@ func updateChannelStatus(channelId int, usingKey string, keyIndex *int, status i
 		} else {
 			// 如果缓存渠道存在，且状态已是目标状态，直接返回
 			if channelCache.Status == status {
-				return false, false
+				return false, common.ChannelStatusUnknown
 			}
 			CacheUpdateChannelStatus(channelId, status)
 		}
@@ -1041,10 +1055,10 @@ func updateChannelStatus(channelId int, usingKey string, keyIndex *int, status i
 	}()
 	channel, err := GetChannelById(channelId, true)
 	if err != nil {
-		return false, false
+		return false, common.ChannelStatusUnknown
 	} else {
 		if !channel.ChannelInfo.IsMultiKey && channel.Status == status {
-			return false, false
+			return false, common.ChannelStatusUnknown
 		}
 
 		if channel.ChannelInfo.IsMultiKey {
@@ -1060,7 +1074,7 @@ func updateChannelStatus(channelId int, usingKey string, keyIndex *int, status i
 			}
 			pollingLock.Unlock()
 			if !updated {
-				return false, false
+				return false, common.ChannelStatusUnknown
 			}
 			if beforeStatus != channel.Status {
 				shouldUpdateAbilities = true
@@ -1076,9 +1090,9 @@ func updateChannelStatus(channelId int, usingKey string, keyIndex *int, status i
 		err = channel.SaveWithoutKey()
 		if err != nil {
 			common.SysLog(fmt.Sprintf("failed to update channel status: channel_id=%d, status=%d, error=%v", channel.Id, status, err))
-			return false, false
+			return false, common.ChannelStatusUnknown
 		}
-		return true, channelStatusStopsServing(channel.Status)
+		return true, channel.Status
 	}
 }
 

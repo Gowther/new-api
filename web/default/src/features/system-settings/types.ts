@@ -268,6 +268,7 @@ export type ModelSettings = {
   'monitor_setting.channel_test_prompts': string
   'monitor_setting.channel_test_prompt_mode': 'fixed' | 'random'
   'monitor_setting.channel_test_prompt': string
+  'monitor_setting.release_routing_override_on_auto_disable': boolean
   'channel_affinity_setting.enabled': boolean
   'channel_affinity_setting.switch_on_success': boolean
   'channel_affinity_setting.keep_on_channel_disabled': boolean

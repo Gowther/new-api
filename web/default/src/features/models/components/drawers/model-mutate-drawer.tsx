@@ -218,6 +218,7 @@ export function ModelMutateDrawer({
       'monitor_setting.channel_test_prompt_mode': 'fixed',
       'monitor_setting.channel_test_prompt':
         'Explain in one short sentence why caching can reduce latency.',
+      'monitor_setting.release_routing_override_on_auto_disable': false,
       'channel_affinity_setting.enabled': false,
       'channel_affinity_setting.switch_on_success': true,
       'channel_affinity_setting.keep_on_channel_disabled': false,

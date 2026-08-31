@@ -74,6 +74,7 @@ const DEFAULT_INPUTS = {
   'monitor_setting.channel_test_prompts': DEFAULT_CHANNEL_TEST_PROMPT,
   'monitor_setting.channel_test_prompt_mode': 'fixed',
   'monitor_setting.channel_test_prompt': DEFAULT_CHANNEL_TEST_PROMPT,
+  'monitor_setting.release_routing_override_on_auto_disable': false,
 };
 
 export default function SettingsMonitoring(props) {
@@ -391,6 +392,27 @@ export default function SettingsMonitoring(props) {
                     setInputs({
                       ...inputs,
                       AutomaticEnableChannelEnabled: value,
+                    })
+                  }
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Switch
+                  field={
+                    'monitor_setting.release_routing_override_on_auto_disable'
+                  }
+                  label={t('自动禁用时解除临时单渠道模式')}
+                  extraText={t(
+                    '自动禁用命中临时单渠道模式指定的渠道时，解除该规则并恢复正常路由；关闭则保留规则直到渠道恢复，期间该渠道覆盖的模型请求会失败。手动禁用始终解除该规则',
+                  )}
+                  size='default'
+                  checkedText='｜'
+                  uncheckedText='〇'
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'monitor_setting.release_routing_override_on_auto_disable':
+                        value,
                     })
                   }
                 />

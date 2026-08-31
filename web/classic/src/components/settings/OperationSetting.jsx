@@ -80,6 +80,7 @@ const DEFAULT_INPUTS = {
   'monitor_setting.channel_test_prompt_mode': 'fixed',
   'monitor_setting.channel_test_prompt':
     'Explain in one short sentence why caching can reduce latency.',
+  'monitor_setting.release_routing_override_on_auto_disable': false,
 
   /* 签到设置 */
   'checkin_setting.enabled': false,

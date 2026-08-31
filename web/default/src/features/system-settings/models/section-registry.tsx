@@ -93,6 +93,8 @@ const MODELS_SECTIONS = [
             settings['monitor_setting.channel_test_prompt_mode'],
           'monitor_setting.channel_test_prompt':
             settings['monitor_setting.channel_test_prompt'],
+          'monitor_setting.release_routing_override_on_auto_disable':
+            settings['monitor_setting.release_routing_override_on_auto_disable'],
         }}
       />
     ),

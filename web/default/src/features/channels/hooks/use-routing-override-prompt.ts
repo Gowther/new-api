@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,8 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useCallback, useEffect, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -57,17 +57,22 @@ export function useRoutingOverridePrompt() {
   // repeat the same rejection.
   const [blockedReason, setBlockedReason] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const preflightRequestIdRef = useRef(0)
 
   const open = useCallback((next: RoutingOverridePromptTarget) => {
+    preflightRequestIdRef.current += 1
     setTarget(next)
     setConflicts([])
     setBlockedReason(null)
+    setIsChecking(false)
   }, [])
 
   const close = useCallback(() => {
+    preflightRequestIdRef.current += 1
     setTarget(null)
     setConflicts([])
     setBlockedReason(null)
+    setIsChecking(false)
   }, [])
 
   const channelId = target?.id ?? null
@@ -77,11 +82,12 @@ export function useRoutingOverridePrompt() {
   useEffect(() => {
     if (!needsPreflight || channelId === null) return
 
+    const requestId = preflightRequestIdRef.current
     let cancelled = false
     setIsChecking(true)
     void getModelRoutingOverrideConflicts(channelId)
       .then((response) => {
-        if (cancelled) return
+        if (cancelled || requestId !== preflightRequestIdRef.current) return
         if (!response.success) {
           setBlockedReason(
             response.message || t('Failed to update temporary routing mode')
@@ -91,7 +97,7 @@ export function useRoutingOverridePrompt() {
         setConflicts(response.data ?? [])
       })
       .catch((error: unknown) => {
-        if (cancelled) return
+        if (cancelled || requestId !== preflightRequestIdRef.current) return
         setBlockedReason(
           error instanceof Error
             ? error.message
@@ -99,7 +105,9 @@ export function useRoutingOverridePrompt() {
         )
       })
       .finally(() => {
-        if (!cancelled) setIsChecking(false)
+        if (!cancelled && requestId === preflightRequestIdRef.current) {
+          setIsChecking(false)
+        }
       })
 
     return () => {

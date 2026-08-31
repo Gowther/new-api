@@ -109,6 +109,7 @@ import {
   SecureVerificationDialog,
   useSecureVerification,
 } from '@/features/auth/secure-verification'
+import { modelRoutingQueryKeys } from '@/features/models/lib/query-keys'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { useHiddenClickUnlock } from '@/hooks/use-hidden-click-unlock'
 import {
@@ -1755,6 +1756,12 @@ export function ChannelMutateDrawer({
   // Handle successful submission
   const handleSuccess = useCallback(
     (values: ChannelFormValues) => {
+      // The routing workbench keeps its own channel and pricing caches, which no
+      // channelsQueryKeys invalidation reaches. Marking them invalidated covers
+      // both ways it observes this write: a mounted workbench refetches now, and
+      // an unmounted one refetches on its next mount even inside its staleTime —
+      // which is what onCreated navigating straight to it depends on.
+      queryClient.invalidateQueries({ queryKey: modelRoutingQueryKeys.all })
       if (!isEditing) {
         onCreated?.(
           values.models

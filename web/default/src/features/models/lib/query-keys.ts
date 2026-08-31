@@ -32,6 +32,21 @@ export const modelsQueryKeys = {
 }
 
 /**
+ * React Query cache keys for the model routing workbench.
+ *
+ * The workbench keeps its own channel and pricing caches because it needs every
+ * channel at once rather than the paginated list the channels page reads. That
+ * makes them invisible to `channelsQueryKeys` invalidation, so anything writing
+ * channels has to invalidate `all` here too or the routing table keeps showing
+ * the channel set from before the write.
+ */
+export const modelRoutingQueryKeys = {
+  all: ['model-routing'] as const,
+  channels: () => [...modelRoutingQueryKeys.all, 'channels'] as const,
+  pricing: () => [...modelRoutingQueryKeys.all, 'pricing'] as const,
+}
+
+/**
  * React Query cache keys for vendors
  */
 export const vendorsQueryKeys = {

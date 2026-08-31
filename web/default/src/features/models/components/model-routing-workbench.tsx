@@ -114,6 +114,8 @@ import { getLobeIcon } from '@/lib/lobe-icon'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
+import { modelRoutingQueryKeys } from '../lib'
+
 const ROUTING_PAGE_SIZE = 100
 const UNASSIGNED_PROVIDER_KEY = '__unassigned__'
 const EMPTY_PRICING_MODELS: PricingModel[] = []
@@ -672,13 +674,13 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     )
 
   const pricingQuery = useQuery({
-    queryKey: ['model-routing', 'pricing'],
+    queryKey: modelRoutingQueryKeys.pricing(),
     queryFn: fetchPricingRoutingData,
     staleTime: 5 * 60 * 1000,
   })
 
   const channelsQuery = useQuery({
-    queryKey: ['model-routing', 'channels'],
+    queryKey: modelRoutingQueryKeys.channels(),
     queryFn: fetchAllChannels,
     staleTime: 30 * 1000,
   })
@@ -1393,7 +1395,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
           queryKey: channelsQueryKeys.lists(),
         })
         await queryClient.invalidateQueries({
-          queryKey: ['model-routing', 'pricing'],
+          queryKey: modelRoutingQueryKeys.pricing(),
         })
         await queryClient.invalidateQueries({
           queryKey: channelsQueryKeys.routingOverride(),
@@ -1441,10 +1443,10 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
         queryKey: channelsQueryKeys.lists(),
       })
       await queryClient.invalidateQueries({
-        queryKey: ['model-routing', 'channels'],
+        queryKey: modelRoutingQueryKeys.channels(),
       })
       await queryClient.invalidateQueries({
-        queryKey: ['model-routing', 'pricing'],
+        queryKey: modelRoutingQueryKeys.pricing(),
       })
       await queryClient.invalidateQueries({
         queryKey: channelsQueryKeys.routingOverride(),
@@ -1468,7 +1470,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     setTestingChannel(null)
     // The dialog writes response_time / test_time into the channel caches.
     void queryClient.invalidateQueries({
-      queryKey: ['model-routing', 'channels'],
+      queryKey: modelRoutingQueryKeys.channels(),
     })
   }
 
@@ -1530,10 +1532,10 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
           queryKey: channelsQueryKeys.lists(),
         })
         await queryClient.invalidateQueries({
-          queryKey: ['model-routing', 'channels'],
+          queryKey: modelRoutingQueryKeys.channels(),
         })
         await queryClient.invalidateQueries({
-          queryKey: ['model-routing', 'pricing'],
+          queryKey: modelRoutingQueryKeys.pricing(),
         })
         toast.success(
           t('{{count}} channel(s) updated', {

@@ -62,6 +62,7 @@ import { ChannelRemarkTooltip } from '../../common/ChannelRemarkTooltip';
 import { CHANNEL_OPTIONS } from '../../../constants';
 import {
   API,
+  CHANNEL_CREATED_EVENT,
   copy,
   getChannelIcon,
   getLobeHubIcon,
@@ -1146,7 +1147,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     writeStoredShowAllModels(checked);
   };
 
-  const refreshRoutingData = async () => {
+  const refreshRoutingData = useCallback(async () => {
     await loadRoutingData();
     setRoutingOverrideLoading(true);
     try {
@@ -1156,7 +1157,22 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     } finally {
       setRoutingOverrideLoading(false);
     }
-  };
+  }, [loadRoutingData, t]);
+
+  // A channel added from elsewhere — the paste listener opens its create modal
+  // over whatever page is showing — lands in this table. The initial load only
+  // runs on mount, and arriving here from the paste flow does not remount when
+  // the routing tab is already open, so the new channel would stay invisible.
+  useEffect(() => {
+    const onChannelCreated = () => {
+      refreshRoutingData();
+    };
+
+    window.addEventListener(CHANNEL_CREATED_EVENT, onChannelCreated);
+    return () => {
+      window.removeEventListener(CHANNEL_CREATED_EVENT, onChannelCreated);
+    };
+  }, [refreshRoutingData]);
 
   const handleSetDefaultModel = () => {
     if (!selectedRoutingSelection) return;

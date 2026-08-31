@@ -274,6 +274,11 @@ func InitLogDB() (err error) {
 }
 
 func migrateDB() error {
+	// migratePrefillGroupUniqueness (upstream 69a41eead) 不引入：依赖新版
+	// GORM 的 schema.Namer.UniqueName，本地 GORM v1.25.12 不支持。
+	if err := migrateTokenKeyUniqueness(DB); err != nil {
+		return err
+	}
 	// Migrate price_amount column from float/double to decimal for existing tables
 	migrateSubscriptionPlanPriceAmount()
 	// Migrate model_limits column from varchar to text for existing tables

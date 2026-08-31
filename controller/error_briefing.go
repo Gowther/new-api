@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -54,7 +55,22 @@ const (
 	errorBriefingRelayPath      = "/pg/chat/completions"
 )
 
-var errorBriefingRateLimiter = common.InMemoryRateLimiter{}
+var (
+	errorBriefingRateLimiter = common.InMemoryRateLimiter{}
+	// Error telemetry can contain credentials that are not URL-shaped and thus
+	// are deliberately outside common.MaskSensitiveInfo's scope. These patterns
+	// cover common header and provider key forms before telemetry reaches the
+	// briefing model.
+	errorBriefingCredentialPatterns = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)\b(?:authorization|x-api-key|api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|secret|password|token)\b["']?\s*[:=]\s*["']?(?:bearer\s+)?[^\s,;'"\\}\]]+`),
+		regexp.MustCompile(`(?i)\bbearer\s+[a-z0-9._~+/=-]{16,}`),
+		regexp.MustCompile(`\b(?:sk|rk|pk|sess)-[A-Za-z0-9_-]{16,}\b`),
+		regexp.MustCompile(`\bAIza[A-Za-z0-9_-]{20,}\b`),
+		regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b`),
+		regexp.MustCompile(`\b(?:AKIA|ASIA)[A-Z0-9]{16}\b`),
+		regexp.MustCompile(`\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b`),
+	}
+)
 
 func init() {
 	errorBriefingRateLimiter.Init(10 * time.Minute)
@@ -265,14 +281,18 @@ func errorBriefingLanguage(value string) string {
 }
 
 // errorBriefingErrorText decides what error text leaves the deployment. The
-// normalized form has already had URLs, UUIDs, and long tokens replaced with
-// placeholders by fingerprinting, which is why it is the default. Raw text is
-// upstream-controlled and can carry key fragments or internal hostnames, so it
-// is masked even when an admin opts into it.
+// normalized form has already had URLs, UUIDs, and some long tokens replaced
+// with placeholders by fingerprinting, which is why it is the default. Raw
+// text is upstream-controlled and can carry key fragments or internal
+// hostnames, so both forms are redacted before an admin-selected channel sees
+// them.
 func errorBriefingErrorText(problem *model.ErrorLogProblem, includeRawErrorText bool) string {
 	text := problem.ErrorSummary
 	if !includeRawErrorText {
 		text = problem.NormalizedErrorSummary
+	}
+	for _, pattern := range errorBriefingCredentialPatterns {
+		text = pattern.ReplaceAllString(text, "***")
 	}
 	text = common.MaskSensitiveInfo(strings.TrimSpace(text))
 	runes := []rune(text)

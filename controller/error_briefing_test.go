@@ -61,6 +61,60 @@ func TestErrorBriefingErrorTextMasksAndTruncatesRawTelemetry(t *testing.T) {
 	assert.LessOrEqual(t, len([]rune(raw)), errorBriefingErrorTextLimit+3)
 }
 
+func TestErrorBriefingErrorTextRedactsCredentialShapedTelemetry(t *testing.T) {
+	tests := []struct {
+		name       string
+		telemetry  string
+		credential string
+	}{
+		{
+			name:       "structured authorization header",
+			telemetry:  `{"authorization":"Bearer field-secret-abcdefghijklmnopqrstuvwxyz"}`,
+			credential: "field-secret-abcdefghijklmnopqrstuvwxyz",
+		},
+		{
+			name:       "OpenAI-style key",
+			telemetry:  "upstream rejected sk-proj-abcdefghijklmnopqrstuvwxyz0123456789",
+			credential: "sk-proj-abcdefghijklmnopqrstuvwxyz0123456789",
+		},
+		{
+			name:       "Google API key",
+			telemetry:  "upstream rejected AIzaABCDEFGHIJKLMNOPQRSTUVWXYZ",
+			credential: "AIzaABCDEFGHIJKLMNOPQRSTUVWXYZ",
+		},
+		{
+			name:       "JWT",
+			telemetry:  "upstream rejected eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJvcGVyYXRvciJ9.signaturepart123456",
+			credential: "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJvcGVyYXRvciJ9.signaturepart123456",
+		},
+		{
+			name:       "AWS access key",
+			telemetry:  "upstream rejected AKIAAAAAAAAAAAAAAAAA",
+			credential: "AKIAAAAAAAAAAAAAAAAA",
+		},
+		{
+			name:       "GitHub token",
+			telemetry:  "upstream rejected ghp_abcdefghijklmnopqrstuvwxyz0123456789",
+			credential: "ghp_abcdefghijklmnopqrstuvwxyz0123456789",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			problem := &model.ErrorLogProblem{
+				ErrorSummary:           tt.telemetry,
+				NormalizedErrorSummary: tt.telemetry,
+			}
+			for _, includeRawErrorText := range []bool{false, true} {
+				text := errorBriefingErrorText(problem, includeRawErrorText)
+
+				assert.NotContains(t, text, tt.credential)
+				assert.Contains(t, text, "***")
+			}
+		})
+	}
+}
+
 func TestExtractErrorBriefingText(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		response := &http.Response{

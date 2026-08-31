@@ -84,16 +84,124 @@ export const upsertModelMappingTemplate = (templates, next) => {
   return templates.map((item) => (item.id === next.id ? next : item));
 };
 
-export const mergeModelMappingTemplate = (currentMapping, templateMapping) => {
-  const currentEntries = Object.entries(currentMapping);
-  const addedEntries = Object.entries(templateMapping).filter(
-    ([source]) => !Object.prototype.hasOwnProperty.call(currentMapping, source),
-  );
+/** Everything after the last slash, so `openai/gpt-4o` and a bare `gpt-4o` can
+ *  be compared. Used for matching only — never for the name we store. */
+const stripVendorPrefix = (model) => {
+  const separator = model.lastIndexOf('/');
+  return separator === -1 ? model : model.slice(separator + 1);
+};
 
-  return {
-    mapping: Object.fromEntries([...currentEntries, ...addedEntries]),
-    addedMapping: Object.fromEntries(addedEntries),
-  };
+// Tried in order, first tier with a match wins. Substring matching is
+// deliberately absent: `gpt-4o` would match `gpt-4o-mini`, and a mapping that
+// silently points at the wrong model is harder to notice than one that is
+// missing. Each tier normalises both sides, so the vendor tier matches a
+// prefixed template target against a bare served model and vice versa.
+const TARGET_MATCH_TIERS = [
+  (model) => model,
+  (model) => model.toLowerCase(),
+  (model) => stripVendorPrefix(model).toLowerCase(),
+];
+
+const resolveTemplateTarget = (target, servedModels) => {
+  for (const normalize of TARGET_MATCH_TIERS) {
+    const normalizedTarget = normalize(target);
+    if (!normalizedTarget) continue;
+    const matches = servedModels.filter(
+      (model) => normalize(model) === normalizedTarget,
+    );
+    if (matches.length === 1) return { model: matches[0] };
+    if (matches.length > 1) return { candidates: matches };
+  }
+  return { candidates: [] };
+};
+
+/**
+ * Applies a template on top of the current mapping.
+ *
+ * `servedModels` is what the channel actually answers — the models fetched from
+ * upstream and kept. A template is a reusable list of exposed names, so it
+ * routinely names models a given channel does not have, and an entry whose
+ * target is missing must not become a mapping: it would advertise a model the
+ * channel cannot answer, and requests for it fail. Pass `undefined` to apply
+ * every entry, which is what callers editing a mapping with no channel in
+ * context (a tag, or the template's own mapping) need.
+ *
+ * The target is matched by name, not by identity, so an upstream that returns
+ * `openai/gpt-4o` or `GPT-4o` still satisfies a template written against
+ * `gpt-4o`. The stored target is always the served model's own name, because
+ * that is what gets sent upstream.
+ *
+ * Sources already present in the current mapping are left alone and reported as
+ * applied: they are the operator's own edits, not something this template is
+ * introducing.
+ */
+export const applyModelMappingTemplate = (
+  currentMapping,
+  templateMapping,
+  servedModels,
+) => {
+  const mapping = { ...currentMapping };
+  const appliedMapping = {};
+  const addedMapping = {};
+  const skipped = [];
+
+  const served = servedModels
+    ? [
+        ...new Set(
+          servedModels
+            .map((model) => String(model || '').trim())
+            .filter(Boolean),
+        ),
+      ]
+    : null;
+
+  for (const [rawSource, rawTarget] of Object.entries(templateMapping)) {
+    const source = String(rawSource || '').trim();
+    const target = String(rawTarget || '').trim();
+    if (!source) continue;
+
+    if (Object.prototype.hasOwnProperty.call(currentMapping, source)) {
+      appliedMapping[source] = currentMapping[source];
+      continue;
+    }
+    if (!target) continue;
+
+    if (!served) {
+      mapping[source] = target;
+      addedMapping[source] = target;
+      appliedMapping[source] = target;
+      continue;
+    }
+
+    const resolved = resolveTemplateTarget(target, served);
+    if (resolved.candidates) {
+      skipped.push({
+        source,
+        target,
+        reason:
+          resolved.candidates.length > 0
+            ? 'target-ambiguous'
+            : 'target-not-served',
+        ...(resolved.candidates.length > 0
+          ? { candidates: resolved.candidates }
+          : {}),
+      });
+      continue;
+    }
+
+    // The channel serves the exposed name itself, so it is already reachable and
+    // the mapping would be an identity no-op.
+    if (resolved.model === source) {
+      skipped.push({ source, target, reason: 'already-served' });
+      continue;
+    }
+
+    mapping[source] = resolved.model;
+    addedMapping[source] = resolved.model;
+    appliedMapping[source] = resolved.model;
+  }
+
+  return { mapping, appliedMapping, addedMapping, skipped };
 };
 
 export const reconcileModelsForMapping = (

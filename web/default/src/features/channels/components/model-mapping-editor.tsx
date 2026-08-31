@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { TFunction } from 'i18next'
 import {
   Code,
   FileStack,
@@ -27,6 +28,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -43,9 +45,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 
 import {
+  applyModelMappingTemplate,
   loadModelMappingTemplates,
-  mergeModelMappingTemplate,
   type ModelMappingTemplate,
+  type ModelMappingTemplateSkip,
 } from '../lib/model-mapping-templates'
 import { ModelMappingTemplatesDialog } from './dialogs/model-mapping-templates-dialog'
 
@@ -87,6 +90,27 @@ function getDuplicateSources(rows: MappingRow[]): string[] {
   }
 
   return Array.from(duplicates)
+}
+
+function describeTemplateSkip(
+  skip: ModelMappingTemplateSkip,
+  t: TFunction
+): string {
+  switch (skip.reason) {
+    case 'target-ambiguous':
+      return t('{{source}}: "{{target}}" matches {{models}}', {
+        source: skip.source,
+        target: skip.target,
+        models: (skip.candidates || []).join(', '),
+      })
+    case 'already-served':
+      return t('{{source}}: already served directly', { source: skip.source })
+    default:
+      return t('{{source}}: this channel does not serve "{{target}}"', {
+        source: skip.source,
+        target: skip.target,
+      })
+  }
 }
 
 export function ModelMappingEditor(props: ModelMappingEditorProps) {
@@ -230,6 +254,38 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
     parseJsonToRows(newJson)
   }
 
+  // Skipping entries silently would read as the template being broken, so say
+  // what landed and what did not. The reasons go in the description because the
+  // count alone does not tell the operator whether to fix the template, the
+  // channel's model list, or nothing at all.
+  const reportTemplateApplication = (
+    appliedCount: number,
+    skipped: ModelMappingTemplateSkip[]
+  ) => {
+    if (skipped.length === 0) {
+      if (appliedCount > 0) {
+        toast.success(
+          t('Applied {{count}} mappings from the template', {
+            count: appliedCount,
+          })
+        )
+      }
+      return
+    }
+    const description = skipped
+      .map((skip) => describeTemplateSkip(skip, t))
+      .join('\n')
+    const message = t('Applied {{applied}}, skipped {{skipped}}', {
+      applied: appliedCount,
+      skipped: skipped.length,
+    })
+    if (appliedCount === 0) {
+      toast.warning(message, { description })
+      return
+    }
+    toast.success(message, { description })
+  }
+
   const applyTemplate = (template: ModelMappingTemplate) => {
     let currentMapping: Record<string, string> = {}
     try {
@@ -250,14 +306,18 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
       return
     }
 
-    const { mapping, addedMapping } = mergeModelMappingTemplate(
-      currentMapping,
-      template.mapping
-    )
-    const appliedMapping = Object.fromEntries(
-      Object.keys(template.mapping).map((source) => [source, mapping[source]])
-    )
+    // A template names exposed models for a whole family of channels, so it
+    // routinely lists models this one does not serve. sourceModelOptions is the
+    // served set when a channel is in context; without it (a tag, or a
+    // template's own mapping) there is nothing to filter against.
+    const { mapping, appliedMapping, addedMapping, skipped } =
+      applyModelMappingTemplate(
+        currentMapping,
+        template.mapping,
+        props.sourceModelOptions
+      )
     setSelectedTemplateId(template.id)
+    reportTemplateApplication(Object.keys(addedMapping).length, skipped)
     if (Object.keys(addedMapping).length === 0) {
       setJsonError(null)
       props.onTemplateApplied?.(appliedMapping, mapping)

@@ -20,7 +20,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 
 import {
-  mergeModelMappingTemplate,
+  applyModelMappingTemplate,
   reconcileModelsForMapping,
   upsertModelMappingTemplate,
   type ModelMappingTemplate,
@@ -28,7 +28,7 @@ import {
 
 describe('model mapping templates', () => {
   test('appends new mappings without replacing existing sources', () => {
-    const result = mergeModelMappingTemplate(
+    const result = applyModelMappingTemplate(
       { existing: 'existing-upstream', shared: 'keep-this-target' },
       { added: 'added-upstream', shared: 'do-not-use-this-target' }
     )
@@ -39,6 +39,82 @@ describe('model mapping templates', () => {
       added: 'added-upstream',
     })
     assert.deepEqual(result.addedMapping, { added: 'added-upstream' })
+    assert.deepEqual(result.appliedMapping, {
+      added: 'added-upstream',
+      shared: 'keep-this-target',
+    })
+    assert.deepEqual(result.skipped, [])
+  })
+
+  test('skips entries whose target the channel does not serve', () => {
+    const result = applyModelMappingTemplate(
+      {},
+      {
+        'gpt-4o': 'gpt-4o-2024-11-20',
+        'claude-sonnet-4': 'claude-sonnet-4-20250514',
+      },
+      ['gpt-4o-2024-11-20']
+    )
+
+    assert.deepEqual(result.mapping, { 'gpt-4o': 'gpt-4o-2024-11-20' })
+    assert.deepEqual(result.addedMapping, { 'gpt-4o': 'gpt-4o-2024-11-20' })
+    assert.deepEqual(result.skipped, [
+      {
+        source: 'claude-sonnet-4',
+        target: 'claude-sonnet-4-20250514',
+        reason: 'target-not-served',
+      },
+    ])
+  })
+
+  test('matches a target past a vendor prefix and case, storing the served name', () => {
+    const result = applyModelMappingTemplate(
+      {},
+      { alias: 'gpt-4o', 'alias-cased': 'CLAUDE-OPUS-4' },
+      ['openai/gpt-4o', 'claude-opus-4']
+    )
+
+    assert.deepEqual(result.mapping, {
+      alias: 'openai/gpt-4o',
+      'alias-cased': 'claude-opus-4',
+    })
+    assert.deepEqual(result.skipped, [])
+  })
+
+  test('refuses to guess when several served models match one target', () => {
+    const result = applyModelMappingTemplate({}, { alias: 'gpt-4o' }, [
+      'openai/gpt-4o',
+      'azure/gpt-4o',
+    ])
+
+    assert.deepEqual(result.mapping, {})
+    assert.deepEqual(result.skipped, [
+      {
+        source: 'alias',
+        target: 'gpt-4o',
+        reason: 'target-ambiguous',
+        candidates: ['openai/gpt-4o', 'azure/gpt-4o'],
+      },
+    ])
+  })
+
+  test('writes no identity mapping when the channel serves the exposed name', () => {
+    const result = applyModelMappingTemplate({}, { 'gpt-4o': 'gpt-4o' }, [
+      'gpt-4o',
+    ])
+
+    assert.deepEqual(result.mapping, {})
+    assert.deepEqual(result.appliedMapping, {})
+    assert.deepEqual(result.skipped, [
+      { source: 'gpt-4o', target: 'gpt-4o', reason: 'already-served' },
+    ])
+  })
+
+  test('applies every entry when no served set is given', () => {
+    const result = applyModelMappingTemplate({}, { alias: 'never-served' })
+
+    assert.deepEqual(result.mapping, { alias: 'never-served' })
+    assert.deepEqual(result.skipped, [])
   })
 
   test('hides new targets and appends missing sources to the model list', () => {
@@ -81,7 +157,7 @@ describe('model mapping templates', () => {
   })
 
   test('reconciles existing template keys with their retained targets', () => {
-    const { mapping } = mergeModelMappingTemplate(
+    const { mapping } = applyModelMappingTemplate(
       { shared: 'retained-target' },
       { shared: 'template-target' }
     )

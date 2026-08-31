@@ -36,16 +36,31 @@ import {
   Divider,
   Tooltip,
   Dropdown,
+  Toast,
 } from '@douyinfe/semi-ui';
 import { IconPlus, IconDelete, IconAlertTriangle } from '@douyinfe/semi-icons';
 import {
   MODEL_MAPPING_TEMPLATES_STORAGE_KEY,
+  applyModelMappingTemplate,
   loadModelMappingTemplates,
-  mergeModelMappingTemplate,
 } from '../../../helpers/modelMapping';
 import ModelMappingTemplateModal from './ModelMappingTemplateModal';
 
 const { Text } = Typography;
+
+const describeTemplateSkip = (skip, t) => {
+  if (skip.reason === 'target-ambiguous') {
+    return `${skip.source}：${t('“{{target}}”匹配到多个模型', {
+      target: skip.target,
+    })} ${(skip.candidates || []).join('、')}`;
+  }
+  if (skip.reason === 'already-served') {
+    return `${skip.source}：${t('渠道已直接提供该模型')}`;
+  }
+  return `${skip.source}：${t('本渠道没有“{{target}}”', {
+    target: skip.target,
+  })}`;
+};
 
 // 唯一 ID 生成器，确保在组件生命周期内稳定且递增
 const generateUniqueId = (() => {
@@ -70,6 +85,10 @@ const JSONEditor = ({
   formApi = null,
   renderStringValueSuffix,
   templateStorageKey = '',
+  /** Models the channel actually serves. Given for a model-mapping template, it
+   *  drops template entries whose target this channel does not have. Omit it
+   *  where no channel is in context (a tag) to apply every entry. */
+  servedModels,
   ...props
 }) => {
   const { t } = useTranslation();
@@ -329,6 +348,44 @@ const JSONEditor = ({
     [keyValuePairs, handleVisualChange],
   );
 
+  // Skipping entries silently would read as the template being broken, so say
+  // what landed and what did not. The reasons follow the count because the count
+  // alone does not tell the operator whether to fix the template, the channel's
+  // model list, or nothing at all.
+  const reportTemplateApplication = useCallback(
+    (appliedCount, skipped) => {
+      if (skipped.length === 0) {
+        if (appliedCount > 0) {
+          Toast.success(
+            t('已应用模板中的 {{count}} 条重定向', { count: appliedCount }),
+          );
+        }
+        return;
+      }
+      const content = (
+        <div>
+          <div>
+            {t('已应用 {{applied}} 条，跳过 {{skipped}} 条', {
+              applied: appliedCount,
+              skipped: skipped.length,
+            })}
+          </div>
+          {skipped.map((skip) => (
+            <div key={`${skip.source}-${skip.reason}`} className='text-xs'>
+              {describeTemplateSkip(skip, t)}
+            </div>
+          ))}
+        </div>
+      );
+      if (appliedCount === 0) {
+        Toast.warning({ content });
+        return;
+      }
+      Toast.success({ content });
+    },
+    [t],
+  );
+
   const applyTemplateValue = useCallback(
     (templateValue, templateId = null) => {
       let nextValue = templateValue;
@@ -361,16 +418,23 @@ const JSONEditor = ({
           return;
         }
 
-        const merged = mergeModelMappingTemplate(currentMapping, templateValue);
-        nextValue = merged.mapping;
-        addedMapping = merged.addedMapping;
-        appliedMapping = Object.fromEntries(
-          Object.keys(templateValue).map((source) => [
-            source,
-            nextValue[source],
-          ]),
+        // A template names exposed models for a whole family of channels, so it
+        // routinely lists models this one does not serve. servedModels is that
+        // set when a channel is in context; without it (a tag) there is nothing
+        // to filter against.
+        const applied = applyModelMappingTemplate(
+          currentMapping,
+          templateValue,
+          servedModels,
         );
+        nextValue = applied.mapping;
+        addedMapping = applied.addedMapping;
+        appliedMapping = applied.appliedMapping;
         setSelectedTemplateId(templateId);
+        reportTemplateApplication(
+          Object.keys(addedMapping).length,
+          applied.skipped,
+        );
         if (Object.keys(addedMapping).length === 0) {
           onTemplateApplied?.(appliedMapping, nextValue);
           setJsonError('');
@@ -401,6 +465,8 @@ const JSONEditor = ({
       objectToKeyValueArray,
       onChange,
       onTemplateApplied,
+      reportTemplateApplication,
+      servedModels,
       t,
       templateStorageKey,
     ],

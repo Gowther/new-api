@@ -235,7 +235,7 @@ export function ErrorWorkbench() {
         <span className='flex min-w-0 items-center gap-2'>
           <span className='truncate'>{t('Error Workbench')}</span>
           <Badge variant='outline' className='shrink-0'>
-            Admin
+            {t('Admin')}
           </Badge>
         </span>
       </SectionPageLayout.Title>

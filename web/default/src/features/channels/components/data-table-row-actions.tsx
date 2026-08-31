@@ -525,7 +525,9 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
                 {routingPrompt.blockedReason}
               </div>
             ) : null}
-            <RoutingOverrideConflictNotice conflicts={routingPrompt.conflicts} />
+            <RoutingOverrideConflictNotice
+              conflicts={routingPrompt.conflicts}
+            />
           </div>
         }
         confirmText={temporaryRoutingConfirmText}

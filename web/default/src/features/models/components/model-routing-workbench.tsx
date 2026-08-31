@@ -1556,6 +1556,13 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     }
   }
 
+  let routingPromptConfirmText = t('Enable temporary mode')
+  if (routingPrompt.target?.isActive) {
+    routingPromptConfirmText = t('Restore normal routing')
+  } else if (routingPrompt.conflicts.length > 0) {
+    routingPromptConfirmText = t('Replace and enable')
+  }
+
   return (
     <div className='flex h-full min-h-0 flex-col gap-3'>
       <div className='flex flex-wrap items-center justify-between gap-2'>
@@ -1944,7 +1951,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                             into view. */}
                         <button
                           type='button'
-                          className='flex min-w-0 items-center gap-2 rounded-sm underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
+                          className='focus-visible:ring-ring flex min-w-0 items-center gap-2 rounded-sm underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:outline-none'
                           title={t('Show this channel in the routing table')}
                           aria-label={`${t('Show this channel in the routing table')}: ${overrideLabel}`}
                           onClick={() =>
@@ -2320,7 +2327,9 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                                       disabled={
                                         !canEditRouting ||
                                         (!isEnabled &&
-                                          !isRoutingOverrideTarget(channel.id)) ||
+                                          !isRoutingOverrideTarget(
+                                            channel.id
+                                          )) ||
                                         isUpdatingRoutingOverride ||
                                         routingPrompt.isSubmitting
                                       }
@@ -2538,16 +2547,12 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                 {routingPrompt.blockedReason}
               </div>
             ) : null}
-            <RoutingOverrideConflictNotice conflicts={routingPrompt.conflicts} />
+            <RoutingOverrideConflictNotice
+              conflicts={routingPrompt.conflicts}
+            />
           </div>
         }
-        confirmText={
-          routingPrompt.target?.isActive
-            ? t('Restore normal routing')
-            : routingPrompt.conflicts.length > 0
-              ? t('Replace and enable')
-              : t('Enable temporary mode')
-        }
+        confirmText={routingPromptConfirmText}
         destructive={routingPrompt.conflicts.length > 0}
         disabled={
           !canEditRouting ||
@@ -2560,8 +2565,9 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
       <ConfirmDialog
         open={restoreRoutingOverrideTarget !== null}
         onOpenChange={(open) => {
-          if (!open && !isUpdatingRoutingOverride)
+          if (!open && !isUpdatingRoutingOverride) {
             setRestoreRoutingOverrideTarget(null)
+          }
         }}
         title={t('Restore normal routing?')}
         desc={

@@ -72,14 +72,14 @@ const defaultChannelTestPrompt =
   'Explain in one short sentence why caching can reduce latency.'
 
 function normalizeChannelTestPromptLines(value: string) {
-  return Array.from(
-    new Set(
+  return [
+    ...new Set(
       normalizeLineEndings(value)
         .split('\n')
         .map((prompt) => prompt.trim())
         .filter(Boolean)
-    )
-  )
+    ),
+  ]
 }
 
 function parseChannelTestPrompts(value?: string) {

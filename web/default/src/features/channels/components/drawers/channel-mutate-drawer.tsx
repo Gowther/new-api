@@ -630,8 +630,7 @@ export function ChannelMutateDrawer({
   )
   const canRevealChannelKey = currentUser?.role === ROLE.SUPER_ADMIN
   const [fetchModelsDialogOpen, setFetchModelsDialogOpen] = useState(false)
-  const [modelMappingPreviewOpen, setModelMappingPreviewOpen] =
-    useState(false)
+  const [modelMappingPreviewOpen, setModelMappingPreviewOpen] = useState(false)
   const [modelMappingPreview, setModelMappingPreview] =
     useState<ChannelModelMappingPreview | null>(null)
   const [isModelMappingPreviewing, setIsModelMappingPreviewing] =
@@ -1642,7 +1641,9 @@ export function ChannelMutateDrawer({
         model_mapping: currentModelMapping || '',
       })
       if (!response.success || !response.data) {
-        throw new Error(response.message || t('Failed to preview model mapping'))
+        throw new Error(
+          response.message || t('Failed to preview model mapping')
+        )
       }
       setModelMappingPreview(response.data)
       setModelMappingPreviewOpen(true)
@@ -1689,7 +1690,7 @@ export function ChannelMutateDrawer({
         selectedModels.map((model) => model.toLowerCase())
       )
       const rawMapping = form.getValues('model_mapping') || ''
-      let nextMapping: Record<string, string> = {}
+      const nextMapping: Record<string, string> = {}
 
       if (rawMapping.trim()) {
         try {
@@ -2443,9 +2444,7 @@ export function ChannelMutateDrawer({
                                 <FormLabel>{t('Remark')}</FormLabel>
                                 <FormControl>
                                   <Textarea
-                                    placeholder={t(
-                                      FIELD_PLACEHOLDERS.REMARK
-                                    )}
+                                    placeholder={t(FIELD_PLACEHOLDERS.REMARK)}
                                     rows={2}
                                     {...field}
                                   />
@@ -2514,7 +2513,6 @@ export function ChannelMutateDrawer({
                             </FormItem>
                           </fieldset>
                         )}
-
                       </ChannelBasicSection>
                     </div>
 
@@ -5135,7 +5133,9 @@ export function ChannelMutateDrawer({
                             name='openai_organization'
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>{t('OpenAI Organization')}</FormLabel>
+                                <FormLabel>
+                                  {t('OpenAI Organization')}
+                                </FormLabel>
                                 <FormControl>
                                   <Input
                                     placeholder={t('org-...')}

@@ -21,7 +21,13 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
-import { CircleAlert, ExternalLink, GitBranch, Sparkles, KeyRound } from 'lucide-react'
+import {
+  CircleAlert,
+  ExternalLink,
+  GitBranch,
+  Sparkles,
+  KeyRound,
+} from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 

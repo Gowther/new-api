@@ -57,10 +57,11 @@ const (
 
 var (
 	errorBriefingRateLimiter = common.InMemoryRateLimiter{}
-	// Error telemetry can contain credentials that are not URL-shaped and thus
-	// are deliberately outside common.MaskSensitiveInfo's scope. These patterns
-	// cover common header and provider key forms before telemetry reaches the
-	// briefing model.
+	// Error telemetry and upstream error messages can contain credentials that
+	// are not URL-shaped and thus are deliberately outside
+	// common.MaskSensitiveInfo's scope. These patterns cover common header and
+	// provider key forms before the text reaches the briefing model, a log, or
+	// an API response.
 	errorBriefingCredentialPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)\b(?:authorization|x-api-key|api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|secret|password|token)\b["']?\s*[:=]\s*["']?(?:bearer\s+)?[^\s,;'"\\}\]]+`),
 		regexp.MustCompile(`(?i)\bbearer\s+[a-z0-9._~+/=-]{16,}`),
@@ -185,7 +186,7 @@ func GetErrorBriefing(c *gin.Context) {
 
 	briefing, err := generateErrorBriefing(c, prompt, setting)
 	if err != nil {
-		safeError := common.MaskSensitiveInfo(common.LocalLogPreview(err.Error()))
+		safeError := maskErrorBriefingText(common.LocalLogPreview(err.Error()))
 		logger.LogError(c, "error briefing generation failed: "+safeError)
 		common.ApiErrorMsg(c, "failed to generate briefing: "+safeError)
 		return
@@ -291,15 +292,19 @@ func errorBriefingErrorText(problem *model.ErrorLogProblem, includeRawErrorText 
 	if !includeRawErrorText {
 		text = problem.NormalizedErrorSummary
 	}
-	for _, pattern := range errorBriefingCredentialPatterns {
-		text = pattern.ReplaceAllString(text, "***")
-	}
-	text = common.MaskSensitiveInfo(strings.TrimSpace(text))
+	text = maskErrorBriefingText(text)
 	runes := []rune(text)
 	if len(runes) > errorBriefingErrorTextLimit {
 		text = string(runes[:errorBriefingErrorTextLimit]) + "..."
 	}
 	return text
+}
+
+func maskErrorBriefingText(text string) string {
+	for _, pattern := range errorBriefingCredentialPatterns {
+		text = pattern.ReplaceAllString(text, "***")
+	}
+	return common.MaskSensitiveInfo(strings.TrimSpace(text))
 }
 
 // generateErrorBriefing runs one non-streaming chat completion through this
@@ -383,7 +388,7 @@ func extractErrorBriefingText(response *http.Response) (string, error) {
 		return "", fmt.Errorf("failed to parse briefing response: %w", err)
 	}
 	if apiError := payload.GetOpenAIError(); apiError != nil {
-		message := common.MaskSensitiveInfo(strings.TrimSpace(apiError.Message))
+		message := maskErrorBriefingText(apiError.Message)
 		if message == "" {
 			message = http.StatusText(response.StatusCode)
 		}

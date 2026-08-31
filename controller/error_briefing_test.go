@@ -145,6 +145,22 @@ func TestExtractErrorBriefingText(t *testing.T) {
 		assert.NotContains(t, err.Error(), "private.example.com")
 	})
 
+	t.Run("credential-shaped relay error", func(t *testing.T) {
+		credential := "field-secret-abcdefghijklmnopqrstuvwxyz"
+		response := &http.Response{
+			StatusCode: http.StatusBadGateway,
+			Body: io.NopCloser(strings.NewReader(
+				`{"error":{"message":"upstream rejected Authorization: Bearer ` + credential + `","type":"upstream_error"}}`,
+			)),
+		}
+
+		_, err := extractErrorBriefingText(response)
+
+		require.Error(t, err)
+		assert.NotContains(t, err.Error(), credential)
+		assert.Contains(t, err.Error(), "***")
+	})
+
 	t.Run("invalid error response", func(t *testing.T) {
 		response := &http.Response{
 			StatusCode: http.StatusServiceUnavailable,

@@ -187,6 +187,7 @@ export function parseChannelConnectionString(text) {
       typeof parsed !== 'object' ||
       parsed._type !== CHANNEL_CONN_CLIPBOARD_TYPE ||
       typeof parsed.key !== 'string' ||
+      !parsed.key.trim() ||
       (parsed.url !== undefined && typeof parsed.url !== 'string')
     ) {
       return null;

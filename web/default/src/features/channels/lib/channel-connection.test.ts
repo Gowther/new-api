@@ -110,6 +110,11 @@ describe('channel connection clipboard payload', () => {
       parseChannelConnectionString(conn({ url: 'https://a.com' })),
       null
     )
+    assert.equal(parseChannelConnectionString(conn({ key: '', url: '' })), null)
+    assert.equal(
+      parseChannelConnectionString(conn({ key: '  \n ', url: '' })),
+      null
+    )
     assert.equal(parseChannelConnectionString(conn({ key: 1, url: '' })), null)
     assert.equal(
       parseChannelConnectionString(conn({ key: 'sk', url: 9 })),

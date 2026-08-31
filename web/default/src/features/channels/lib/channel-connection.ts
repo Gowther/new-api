@@ -129,7 +129,7 @@ export function parseChannelConnectionString(
 
   const payload = parsed as Record<string, unknown>
   if (payload._type !== CHANNEL_CONN_CLIPBOARD_TYPE) return null
-  if (typeof payload.key !== 'string') return null
+  if (typeof payload.key !== 'string' || !payload.key.trim()) return null
   if (payload.url !== undefined && typeof payload.url !== 'string') return null
 
   const config: ChannelConnectionConfig = {

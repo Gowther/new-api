@@ -85,12 +85,17 @@ export function loadModelMappingTemplates(): ModelMappingTemplate[] {
 
 export function persistModelMappingTemplates(
   templates: ModelMappingTemplate[]
-) {
-  if (typeof window === 'undefined') return
-  window.localStorage.setItem(
-    MODEL_MAPPING_TEMPLATES_STORAGE_KEY,
-    JSON.stringify({ version: 1, templates })
-  )
+): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    window.localStorage.setItem(
+      MODEL_MAPPING_TEMPLATES_STORAGE_KEY,
+      JSON.stringify({ version: 1, templates })
+    )
+    return true
+  } catch {
+    return false
+  }
 }
 
 /** Upserts by id, so renaming a template in place keeps its identity. */

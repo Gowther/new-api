@@ -44,11 +44,16 @@ export const normalizeModelMappingTemplate = (value) => {
 };
 
 export const persistModelMappingTemplates = (templates) => {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(
-    MODEL_MAPPING_TEMPLATES_STORAGE_KEY,
-    JSON.stringify({ version: 1, templates }),
-  );
+  if (typeof window === 'undefined') return false;
+  try {
+    window.localStorage.setItem(
+      MODEL_MAPPING_TEMPLATES_STORAGE_KEY,
+      JSON.stringify({ version: 1, templates }),
+    );
+    return true;
+  } catch {
+    return false;
+  }
 };
 
 export const loadModelMappingTemplates = () => {

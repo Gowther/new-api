@@ -26,7 +26,16 @@ import {
   Table,
   Trash2,
 } from 'lucide-react'
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -50,7 +59,6 @@ import {
   type ModelMappingTemplate,
   type ModelMappingTemplateSkip,
 } from '../lib/model-mapping-templates'
-import { ModelMappingTemplatesDialog } from './dialogs/model-mapping-templates-dialog'
 
 type ModelMappingEditorProps = {
   value: string
@@ -75,6 +83,12 @@ type MappingRow = {
 
 const DUPLICATE_MAPPING_SENTINEL = '{ "duplicate_source_models": '
 
+const ModelMappingTemplatesDialog = lazy(() =>
+  import('./dialogs/model-mapping-templates-dialog').then((module) => ({
+    default: module.ModelMappingTemplatesDialog,
+  }))
+)
+
 function getDuplicateSources(rows: MappingRow[]): string[] {
   const seen = new Set<string>()
   const duplicates = new Set<string>()
@@ -89,7 +103,7 @@ function getDuplicateSources(rows: MappingRow[]): string[] {
     }
   }
 
-  return Array.from(duplicates)
+  return [...duplicates]
 }
 
 function describeTemplateSkip(
@@ -132,68 +146,71 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
   const nextRowIdRef = useRef(0)
   const duplicateSources = useMemo(() => getDuplicateSources(rows), [rows])
 
-  const createRowId = () => {
+  const createRowId = useCallback(() => {
     nextRowIdRef.current += 1
     return `mapping-${nextRowIdRef.current}`
-  }
+  }, [])
 
-  const parseJsonToRows = (json: string): boolean => {
-    try {
-      if (!json.trim()) {
-        setRows([])
-        setJsonError(null)
-        return true
-      }
-      const parsed = JSON.parse(json)
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        setJsonError(t('Model mapping must be a valid JSON object'))
-        return false
-      }
-      const entries = Object.entries(parsed)
-      const invalidValue = entries.find(([, to]) => typeof to !== 'string')
-      if (invalidValue) {
-        setJsonError(t('Model mapping values must be strings'))
-        return false
-      }
-      setRows((previousRows) => {
-        const remainingRows = [...previousRows]
-        return entries.map(([from, to], index) => {
-          const toString = String(to)
-          const existingIndex = remainingRows.findIndex(
-            (row) =>
-              row.from === from ||
-              (row.from === from && row.to === toString) ||
-              previousRows[index]?.id === row.id
-          )
-          if (existingIndex >= 0) {
-            const [existing] = remainingRows.splice(existingIndex, 1)
+  const parseJsonToRows = useCallback(
+    (json: string): boolean => {
+      try {
+        if (!json.trim()) {
+          setRows([])
+          setJsonError(null)
+          return true
+        }
+        const parsed = JSON.parse(json)
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          setJsonError(t('Model mapping must be a valid JSON object'))
+          return false
+        }
+        const entries = Object.entries(parsed)
+        const invalidValue = entries.find(([, to]) => typeof to !== 'string')
+        if (invalidValue) {
+          setJsonError(t('Model mapping values must be strings'))
+          return false
+        }
+        setRows((previousRows) => {
+          const remainingRows = [...previousRows]
+          return entries.map(([from, to], index) => {
+            const toString = String(to)
+            const existingIndex = remainingRows.findIndex(
+              (row) =>
+                row.from === from ||
+                (row.from === from && row.to === toString) ||
+                previousRows[index]?.id === row.id
+            )
+            if (existingIndex >= 0) {
+              const [existing] = remainingRows.splice(existingIndex, 1)
+              return {
+                id: existing.id,
+                from,
+                to: toString,
+              }
+            }
             return {
-              id: existing.id,
+              id: createRowId(),
               from,
               to: toString,
             }
-          }
-          return {
-            id: createRowId(),
-            from,
-            to: toString,
-          }
+          })
         })
-      })
-      setJsonError(null)
-      return true
-    } catch {
-      setJsonError(t('Model mapping must be valid JSON format'))
-      return false
-    }
-  }
+        setJsonError(null)
+        return true
+      } catch {
+        setJsonError(t('Model mapping must be valid JSON format'))
+        return false
+      }
+    },
+    [createRowId, t]
+  )
 
   // Parse JSON to rows when value changes externally
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setJsonValue(props.value)
     parseJsonToRows(props.value)
-  }, [props.value])
+  }, [parseJsonToRows, props.value])
 
   const convertRowsToJson = (updatedRows: MappingRow[]): string => {
     if (updatedRows.length === 0) {
@@ -465,7 +482,7 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
               <div className='grid grid-cols-[1fr_1fr_auto] gap-2 text-sm font-medium'>
                 <div>{t('Original Model')}</div>
                 <div>{t('Replacement Model')}</div>
-                <div className='w-10'></div>
+                <div className='w-10' />
               </div>
               {rows.map((row) => (
                 <div
@@ -555,15 +572,17 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
       )}
 
       {!props.hideTemplates && (
-        <ModelMappingTemplatesDialog
-          open={templateManagerOpen}
-          onOpenChange={setTemplateManagerOpen}
-          templates={templates}
-          onTemplatesChange={handleTemplatesChange}
-          initialMapping={templateSeed}
-          sourceModelOptions={props.sourceModelOptions}
-          targetModelOptions={props.targetModelOptions}
-        />
+        <Suspense fallback={null}>
+          <ModelMappingTemplatesDialog
+            open={templateManagerOpen}
+            onOpenChange={setTemplateManagerOpen}
+            templates={templates}
+            onTemplatesChange={handleTemplatesChange}
+            initialMapping={templateSeed}
+            sourceModelOptions={props.sourceModelOptions}
+            targetModelOptions={props.targetModelOptions}
+          />
+        </Suspense>
       )}
     </div>
   )

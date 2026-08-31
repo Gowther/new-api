@@ -135,8 +135,11 @@ const ModelMappingTemplateModal = ({
       name,
       mapping,
     });
+    if (!persistModelMappingTemplates(next)) {
+      setError(t('保存失败'));
+      return;
+    }
     onTemplatesChange(next);
-    persistModelMappingTemplates(next);
     onCancel();
   };
 
@@ -149,8 +152,11 @@ const ModelMappingTemplateModal = ({
       okButtonProps: { type: 'danger' },
       onOk: () => {
         const next = templates.filter((item) => item.id !== template.id);
+        if (!persistModelMappingTemplates(next)) {
+          setError(t('保存失败'));
+          return;
+        }
         onTemplatesChange(next);
-        persistModelMappingTemplates(next);
         if (draftId === template.id) startNewDraft();
       },
     });

@@ -21,6 +21,8 @@ import { describe, test } from 'node:test'
 
 import {
   applyModelMappingTemplate,
+  MODEL_MAPPING_TEMPLATES_STORAGE_KEY,
+  persistModelMappingTemplates,
   reconcileModelsForMapping,
   upsertModelMappingTemplate,
   type ModelMappingTemplate,
@@ -206,5 +208,43 @@ describe('model mapping templates', () => {
       { id: 'a', name: 'first', mapping: { from: 'to' } },
       { id: 'new', name: 'second', mapping: { x: 'y' } },
     ])
+  })
+
+  test('reports local storage failures instead of throwing or claiming success', () => {
+    const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
+    const writes: Array<[string, string]> = []
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        localStorage: {
+          setItem(key: string, value: string) {
+            writes.push([key, value])
+          },
+        },
+      },
+    })
+
+    try {
+      const templates: ModelMappingTemplate[] = [
+        { id: 'saved', name: 'saved template', mapping: { from: 'to' } },
+      ]
+      assert.equal(persistModelMappingTemplates(templates), true)
+      assert.equal(writes[0]?.[0], MODEL_MAPPING_TEMPLATES_STORAGE_KEY)
+      assert.deepEqual(JSON.parse(writes[0]?.[1] || ''), {
+        version: 1,
+        templates,
+      })
+
+      window.localStorage.setItem = () => {
+        throw new Error('storage denied')
+      }
+      assert.equal(persistModelMappingTemplates(templates), false)
+    } finally {
+      if (previousWindow) {
+        Object.defineProperty(globalThis, 'window', previousWindow)
+      } else {
+        Reflect.deleteProperty(globalThis, 'window')
+      }
+    }
   })
 })

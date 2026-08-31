@@ -139,8 +139,11 @@ export function ModelMappingTemplatesDialog({
       name,
       mapping,
     })
+    if (!persistModelMappingTemplates(next)) {
+      setNameError(t('Failed to save'))
+      return
+    }
     onTemplatesChange(next)
-    persistModelMappingTemplates(next)
     onOpenChange(false)
   }
 
@@ -149,8 +152,12 @@ export function ModelMappingTemplatesDialog({
     const next = templates.filter(
       (template) => template.id !== pendingDelete.id
     )
+    if (!persistModelMappingTemplates(next)) {
+      setNameError(t('Failed to save'))
+      setPendingDelete(null)
+      return
+    }
     onTemplatesChange(next)
-    persistModelMappingTemplates(next)
     if (draftId === pendingDelete.id) startNewDraft()
     setPendingDelete(null)
   }

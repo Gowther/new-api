@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         new-api 最新调用日志横幅（跨标签页翻滚）
 // @namespace    https://github.com/QuantumNous/new-api
-// @version      1.1.0
+// @version      1.1.1
 // @description  在任意网页悬浮一条可拖动的横幅，翻滚展示 new-api 最新调用日志（成功/失败 / 模型 / 渠道 / Token / 耗时 / 费用）；点开看最近 N 条，失败可悬停看错误详情；多标签页共享同一份轮询结果。
 // @author       shiki
 // @match        *://*/*
@@ -349,8 +349,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
   let identity = null;
 
+  const identityConfigKey = (cfg) =>
+    JSON.stringify([cfg.baseUrl, cfg.userId, cfg.authMode, cfg.accessToken]);
+
   async function loadIdentity(cfg, force = false) {
-    if (!force && identity && Date.now() - identity.at < IDENTITY_TTL_MS) return identity;
+    const configKey = identityConfigKey(cfg);
+    if (
+      !force &&
+      identity?.configKey === configKey &&
+      Date.now() - identity.at < IDENTITY_TTL_MS
+    ) {
+      return identity;
+    }
     const self = await requestJson(`${cfg.baseUrl}/api/user/self`, cfg);
     const user = (self && self.data) || {};
     let quotaPerUnit = DEFAULT_QUOTA_PER_UNIT;
@@ -362,6 +372,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       /* /api/status 拿不到就用默认换算比例，不影响主功能 */
     }
     identity = {
+      configKey,
       at: Date.now(),
       username: String(user.username || ""),
       role: Number(user.role) || 0,
@@ -391,6 +402,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     }
     return (hash >>> 0).toString(36);
   }
+
+  // Feed storage is shared by every tab. Keep a non-secret source marker on it
+  // so switching sites, users, scopes, or filters cannot replay the previous
+  // source's logs while the first request for the new source is still pending.
+  const feedSourceKey = (cfg) =>
+    JSON.stringify([
+      cfg.baseUrl,
+      cfg.userId,
+      cfg.authMode,
+      cfg.scope,
+      cfg.callFilter,
+    ]);
 
   // log.id 是页内序号不是主键（model/log.go:132 assignDisplayLogIds），不能用来去重。
   // request_id 也不足以单独做键：一个 HTTP 请求内的多次重试共用同一个 request_id，
@@ -474,7 +497,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
   function publishFeed(patch, markFresh = false) {
     const prev = readStore(FEED_KEY, {}) || {};
     const rev = (Number(prev.rev) || 0) + 1;
-    const freshRev = markFresh ? rev : Number(prev.freshRev) || 0;
+    const sourceChanged = patch.sourceKey && patch.sourceKey !== prev.sourceKey;
+    let freshRev = Number(prev.freshRev) || 0;
+    if (sourceChanged) freshRev = 0;
+    if (markFresh) freshRev = rev;
     writeStore(FEED_KEY, { ...prev, ...patch, rev, freshRev });
   }
 
@@ -511,15 +537,24 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     }
     writeStore(LEADER_KEY, { tabId: TAB_ID, ts: Date.now() });
     if (leaderPolling) return;
+    const pollingConfig = config;
+    const sourceKey = feedSourceKey(pollingConfig);
     const feed = readStore(FEED_KEY, {}) || {};
-    const due = Date.now() - (Number(feed.polledAt) || 0) >= config.pollSeconds * 1000;
+    const due =
+      feed.sourceKey !== sourceKey ||
+      Date.now() - (Number(feed.polledAt) || 0) >=
+        pollingConfig.pollSeconds * 1000;
     if (!due) return;
     leaderPolling = true;
     try {
-      const result = await pollOnce(config);
+      const result = await pollOnce(pollingConfig);
+      // Credentials/config may have changed while the request was in flight.
+      // Publishing that result would leak the previous source into the new feed.
+      if (feedSourceKey(config) !== sourceKey) return;
       // 请求期间可能发生 leader 交接，seen 要用此刻的最新值，别拿请求前的快照覆盖回去。
       const latest = readStore(FEED_KEY, {}) || {};
-      const seen = Array.isArray(latest.seen) ? latest.seen : [];
+      const seen =
+        latest.sourceKey === sourceKey && Array.isArray(latest.seen) ? latest.seen : [];
       const seenSet = new Set(seen);
       // 接口按 id desc 返回，反转成旧→新推入队列，保证翻滚顺序符合时间。
       // 同一批次内也要去重：两行完全相同（同类型同渠道同内容同秒）时只留一条，
@@ -534,6 +569,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       const nextSeen = [...seen, ...fresh.map((item) => item.key)].slice(-SEEN_KEYS_MAX);
       publishFeed(
         {
+          sourceKey,
           polledAt: Date.now(),
           error: "",
           quotaPerUnit: result.quotaPerUnit,
@@ -546,7 +582,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         fresh.length > 0
       );
     } catch (err) {
-      publishFeed({ polledAt: Date.now(), error: err?.message || String(err) });
+      if (feedSourceKey(config) !== sourceKey) return;
+      const latest = readStore(FEED_KEY, {}) || {};
+      const resetSource = latest.sourceKey !== sourceKey;
+      publishFeed({
+        sourceKey,
+        polledAt: Date.now(),
+        error: err?.message || String(err),
+        ...(resetSource ? { seen: [], items: [], fresh: [] } : {}),
+      });
     } finally {
       leaderPolling = false;
     }
@@ -629,6 +673,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     dragging: false,
     rotateTimer: 0,
   };
+
+  function resetFeedState() {
+    state.queue = [];
+    state.history = [];
+    state.cursor = -1;
+    state.current = null;
+    state.error = "";
+    state.lastRev = 0;
+    state.lastFreshRev = 0;
+    state.primed = false;
+    state.skipped = 0;
+  }
 
   // 这三种情况都不该继续翻滚：用户点了暂停、鼠标停在横幅上、列表展开着。
   const isFrozen = () => state.paused || state.hovering || state.listOpen;
@@ -728,7 +784,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
     "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
 .wrap { position: fixed; z-index: 2147483647; pointer-events: auto; display: flex;
-  flex-direction: column; gap: 8px; align-items: stretch; }
+  flex-direction: column; gap: 8px; align-items: stretch; max-width: calc(100vw - 12px); }
 .wrap[data-pos="top-left"] { top: 12px; left: 12px; }
 .wrap[data-pos="top-center"] { top: 12px; left: 50%; transform: translateX(-50%); }
 .wrap[data-pos="top-right"] { top: 12px; right: 12px; }
@@ -817,7 +873,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 .list-empty { padding: 14px 12px; opacity: 0.6; font-size: 11px; }
 
 /* 失败详情浮层：原生 title 延迟高且不能换行，自己画一个 */
-.tip { position: fixed; z-index: 2147483647; max-width: 420px; padding: 8px 10px;
+.tip { position: fixed; z-index: 2147483647; max-width: min(420px, calc(100vw - 12px));
+  max-height: calc(100vh - 12px); overflow: hidden; padding: 8px 10px;
   border-radius: 9px; font-size: 11px; line-height: 1.5; white-space: pre-wrap;
   word-break: break-word; pointer-events: none; box-shadow: 0 10px 34px rgba(0, 0, 0, 0.4); }
 :host([data-theme="dark"]) .tip { background: rgba(30, 16, 18, 0.98); color: #ffd7d3;
@@ -829,7 +886,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 `;
 
   const PANEL_CSS = `
-.panel { width: 360px; max-height: min(72vh, 620px); overflow-y: auto; border-radius: 14px;
+.panel { width: min(360px, calc(100vw - 12px)); max-height: min(72vh, 620px);
+  overflow-y: auto; border-radius: 14px;
   padding: 14px; font-size: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.34);
   backdrop-filter: blur(14px); }
 :host([data-theme="dark"]) .panel { background: rgba(20, 22, 28, 0.97); color: #e8eaf0;
@@ -927,7 +985,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       if (event.button !== 0) return;
       const startX = event.clientX;
       const startY = event.clientY;
-      const box = ui.wrap.getBoundingClientRect();
+      // The wrap also contains the expanded list/panel. Measuring the visible
+      // handle keeps its grab point stable when those siblings are collapsed.
+      const box = handle.getBoundingClientRect();
       const grabX = startX - box.left;
       const grabY = startY - box.top;
       let moved = false;
@@ -1016,7 +1076,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       return;
     }
     // 预设锚点的 left/top/bottom 由 CSS 负责，这里只要让展开方向跟锚点一致：
-    // 贴上边就往下展开，贴下边就往上展开。
+    // 贴上边就往下展开，贴下边就往上展开。跨标签页重置位置也会走这里，
+    // 所以必须清掉之前自由拖动留下的行内坐标，让 data-pos 的 CSS 重新接管。
+    for (const prop of ["left", "top", "right", "bottom", "transform"]) {
+      ui.wrap.style.removeProperty(prop);
+    }
     ui.wrap.setAttribute("data-pos", config.position);
     ui.wrap.style.flexDirection = config.position.startsWith("top") ? "column" : "column-reverse";
   }
@@ -1295,11 +1359,28 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       if (testOnly) return;
     }
     if (testOnly) return;
-    const before = { pollSeconds: config.pollSeconds, rotateSeconds: config.rotateSeconds };
+    const before = {
+      sourceKey: feedSourceKey(config),
+      pollSeconds: config.pollSeconds,
+      rotateSeconds: config.rotateSeconds,
+    };
     saveConfig(candidate);
     identity = null;
-    // 轮询节奏由 feed.polledAt 驱动，间隔改小后强制下一 tick 立即拉一次。
-    if (config.pollSeconds !== before.pollSeconds) publishFeed({ polledAt: 0 });
+    const nextSourceKey = feedSourceKey(config);
+    if (nextSourceKey !== before.sourceKey) {
+      resetFeedState();
+      publishFeed({
+        sourceKey: nextSourceKey,
+        polledAt: 0,
+        error: "",
+        seen: [],
+        items: [],
+        fresh: [],
+      });
+    } else if (config.pollSeconds !== before.pollSeconds) {
+      // 轮询节奏由 feed.polledAt 驱动，间隔改小后强制下一 tick 立即拉一次。
+      publishFeed({ polledAt: 0 });
+    }
     if (config.rotateSeconds !== before.rotateSeconds) scheduleRotate();
     render();
   }
@@ -1341,11 +1422,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
   // 清掉拖动坐标，回到 position 锚点。行内样式必须一并抹掉，否则 CSS 的锚点规则被压住。
   function resetPosition() {
     saveConfig({ dragX: null, dragY: null });
-    const style = ui.wrap.style;
-    // flex-direction 不用清：下面 render → layoutWrap 会按预设锚点重新写一遍。
-    for (const prop of ["left", "top", "right", "bottom", "transform"]) {
-      style.removeProperty(prop);
-    }
     render();
   }
 
@@ -1553,8 +1629,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     ui.host.setAttribute("data-theme", config.theme);
     ui.wrap.setAttribute("data-pos", config.position);
     ui.wrap.style.opacity = String(config.opacity);
-    ui.bar.style.maxWidth = `${config.maxWidth}px`;
-    ui.bar.style.width = `${config.maxWidth}px`;
+    const viewportWidth = window.innerWidth || 1024;
+    const barWidth = Math.min(
+      config.maxWidth,
+      Math.max(0, viewportWidth - EDGE_MARGIN_PX * 2)
+    );
+    ui.bar.style.maxWidth = `${barWidth}px`;
+    ui.bar.style.width = `${barWidth}px`;
 
     // 在本站隐藏时仍留下小圆点，否则用户没有入口把它调回来。
     const showBar = config.enabled && !config.collapsed && !hiddenHere;
@@ -1623,11 +1704,38 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
   function syncFromStore() {
     const feed = readStore(FEED_KEY, null);
-    if (!feed) return;
+    if (!feed || feed.sourceKey !== feedSourceKey(config)) return;
     const rev = Number(feed.rev) || 0;
     if (rev && rev === state.lastRev) return;
     state.lastRev = rev;
     ingestFeed(feed);
+  }
+
+  function applyStoredConfig(raw) {
+    let nextConfig;
+    try {
+      nextConfig = normalizeConfig(typeof raw === "string" ? JSON.parse(raw) : raw);
+    } catch {
+      return;
+    }
+    if (JSON.stringify(nextConfig) === JSON.stringify(config)) return;
+
+    const panelOpen = ui.panel && !ui.panel.classList.contains("hidden");
+    const previousSourceKey = feedSourceKey(config);
+    const previousIdentityKey = identityConfigKey(config);
+    config = nextConfig;
+    if (identityConfigKey(config) !== previousIdentityKey) identity = null;
+    if (feedSourceKey(config) !== previousSourceKey) resetFeedState();
+    scheduleRotate();
+    if (panelOpen) togglePanel(true);
+    syncFromStore();
+    render();
+  }
+
+  function syncConfigFromStore() {
+    if (!hasFn("GM_getValue")) return;
+    const stored = readStore(CONFIG_KEY, undefined);
+    if (stored !== undefined) applyStoredConfig(stored);
   }
 
   function watchFeed() {
@@ -1635,19 +1743,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
       GM_addValueChangeListener(FEED_KEY, () => syncFromStore());
       GM_addValueChangeListener(CONFIG_KEY, (_key, _old, next, remote) => {
         if (!remote) return;
-        try {
-          config = normalizeConfig(typeof next === "string" ? JSON.parse(next) : next);
-        } catch {
-          return;
-        }
-        scheduleRotate();
-        render();
+        applyStoredConfig(next);
       });
       // 监听器可用也保留一个低频兜底：个别管理器只在同源标签页间派发事件。
-      setInterval(syncFromStore, 5000);
+      setInterval(() => {
+        syncConfigFromStore();
+        syncFromStore();
+      }, 5000);
       return;
     }
-    setInterval(syncFromStore, FOLLOWER_POLL_MS);
+    setInterval(() => {
+      syncConfigFromStore();
+      syncFromStore();
+    }, FOLLOWER_POLL_MS);
   }
 
   function registerMenu() {
@@ -1677,6 +1785,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     // 窗口变小后原坐标可能已经在视口外，重新钳制一次并重算展开方向。
     window.addEventListener("resize", () => {
       if (!ui.wrap) return;
+      render();
       if (config.dragX === null || config.dragY === null) return;
       const placed = placeBar(config.dragX, config.dragY);
       if (placed.x !== config.dragX || placed.y !== config.dragY) {

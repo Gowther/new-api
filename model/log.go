@@ -632,12 +632,17 @@ type ErrorLogSummaryQuery struct {
 }
 
 type ErrorLogSummaryResponse struct {
-	Items       []*ErrorLogSummaryItem `json:"items"`
-	ScannedLogs int                    `json:"scanned_logs"`
-	TotalLogs   int64                  `json:"total_logs"`
-	Truncated   bool                   `json:"truncated"`
-	StartTime   int64                  `json:"start_time"`
-	EndTime     int64                  `json:"end_time"`
+	Items    []*ErrorLogSummaryItem `json:"items"`
+	Problems []*ErrorLogProblem     `json:"problems"`
+	// BriefingAvailable tells the workbench whether to offer the AI briefing
+	// button. It is filled in by the controller from settings, so the workbench
+	// does not need a second request just to decide what to render.
+	BriefingAvailable bool  `json:"briefing_available"`
+	ScannedLogs       int   `json:"scanned_logs"`
+	TotalLogs         int64 `json:"total_logs"`
+	Truncated         bool  `json:"truncated"`
+	StartTime         int64 `json:"start_time"`
+	EndTime           int64 `json:"end_time"`
 }
 
 type ErrorLogSummaryItem struct {
@@ -842,7 +847,10 @@ func GetErrorLogSummary(query ErrorLogSummaryQuery) (*ErrorLogSummaryResponse, e
 		if items[i].Count != items[j].Count {
 			return items[i].Count > items[j].Count
 		}
-		return items[i].LastSeen > items[j].LastSeen
+		if items[i].LastSeen != items[j].LastSeen {
+			return items[i].LastSeen > items[j].LastSeen
+		}
+		return items[i].Key < items[j].Key
 	})
 	candidateLimit := min(query.Limit*2, maxErrorSummaryCandidates)
 	if len(items) > candidateLimit {
@@ -869,7 +877,10 @@ func GetErrorLogSummary(query ErrorLogSummaryQuery) (*ErrorLogSummaryResponse, e
 		if items[i].Count != items[j].Count {
 			return items[i].Count > items[j].Count
 		}
-		return items[i].LastSeen > items[j].LastSeen
+		if items[i].LastSeen != items[j].LastSeen {
+			return items[i].LastSeen > items[j].LastSeen
+		}
+		return items[i].Key < items[j].Key
 	})
 	if len(items) > query.Limit {
 		items = items[:query.Limit]
@@ -880,6 +891,7 @@ func GetErrorLogSummary(query ErrorLogSummaryQuery) (*ErrorLogSummaryResponse, e
 
 	return &ErrorLogSummaryResponse{
 		Items:       items,
+		Problems:    foldErrorLogProblems(items, requestIdsByKey, userIdsByKey),
 		ScannedLogs: len(logs),
 		TotalLogs:   total,
 		Truncated:   total > int64(len(logs)),

@@ -25,6 +25,7 @@ import SettingsSidebarModulesAdmin from '../../pages/Setting/Operation/SettingsS
 import SettingsSensitiveWords from '../../pages/Setting/Operation/SettingsSensitiveWords';
 import SettingsLog from '../../pages/Setting/Operation/SettingsLog';
 import SettingsMonitoring from '../../pages/Setting/Operation/SettingsMonitoring';
+import SettingsErrorBriefing from '../../pages/Setting/Operation/SettingsErrorBriefing';
 import SettingsCreditLimit from '../../pages/Setting/Operation/SettingsCreditLimit';
 import SettingsCheckin from '../../pages/Setting/Operation/SettingsCheckin';
 import { API, showError, toBoolean } from '../../helpers';
@@ -81,6 +82,14 @@ const DEFAULT_INPUTS = {
   'monitor_setting.channel_test_prompt':
     'Explain in one short sentence why caching can reduce latency.',
   'monitor_setting.release_routing_override_on_auto_disable': false,
+
+  /* AI 错误简报设置 */
+  'error_briefing_setting.enabled': false,
+  'error_briefing_setting.group': 'default',
+  'error_briefing_setting.model': '',
+  'error_briefing_setting.include_raw_error_text': false,
+  'error_briefing_setting.cache_minutes': 5,
+  'error_briefing_setting.max_problems': 20,
 
   /* 签到设置 */
   'checkin_setting.enabled': false,
@@ -159,6 +168,10 @@ const OperationSetting = () => {
         {/* 监控设置 */}
         <Card style={{ marginTop: '10px' }}>
           <SettingsMonitoring options={inputs} refresh={onRefresh} />
+        </Card>
+        {/* AI 错误简报设置 */}
+        <Card style={{ marginTop: '10px' }}>
+          <SettingsErrorBriefing options={inputs} refresh={onRefresh} />
         </Card>
         {/* 额度设置 */}
         <Card style={{ marginTop: '10px' }}>

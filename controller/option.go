@@ -343,6 +343,43 @@ func UpdateOption(c *gin.Context) {
 			return
 		}
 		option.Value = selectedPrompt
+	case "error_briefing_setting.enabled":
+		// Enabling the briefing without a model would offer a button that always
+		// fails, so the model is required at the moment it is switched on.
+		if option.Value.(string) == "true" && operation_setting.GetErrorBriefingSetting().Model == "" {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "select a briefing model before enabling AI error briefing",
+			})
+			return
+		}
+	case "error_briefing_setting.model":
+		option.Value = strings.TrimSpace(option.Value.(string))
+	case "error_briefing_setting.group":
+		option.Value = strings.TrimSpace(option.Value.(string))
+		if option.Value == "" {
+			option.Value = operation_setting.DefaultErrorBriefingGroup
+		}
+	case "error_briefing_setting.cache_minutes":
+		cacheMinutes, parseErr := strconv.Atoi(strings.TrimSpace(option.Value.(string)))
+		if parseErr != nil || cacheMinutes < 1 || cacheMinutes > operation_setting.MaxErrorBriefingCacheMinutes {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": fmt.Sprintf("briefing cache minutes must be between 1 and %d", operation_setting.MaxErrorBriefingCacheMinutes),
+			})
+			return
+		}
+		option.Value = strconv.Itoa(cacheMinutes)
+	case "error_briefing_setting.max_problems":
+		maxProblems, parseErr := strconv.Atoi(strings.TrimSpace(option.Value.(string)))
+		if parseErr != nil || maxProblems < 1 || maxProblems > operation_setting.MaxErrorBriefingMaxProblems {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": fmt.Sprintf("briefing max problems must be between 1 and %d", operation_setting.MaxErrorBriefingMaxProblems),
+			})
+			return
+		}
+		option.Value = strconv.Itoa(maxProblems)
 	case "console_setting.api_info":
 		err = console_setting.ValidateConsoleSettings(option.Value.(string), "ApiInfo")
 		if err != nil {

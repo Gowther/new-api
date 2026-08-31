@@ -41,6 +41,8 @@ import { API, showError, showSuccess, timestamp2string } from '../../helpers';
 
 const DEFAULT_SUMMARY = {
   items: [],
+  problems: [],
+  briefing_available: false,
   scanned_logs: 0,
   total_logs: 0,
   truncated: false,
@@ -279,6 +281,109 @@ function getUrgentClusterCount(items) {
   return items.filter(
     (item) => item.severity === 'critical' || item.severity === 'high',
   ).length;
+}
+
+function ErrorProblemOverview({
+  problems,
+  briefingAvailable,
+  briefing,
+  briefingModel,
+  briefingCached,
+  briefingLoading,
+  onGenerateBriefing,
+  onSelectProblem,
+  t,
+}) {
+  if (!problems || problems.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className='shrink-0 rounded border border-solid border-gray-200 bg-white'>
+      <div className='flex flex-wrap items-center justify-between gap-2 border-b border-solid border-gray-200 px-3 py-2'>
+        <Typography.Text strong>
+          <ErrorMetricHelp
+            description={t(
+              '问题是故障簇按共同点折叠后的结果。同一条渠道在多个模型上以相同方式失败会折成一个渠道级问题；同一个模型在多条渠道上失败会折成一个模型级问题。每个故障簇只属于一个问题。',
+            )}
+          >
+            {t('问题')}
+          </ErrorMetricHelp>
+          <Typography.Text type='tertiary' size='small' className='ml-2'>
+            {problems.length}
+          </Typography.Text>
+        </Typography.Text>
+        {briefingAvailable && (
+          <Button
+            size='small'
+            loading={briefingLoading}
+            onClick={onGenerateBriefing}
+          >
+            {t('生成 AI 简报')}
+          </Button>
+        )}
+      </div>
+
+      {briefing && (
+        <div className='border-b border-solid border-gray-200 px-3 py-2'>
+          <Typography.Paragraph style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
+            {briefing}
+          </Typography.Paragraph>
+          <Typography.Text type='tertiary' size='small'>
+            {t('由 {{model}} 生成', { model: briefingModel })}
+            {briefingCached ? ` · ${t('缓存结果')}` : ''}
+          </Typography.Text>
+        </div>
+      )}
+
+      <div className='max-h-56 divide-y divide-solid divide-gray-100 overflow-y-auto'>
+        {problems.map((problem) => {
+          let primary = problem.model_name || problem.channel_name || '-';
+          let secondary =
+            problem.channel_name && problem.model_name
+              ? problem.channel_name
+              : '';
+          if (problem.scope === 'channel') {
+            primary = problem.channel_name || `#${problem.channel}`;
+            secondary =
+              (problem.affected_models || []).length > 1
+                ? t('{{count}} 个模型', {
+                    count: problem.affected_models.length,
+                  })
+                : '';
+          } else if (problem.scope === 'model') {
+            primary = problem.model_name;
+            secondary =
+              (problem.affected_channels || []).length > 1
+                ? t('{{count}} 条渠道', {
+                    count: problem.affected_channels.length,
+                  })
+                : '';
+          }
+          return (
+            <button
+              key={problem.key}
+              type='button'
+              onClick={() => onSelectProblem(problem)}
+              className='flex w-full cursor-pointer flex-wrap items-center gap-2 border-0 bg-transparent px-3 py-2 text-left text-xs hover:bg-gray-50'
+            >
+              {renderSeverity(problem.severity, t)}
+              {renderStatusCode(problem.status_code, t)}
+              <span className='min-w-0 truncate font-medium'>{primary}</span>
+              {secondary && (
+                <span className='shrink-0 text-gray-500'>{secondary}</span>
+              )}
+              <span className='ml-auto shrink-0 tabular-nums text-gray-500'>
+                {t('{{count}} 个故障簇', { count: problem.cluster_count })}
+                {' · '}
+                {t('{{count}} 个请求', { count: problem.affected_requests })}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function ErrorClusterList({ items, selectedKey, loading, onSelect, t }) {
@@ -691,13 +796,17 @@ function ErrorClusterDetails({
 }
 
 export default function ErrorWorkbench() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [summary, setSummary] = useState(DEFAULT_SUMMARY);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState({});
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [queryFilters, setQueryFilters] = useState(DEFAULT_FILTERS);
   const [selectedKey, setSelectedKey] = useState(null);
+  const [briefing, setBriefing] = useState(null);
+  const [briefingLoading, setBriefingLoading] = useState(false);
+  const briefingRequestVersion = useRef(0);
+  const briefingLanguage = i18n.resolvedLanguage || i18n.language;
 
   const statCards = useMemo(
     () => [
@@ -744,21 +853,27 @@ export default function ErrorWorkbench() {
     setFilters((prev) => ({ ...prev, [key]: value }));
   };
 
+  const buildSummaryParams = (nextFilters) => {
+    const params = {
+      limit: nextFilters.limit,
+      ...buildTimeRangeParams(nextFilters.time_range),
+    };
+    if (nextFilters.model_name?.trim())
+      params.model_name = nextFilters.model_name.trim();
+    if (nextFilters.channel !== '' && nextFilters.channel !== undefined)
+      params.channel = nextFilters.channel;
+    if (nextFilters.group?.trim()) params.group = nextFilters.group.trim();
+    return params;
+  };
+
   const fetchSummary = async (nextFilters = queryFilters) => {
+    briefingRequestVersion.current += 1;
+    setBriefing(null);
+    setBriefingLoading(false);
     setLoading(true);
     try {
-      const params = {
-        limit: nextFilters.limit,
-        ...buildTimeRangeParams(nextFilters.time_range),
-      };
-      if (nextFilters.model_name?.trim())
-        params.model_name = nextFilters.model_name.trim();
-      if (nextFilters.channel !== '' && nextFilters.channel !== undefined)
-        params.channel = nextFilters.channel;
-      if (nextFilters.group?.trim()) params.group = nextFilters.group.trim();
-
       const res = await API.get('/api/log/error_summary', {
-        params,
+        params: buildSummaryParams(nextFilters),
         disableDuplicate: true,
       });
       if (res.data.success) {
@@ -795,10 +910,60 @@ export default function ErrorWorkbench() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queryFilters]);
 
+  useEffect(() => {
+    briefingRequestVersion.current += 1;
+    setBriefing(null);
+    setBriefingLoading(false);
+  }, [briefingLanguage]);
+
   const selectedRecord =
     summary.items.find((item) => item.key === selectedKey) ||
     summary.items[0] ||
     null;
+
+  const generateBriefing = async () => {
+    const requestVersion = briefingRequestVersion.current + 1;
+    briefingRequestVersion.current = requestVersion;
+    setBriefing(null);
+    setBriefingLoading(true);
+    try {
+      const params = buildSummaryParams(queryFilters);
+      delete params.hours;
+      params.start_time = summary.start_time;
+      params.end_time = summary.end_time;
+      params.language = briefingLanguage;
+      const res = await API.post('/api/log/error_briefing', null, {
+        params,
+      });
+      if (
+        res.data.success &&
+        briefingRequestVersion.current === requestVersion
+      ) {
+        setBriefing(res.data.data || null);
+      } else {
+        if (briefingRequestVersion.current === requestVersion) {
+          showError(res.data.message || t('生成简报失败'));
+        }
+      }
+    } catch (error) {
+      if (briefingRequestVersion.current === requestVersion) {
+        showError(error);
+      }
+    } finally {
+      if (briefingRequestVersion.current === requestVersion) {
+        setBriefingLoading(false);
+      }
+    }
+  };
+
+  // 一个问题代表多个故障簇。点开时选中它的第一个故障簇，也就是这组里最严重的那个，
+  // 因为折叠后的列表沿用了故障簇列表的排序。
+  const selectProblem = (problem) => {
+    const firstKey = (problem.cluster_keys || [])[0];
+    if (firstKey) {
+      setSelectedKey(firstKey);
+    }
+  };
 
   const testChannel = async (record, channelId = record.channel) => {
     if (!channelId) {
@@ -963,6 +1128,9 @@ export default function ErrorWorkbench() {
             onClick={() => {
               setFilters(DEFAULT_FILTERS);
               setSelectedKey(null);
+              briefingRequestVersion.current += 1;
+              setBriefing(null);
+              setBriefingLoading(false);
             }}
           >
             {t('重置')}
@@ -976,6 +1144,18 @@ export default function ErrorWorkbench() {
           )}
         </div>
       </div>
+
+      <ErrorProblemOverview
+        problems={summary.problems || []}
+        briefingAvailable={summary.briefing_available && !loading}
+        briefing={briefing?.briefing || ''}
+        briefingModel={briefing?.model || ''}
+        briefingCached={briefing?.cached || false}
+        briefingLoading={briefingLoading}
+        onGenerateBriefing={generateBriefing}
+        onSelectProblem={selectProblem}
+        t={t}
+      />
 
       <div className='grid min-h-[32rem] w-full grid-cols-1 gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(20rem,0.85fr)_minmax(0,1.4fr)]'>
         <ErrorClusterList

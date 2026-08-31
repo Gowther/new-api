@@ -269,6 +269,12 @@ export type ModelSettings = {
   'monitor_setting.channel_test_prompt_mode': 'fixed' | 'random'
   'monitor_setting.channel_test_prompt': string
   'monitor_setting.release_routing_override_on_auto_disable': boolean
+  'error_briefing_setting.enabled': boolean
+  'error_briefing_setting.group': string
+  'error_briefing_setting.model': string
+  'error_briefing_setting.include_raw_error_text': boolean
+  'error_briefing_setting.cache_minutes': number
+  'error_briefing_setting.max_problems': number
   'channel_affinity_setting.enabled': boolean
   'channel_affinity_setting.switch_on_success': boolean
   'channel_affinity_setting.keep_on_channel_disabled': boolean

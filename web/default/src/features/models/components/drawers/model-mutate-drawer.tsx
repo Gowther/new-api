@@ -219,6 +219,12 @@ export function ModelMutateDrawer({
       'monitor_setting.channel_test_prompt':
         'Explain in one short sentence why caching can reduce latency.',
       'monitor_setting.release_routing_override_on_auto_disable': false,
+      'error_briefing_setting.enabled': false,
+      'error_briefing_setting.group': 'default',
+      'error_briefing_setting.model': '',
+      'error_briefing_setting.include_raw_error_text': false,
+      'error_briefing_setting.cache_minutes': 5,
+      'error_briefing_setting.max_problems': 20,
       'channel_affinity_setting.enabled': false,
       'channel_affinity_setting.switch_on_success': true,
       'channel_affinity_setting.keep_on_channel_disabled': false,

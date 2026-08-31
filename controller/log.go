@@ -6,6 +6,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
 )
@@ -159,28 +160,30 @@ func GetLogsSelfStat(c *gin.Context) {
 }
 
 func GetErrorLogSummary(c *gin.Context) {
+	summary, err := model.GetErrorLogSummary(parseErrorLogSummaryQuery(c))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	summary.BriefingAvailable = operation_setting.IsErrorBriefingAvailable()
+	common.ApiSuccess(c, summary)
+}
+
+func parseErrorLogSummaryQuery(c *gin.Context) model.ErrorLogSummaryQuery {
 	hours, _ := strconv.Atoi(c.Query("hours"))
 	limit, _ := strconv.Atoi(c.Query("limit"))
 	startTime, _ := strconv.ParseInt(c.Query("start_time"), 10, 64)
 	endTime, _ := strconv.ParseInt(c.Query("end_time"), 10, 64)
 	channel, _ := strconv.Atoi(c.Query("channel"))
-	modelName := c.Query("model_name")
-	group := c.Query("group")
-
-	summary, err := model.GetErrorLogSummary(model.ErrorLogSummaryQuery{
+	return model.ErrorLogSummaryQuery{
 		Hours:     hours,
 		Limit:     limit,
 		StartTime: startTime,
 		EndTime:   endTime,
-		ModelName: modelName,
+		ModelName: c.Query("model_name"),
 		ChannelId: channel,
-		Group:     group,
-	})
-	if err != nil {
-		common.ApiError(c, err)
-		return
+		Group:     c.Query("group"),
 	}
-	common.ApiSuccess(c, summary)
 }
 
 // DeleteHistoryLogs is the legacy synchronous log cleanup endpoint (DELETE /api/log/).

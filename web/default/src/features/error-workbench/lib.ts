@@ -32,6 +32,8 @@ export const DEFAULT_FILTERS: ErrorWorkbenchFilters = {
 
 export const EMPTY_SUMMARY: ErrorSummaryResponse = {
   items: [],
+  problems: [],
+  briefing_available: false,
   scanned_logs: 0,
   total_logs: 0,
   truncated: false,
@@ -40,14 +42,14 @@ export const EMPTY_SUMMARY: ErrorSummaryResponse = {
 }
 
 export function buildTimeRangeParams(
-  timeRange: string,
+  timeRange: string
 ): Record<string, number> {
   if (timeRange === 'today' || timeRange === 'yesterday') {
     const now = new Date()
     const todayStart = new Date(
       now.getFullYear(),
       now.getMonth(),
-      now.getDate(),
+      now.getDate()
     )
     const todayStartSeconds = Math.floor(todayStart.getTime() / 1000)
     if (timeRange === 'today') {
@@ -93,6 +95,6 @@ export function getVisibleAffectedRequests(items: ErrorSummaryItem[]): number {
 
 export function getUrgentClusterCount(items: ErrorSummaryItem[]): number {
   return items.filter(
-    (item) => item.severity === 'critical' || item.severity === 'high',
+    (item) => item.severity === 'critical' || item.severity === 'high'
   ).length
 }

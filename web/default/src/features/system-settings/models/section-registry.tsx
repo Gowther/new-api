@@ -20,9 +20,10 @@ import { ChannelAffinitySection } from '../general/channel-affinity'
 import { IoNetDeploymentSettingsSection } from '../integrations/ionet-deployment-settings-section'
 import type { ModelSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
-import { ClaudeSettingsCard } from './claude-settings-card'
 import { ChannelModelMappingRulesSection } from './channel-model-mapping-rules-section'
 import { ChannelQuickMappingRulesSection } from './channel-quick-mapping-rules-section'
+import { ClaudeSettingsCard } from './claude-settings-card'
+import { ErrorBriefingSettingsCard } from './error-briefing-settings-card'
 import { GeminiSettingsCard } from './gemini-settings-card'
 import { GlobalSettingsCard } from './global-settings-card'
 import { GrokSettingsCard } from './grok-settings-card'
@@ -94,7 +95,31 @@ const MODELS_SECTIONS = [
           'monitor_setting.channel_test_prompt':
             settings['monitor_setting.channel_test_prompt'],
           'monitor_setting.release_routing_override_on_auto_disable':
-            settings['monitor_setting.release_routing_override_on_auto_disable'],
+            settings[
+              'monitor_setting.release_routing_override_on_auto_disable'
+            ],
+        }}
+      />
+    ),
+  },
+  {
+    id: 'error-briefing',
+    titleKey: 'AI Error Briefing',
+    build: (settings: ModelSettings) => (
+      <ErrorBriefingSettingsCard
+        defaultValues={{
+          'error_briefing_setting.enabled':
+            settings['error_briefing_setting.enabled'],
+          'error_briefing_setting.group':
+            settings['error_briefing_setting.group'],
+          'error_briefing_setting.model':
+            settings['error_briefing_setting.model'],
+          'error_briefing_setting.include_raw_error_text':
+            settings['error_briefing_setting.include_raw_error_text'],
+          'error_briefing_setting.cache_minutes':
+            settings['error_briefing_setting.cache_minutes'],
+          'error_briefing_setting.max_problems':
+            settings['error_briefing_setting.max_problems'],
         }}
       />
     ),

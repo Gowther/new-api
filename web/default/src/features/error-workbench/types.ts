@@ -89,11 +89,47 @@ export type ErrorSummaryItem = {
   max_use_time: number
 }
 
+export type ErrorProblemScope = 'channel' | 'model' | 'cluster'
+
+export type ErrorSummaryProblem = {
+  key: string
+  scope: ErrorProblemScope | string
+  severity: 'critical' | 'high' | 'medium' | 'low' | string
+  trend: 'new' | 'rising' | 'falling' | 'stable' | string
+  status_code: number
+  channel: number
+  channel_name: string
+  model_name: string
+  error_summary: string
+  normalized_error_summary: string
+  cluster_keys: string[]
+  cluster_count: number
+  count: number
+  current_count: number
+  previous_count: number
+  affected_requests: number
+  affected_users: number
+  affected_models: string[]
+  affected_channels: number[]
+  first_seen: number
+  last_seen: number
+}
+
 export type ErrorSummaryResponse = {
   items: ErrorSummaryItem[]
+  problems: ErrorSummaryProblem[]
+  briefing_available: boolean
   scanned_logs: number
   total_logs: number
   truncated: boolean
   start_time: number
   end_time: number
+}
+
+export type ErrorBriefingResponse = {
+  briefing: string
+  model: string
+  problems_used: number
+  generated_at: number
+  cached: boolean
 }

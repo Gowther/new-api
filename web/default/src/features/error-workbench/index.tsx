@@ -37,6 +37,7 @@ import { formatTimestampToDate } from '@/lib/format'
 import { ErrorClusterDetails } from './components/error-cluster-details'
 import { ErrorClusterList } from './components/error-cluster-list'
 import { ErrorMetricHelp } from './components/error-metric-help'
+import { ErrorProblemOverview } from './components/error-problem-overview'
 import {
   DEFAULT_FILTERS,
   EMPTY_SUMMARY,
@@ -44,7 +45,12 @@ import {
   getUrgentClusterCount,
   getVisibleAffectedRequests,
 } from './lib'
-import type { ErrorSummaryResponse, ErrorWorkbenchFilters } from './types'
+import type {
+  ErrorBriefingResponse,
+  ErrorSummaryProblem,
+  ErrorSummaryResponse,
+  ErrorWorkbenchFilters,
+} from './types'
 
 type BackendResponse<T> = {
   success: boolean
@@ -68,8 +74,34 @@ async function getErrorSummary(filters: ErrorWorkbenchFilters) {
   return response.data.data ?? EMPTY_SUMMARY
 }
 
+async function generateErrorBriefing(
+  filters: ErrorWorkbenchFilters,
+  startTime: number,
+  endTime: number,
+  language: string,
+  fallbackMessage: string
+) {
+  const params = buildSummaryParams(filters)
+  delete params.hours
+  params.start_time = startTime
+  params.end_time = endTime
+  params.language = language
+  const response = await api.post<BackendResponse<ErrorBriefingResponse>>(
+    '/api/log/error_briefing',
+    null,
+    { params }
+  )
+  if (!response.data.success) {
+    throw new Error(response.data.message || fallbackMessage)
+  }
+  if (!response.data.data) {
+    throw new Error(fallbackMessage)
+  }
+  return response.data.data
+}
+
 export function ErrorWorkbench() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [filters, setFilters] = useState<ErrorWorkbenchFilters>(DEFAULT_FILTERS)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [testingChannelId, setTestingChannelId] = useState<number | null>(null)
@@ -102,6 +134,53 @@ export function ErrorWorkbench() {
     summary.items.find((item) => item.key === selectedKey) ??
     summary.items[0] ??
     null
+  const briefingLanguage = i18n.resolvedLanguage || i18n.language
+
+  const briefingContextKey = JSON.stringify([
+    queryFilters,
+    summary.start_time,
+    summary.end_time,
+    briefingLanguage,
+  ])
+
+  const briefingMutation = useMutation({
+    mutationFn: async (input: {
+      filters: ErrorWorkbenchFilters
+      startTime: number
+      endTime: number
+      language: string
+      contextKey: string
+      fallbackMessage: string
+    }) => ({
+      data: await generateErrorBriefing(
+        input.filters,
+        input.startTime,
+        input.endTime,
+        input.language,
+        input.fallbackMessage
+      ),
+      contextKey: input.contextKey,
+    }),
+  })
+  const briefingResult =
+    briefingMutation.data?.contextKey === briefingContextKey
+      ? briefingMutation.data.data
+      : undefined
+  const briefingError =
+    briefingMutation.variables?.contextKey === briefingContextKey &&
+    briefingMutation.error instanceof Error
+      ? briefingMutation.error.message
+      : ''
+
+  // A problem stands for several clusters. Opening one selects its first
+  // cluster, which is the most severe of the group because the folded list keeps
+  // the ranking the cluster list uses.
+  const selectProblem = (problem: ErrorSummaryProblem) => {
+    const firstKey = problem.cluster_keys[0]
+    if (firstKey) {
+      setSelectedKey(firstKey)
+    }
+  }
 
   const testMutation = useMutation({
     mutationFn: async (input: { channelId: number; modelName: string }) => {
@@ -119,6 +198,7 @@ export function ErrorWorkbench() {
     },
     onSuccess: () => {
       toast.success(t('Channel test succeeded'))
+      briefingMutation.reset()
       void summaryQuery.refetch()
     },
     onError: (error) => {
@@ -141,6 +221,12 @@ export function ErrorWorkbench() {
   const resetFilters = () => {
     setFilters(DEFAULT_FILTERS)
     setSelectedKey(null)
+    briefingMutation.reset()
+  }
+
+  const refreshSummary = () => {
+    briefingMutation.reset()
+    void summaryQuery.refetch()
   }
 
   return (
@@ -345,7 +431,7 @@ export function ErrorWorkbench() {
             <div className='mt-3 flex flex-wrap items-center gap-2'>
               <Button
                 type='button'
-                onClick={() => void summaryQuery.refetch()}
+                onClick={refreshSummary}
                 disabled={summaryQuery.isFetching}
               >
                 <RefreshCw
@@ -375,6 +461,29 @@ export function ErrorWorkbench() {
               )}
             </div>
           </section>
+
+          <ErrorProblemOverview
+            problems={summary.problems}
+            briefingAvailable={
+              summary.briefing_available && !summaryQuery.isFetching
+            }
+            briefing={briefingResult?.briefing ?? ''}
+            briefingModel={briefingResult?.model ?? ''}
+            briefingCached={briefingResult?.cached ?? false}
+            briefingLoading={briefingMutation.isPending}
+            briefingError={briefingError}
+            onGenerateBriefing={() =>
+              briefingMutation.mutate({
+                filters: { ...queryFilters },
+                startTime: summary.start_time,
+                endTime: summary.end_time,
+                language: briefingLanguage,
+                contextKey: briefingContextKey,
+                fallbackMessage: t('Failed to generate briefing'),
+              })
+            }
+            onSelectProblem={selectProblem}
+          />
 
           <div className='grid min-h-[32rem] gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(20rem,0.85fr)_minmax(0,1.4fr)]'>
             <ErrorClusterList

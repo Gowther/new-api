@@ -805,6 +805,7 @@ export default function ErrorWorkbench() {
   const [selectedKey, setSelectedKey] = useState(null);
   const [briefing, setBriefing] = useState(null);
   const [briefingLoading, setBriefingLoading] = useState(false);
+  const summaryRequestVersion = useRef(0);
   const briefingRequestVersion = useRef(0);
   const briefingLanguage = i18n.resolvedLanguage || i18n.language;
 
@@ -867,6 +868,8 @@ export default function ErrorWorkbench() {
   };
 
   const fetchSummary = async (nextFilters = queryFilters) => {
+    const requestVersion = summaryRequestVersion.current + 1;
+    summaryRequestVersion.current = requestVersion;
     briefingRequestVersion.current += 1;
     setBriefing(null);
     setBriefingLoading(false);
@@ -876,15 +879,20 @@ export default function ErrorWorkbench() {
         params: buildSummaryParams(nextFilters),
         disableDuplicate: true,
       });
+      if (summaryRequestVersion.current !== requestVersion) return;
       if (res.data.success) {
         setSummary(res.data.data || DEFAULT_SUMMARY);
       } else {
         showError(res.data.message || t('获取错误汇总失败'));
       }
     } catch (error) {
-      showError(error);
+      if (summaryRequestVersion.current === requestVersion) {
+        showError(error);
+      }
     } finally {
-      setLoading(false);
+      if (summaryRequestVersion.current === requestVersion) {
+        setLoading(false);
+      }
     }
   };
 

@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { Activity, ExternalLink, RefreshCw } from 'lucide-react'
+import { Activity, ExternalLink, RefreshCw, Sparkles } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -26,25 +26,29 @@ import { toast } from 'sonner'
 import { SectionPageLayout } from '@/components/layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+  useResizableLayout,
+} from '@/components/ui/resizable'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { testChannel as testChannelRequest } from '@/features/channels/api'
 import { useDebounce } from '@/hooks'
 import { api } from '@/lib/api'
-import { formatTimestampToDate } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
+import { ErrorBriefingBand } from './components/error-briefing-band'
 import { ErrorClusterDetails } from './components/error-cluster-details'
 import { ErrorClusterList } from './components/error-cluster-list'
 import { ErrorMetricHelp } from './components/error-metric-help'
 import { ErrorProblemOverview } from './components/error-problem-overview'
 import {
-  DEFAULT_FILTERS,
-  EMPTY_SUMMARY,
-  buildSummaryParams,
-  getUrgentClusterCount,
-  getVisibleAffectedRequests,
-} from './lib'
+  ErrorWorkbenchFiltersPopover,
+  ErrorWorkbenchTimeRange,
+} from './components/error-workbench-filters'
+import { ErrorWorkbenchStats } from './components/error-workbench-stats'
+import { DEFAULT_FILTERS, EMPTY_SUMMARY, buildSummaryParams } from './lib'
 import type {
   ErrorBriefingResponse,
   ErrorSummaryProblem,
@@ -59,6 +63,9 @@ type BackendResponse<T> = {
 }
 
 const FILTER_INPUT_DEBOUNCE_MS = 500
+
+/** The left panel shows the clusters or the problems they fold into. */
+type ListView = 'clusters' | 'problems'
 
 async function getErrorSummary(filters: ErrorWorkbenchFilters) {
   const response = await api.get<BackendResponse<ErrorSummaryResponse>>(
@@ -105,6 +112,10 @@ export function ErrorWorkbench() {
   const [filters, setFilters] = useState<ErrorWorkbenchFilters>(DEFAULT_FILTERS)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [testingChannelId, setTestingChannelId] = useState<number | null>(null)
+  const [listView, setListView] = useState<ListView>('clusters')
+  const { defaultLayout: layout, onLayoutChanged } = useResizableLayout({
+    id: 'error-workbench-split',
+  })
 
   const debouncedLimit = useDebounce(filters.limit, FILTER_INPUT_DEBOUNCE_MS)
   const debouncedModelName = useDebounce(
@@ -173,12 +184,14 @@ export function ErrorWorkbench() {
       : ''
 
   // A problem stands for several clusters. Opening one selects its first
-  // cluster, which is the most severe of the group because the folded list keeps
+  // cluster, the most severe of the group because the folded list keeps
   // the ranking the cluster list uses.
   const selectProblem = (problem: ErrorSummaryProblem) => {
     const firstKey = problem.cluster_keys[0]
     if (firstKey) {
       setSelectedKey(firstKey)
+      // Switch back so the row that just became selected is on screen.
+      setListView('clusters')
     }
   }
 
@@ -240,6 +253,53 @@ export function ErrorWorkbench() {
         </span>
       </SectionPageLayout.Title>
       <SectionPageLayout.Actions>
+        <ErrorWorkbenchTimeRange
+          value={filters.timeRange}
+          onChange={(value) => setFilterValue('timeRange', value)}
+        />
+        <ErrorWorkbenchFiltersPopover
+          filters={filters}
+          onChange={setFilterValue}
+          onReset={resetFilters}
+        />
+        <Button
+          type='button'
+          variant='outline'
+          onClick={refreshSummary}
+          disabled={summaryQuery.isFetching}
+        >
+          <RefreshCw
+            className={cn('size-4', summaryQuery.isFetching && 'animate-spin')}
+          />
+          {t('Refresh')}
+        </Button>
+        {summary.briefing_available && !summaryQuery.isFetching && (
+          <Button
+            type='button'
+            variant='outline'
+            onClick={() =>
+              briefingMutation.mutate({
+                filters: { ...queryFilters },
+                startTime: summary.start_time,
+                endTime: summary.end_time,
+                language: briefingLanguage,
+                contextKey: briefingContextKey,
+                fallbackMessage: t('Failed to generate briefing'),
+              })
+            }
+            disabled={briefingMutation.isPending}
+          >
+            <Sparkles
+              className={cn(
+                'size-4',
+                briefingMutation.isPending && 'animate-pulse'
+              )}
+            />
+            {briefingMutation.isPending
+              ? t('Generating briefing...')
+              : t('Generate AI briefing')}
+          </Button>
+        )}
         <Button
           type='button'
           variant='outline'
@@ -262,246 +322,102 @@ export function ErrorWorkbench() {
         </Button>
       </SectionPageLayout.Actions>
       <SectionPageLayout.Content>
-        <div className='flex h-full min-h-0 flex-col gap-3 overflow-y-auto'>
-          <div className='grid shrink-0 gap-3 sm:grid-cols-2 xl:grid-cols-4'>
-            <div className='rounded-lg border px-4 py-2.5'>
-              <div className='text-muted-foreground text-xs'>
-                <ErrorMetricHelp
-                  description={t(
-                    'Error logs is the total number of matching error-log rows in the selected time range. If scanning is truncated, this total still covers all matches while fault clusters use only the latest scanned rows.'
-                  )}
-                >
-                  {t('Error logs')}
-                </ErrorMetricHelp>
-              </div>
-              <div className='mt-1 text-xl font-semibold tabular-nums'>
-                {summary.total_logs.toLocaleString()}
-              </div>
-              <div className='text-muted-foreground mt-1 text-xs'>
-                {summary.truncated
-                  ? t('Only the latest scanned logs are summarized')
-                  : t('All matching logs are summarized')}
-              </div>
-            </div>
-            <div className='rounded-lg border px-4 py-2.5'>
-              <div className='text-muted-foreground text-xs'>
-                <ErrorMetricHelp
-                  description={t(
-                    'A fault cluster groups error logs by model, group, channel, and a normalized error fingerprint. The visible list is ranked by severity and capped by the fault cluster limit.'
-                  )}
-                >
-                  {t('Fault clusters')}
-                </ErrorMetricHelp>
-              </div>
-              <div className='mt-1 text-xl font-semibold tabular-nums'>
-                {summary.items.length.toLocaleString()}
-              </div>
-              <div className='text-muted-foreground mt-1 text-xs'>
-                {t('Visible clusters')}
-              </div>
-            </div>
-            <div className='rounded-lg border px-4 py-2.5'>
-              <div className='text-muted-foreground text-xs'>
-                <ErrorMetricHelp
-                  description={t(
-                    "Visible affected requests is the sum of each visible fault cluster's distinct failed-request count. The same request can be counted more than once if it appears in multiple clusters."
-                  )}
-                >
-                  {t('Affected requests')}
-                </ErrorMetricHelp>
-              </div>
-              <div className='mt-1 text-xl font-semibold tabular-nums'>
-                {getVisibleAffectedRequests(summary.items).toLocaleString()}
-              </div>
-              <div className='text-muted-foreground mt-1 text-xs'>
-                {t('Across visible clusters')}
-              </div>
-            </div>
-            <div className='rounded-lg border px-4 py-2.5'>
-              <div className='text-muted-foreground text-xs'>
-                <ErrorMetricHelp
-                  description={t(
-                    'Urgent clusters are visible clusters classified as high or critical by channel status, HTTP status, route error rate, route attempts, and cluster error-log count.'
-                  )}
-                >
-                  {t('Urgent clusters')}
-                </ErrorMetricHelp>
-              </div>
-              <div className='mt-1 text-xl font-semibold tabular-nums'>
-                {getUrgentClusterCount(summary.items).toLocaleString()}
-              </div>
-              <div className='text-muted-foreground mt-1 text-xs'>
-                {t('High and critical severity')}
-              </div>
-            </div>
-          </div>
-
-          <section className='shrink-0 rounded-lg border p-3'>
-            <div className='grid gap-3 md:grid-cols-6'>
-              <div className='space-y-1.5'>
-                <Label htmlFor='error-workbench-hours'>{t('Time range')}</Label>
-                <NativeSelect
-                  id='error-workbench-hours'
-                  value={filters.timeRange}
-                  onChange={(event) =>
-                    setFilterValue('timeRange', event.target.value)
-                  }
-                >
-                  <NativeSelectOption value='today'>
-                    {t('Today')}
-                  </NativeSelectOption>
-                  <NativeSelectOption value='yesterday'>
-                    {t('Yesterday')}
-                  </NativeSelectOption>
-                  <NativeSelectOption value='1'>
-                    {t('Last 1 hour')}
-                  </NativeSelectOption>
-                  <NativeSelectOption value='6'>
-                    {t('Last 6 hours')}
-                  </NativeSelectOption>
-                  <NativeSelectOption value='24'>
-                    {t('Last 24 hours')}
-                  </NativeSelectOption>
-                  <NativeSelectOption value='72'>
-                    {t('Last 3 days')}
-                  </NativeSelectOption>
-                  <NativeSelectOption value='168'>
-                    {t('Last 7 days')}
-                  </NativeSelectOption>
-                </NativeSelect>
-              </div>
-              <div className='space-y-1.5'>
-                <Label htmlFor='error-workbench-limit'>
-                  <ErrorMetricHelp
-                    description={t(
-                      'Limit controls how many fault clusters are returned after severity ranking. It does not limit the route attempts used to calculate each route error rate.'
-                    )}
-                  >
-                    {t('Fault cluster limit')}
-                  </ErrorMetricHelp>
-                </Label>
-                <Input
-                  id='error-workbench-limit'
-                  type='number'
-                  min={1}
-                  max={200}
-                  value={filters.limit}
-                  onChange={(event) =>
-                    setFilterValue('limit', Number(event.target.value) || 50)
-                  }
-                />
-              </div>
-              <div className='space-y-1.5 md:col-span-2'>
-                <Label htmlFor='error-workbench-model'>{t('Model')}</Label>
-                <Input
-                  id='error-workbench-model'
-                  value={filters.modelName}
-                  placeholder='gpt-4o'
-                  onChange={(event) =>
-                    setFilterValue('modelName', event.target.value)
-                  }
-                />
-              </div>
-              <div className='space-y-1.5'>
-                <Label htmlFor='error-workbench-channel'>
-                  {t('Channel ID')}
-                </Label>
-                <Input
-                  id='error-workbench-channel'
-                  type='number'
-                  min={1}
-                  value={filters.channel}
-                  onChange={(event) =>
-                    setFilterValue('channel', event.target.value)
-                  }
-                />
-              </div>
-              <div className='space-y-1.5'>
-                <Label htmlFor='error-workbench-group'>{t('Group')}</Label>
-                <Input
-                  id='error-workbench-group'
-                  value={filters.group}
-                  placeholder='default'
-                  onChange={(event) =>
-                    setFilterValue('group', event.target.value)
-                  }
-                />
-              </div>
-            </div>
-            <div className='mt-3 flex flex-wrap items-center gap-2'>
-              <Button
-                type='button'
-                onClick={refreshSummary}
-                disabled={summaryQuery.isFetching}
-              >
-                <RefreshCw
-                  className={
-                    summaryQuery.isFetching ? 'size-4 animate-spin' : 'size-4'
-                  }
-                />
-                {t('Refresh')}
-              </Button>
-              <Button type='button' variant='outline' onClick={resetFilters}>
-                {t('Reset')}
-              </Button>
-              {summary.truncated && (
-                <span className='text-muted-foreground text-xs'>
-                  {t('Summary is limited to the latest scanned logs')}
-                </span>
-              )}
-              {summaryQuery.error instanceof Error && (
-                <span className='text-destructive text-xs'>
-                  {summaryQuery.error.message}
-                </span>
-              )}
-              {summary.items.length > 0 && (
-                <span className='text-muted-foreground ml-auto text-xs'>
-                  {t('Last updated')}: {formatTimestampToDate(summary.end_time)}
-                </span>
-              )}
-            </div>
-          </section>
-
-          <ErrorProblemOverview
-            problems={summary.problems}
-            briefingAvailable={
-              summary.briefing_available && !summaryQuery.isFetching
+        <div className='flex h-full min-h-0 flex-col gap-3'>
+          <ErrorWorkbenchStats
+            summary={summary}
+            error={
+              summaryQuery.error instanceof Error
+                ? summaryQuery.error.message
+                : ''
             }
+          />
+
+          <ErrorBriefingBand
             briefing={briefingResult?.briefing ?? ''}
             briefingModel={briefingResult?.model ?? ''}
             briefingCached={briefingResult?.cached ?? false}
-            briefingLoading={briefingMutation.isPending}
             briefingError={briefingError}
-            onGenerateBriefing={() =>
-              briefingMutation.mutate({
-                filters: { ...queryFilters },
-                startTime: summary.start_time,
-                endTime: summary.end_time,
-                language: briefingLanguage,
-                contextKey: briefingContextKey,
-                fallbackMessage: t('Failed to generate briefing'),
-              })
-            }
-            onSelectProblem={selectProblem}
+            onDismiss={() => briefingMutation.reset()}
           />
 
-          <div className='grid min-h-[36rem] gap-4 lg:min-h-[40rem] lg:flex-1 lg:grid-cols-[minmax(22rem,0.8fr)_minmax(0,1.5fr)]'>
-            <ErrorClusterList
-              items={summary.items}
-              selectedKey={selectedRecord?.key ?? null}
-              loading={summaryQuery.isFetching}
-              onSelect={setSelectedKey}
-            />
-            <ErrorClusterDetails
-              record={selectedRecord}
-              startTime={summary.start_time}
-              endTime={summary.end_time}
-              testingChannelId={testingChannelId}
-              onTestChannel={(channelId, modelName) =>
-                testMutation.mutate({ channelId, modelName })
-              }
-            />
-          </div>
+          <ResizablePanelGroup
+            className='min-h-0 flex-1 max-lg:flex-col'
+            orientation='horizontal'
+            defaultLayout={layout}
+            onLayoutChanged={onLayoutChanged}
+          >
+            <ResizablePanel
+              id='error-workbench-list'
+              minSize='18rem'
+              defaultSize='36%'
+              className='bg-background flex min-h-[24rem] min-w-0 flex-col overflow-hidden rounded-lg border'
+            >
+              <Tabs
+                value={listView}
+                onValueChange={(value) => setListView(value as ListView)}
+                className='flex min-h-0 flex-1 flex-col gap-0'
+              >
+                <TabsList className='m-2 grid w-auto shrink-0 grid-cols-2'>
+                  <TabsTrigger value='clusters'>
+                    {t('Fault clusters')}
+                    <span className='text-muted-foreground ml-1.5 tabular-nums'>
+                      {summary.items.length}
+                    </span>
+                  </TabsTrigger>
+                  <TabsTrigger value='problems'>
+                    <ErrorMetricHelp
+                      description={t(
+                        'Problems fold the fault clusters by what they share. One channel failing the same way across several models becomes a single channel problem; one model failing across several channels becomes a single model problem. Every cluster belongs to exactly one problem.'
+                      )}
+                    >
+                      {t('Problems')}
+                    </ErrorMetricHelp>
+                    <span className='text-muted-foreground ml-1.5 tabular-nums'>
+                      {summary.problems.length}
+                    </span>
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent
+                  value='clusters'
+                  className='min-h-0 flex-1 border-t'
+                >
+                  <ErrorClusterList
+                    items={summary.items}
+                    selectedKey={selectedRecord?.key ?? null}
+                    loading={summaryQuery.isFetching}
+                    onSelect={setSelectedKey}
+                  />
+                </TabsContent>
+                <TabsContent
+                  value='problems'
+                  className='min-h-0 flex-1 border-t'
+                >
+                  <ErrorProblemOverview
+                    problems={summary.problems}
+                    onSelectProblem={selectProblem}
+                  />
+                </TabsContent>
+              </Tabs>
+            </ResizablePanel>
+
+            <ResizableHandle withHandle className='mx-1 max-lg:hidden' />
+
+            <ResizablePanel
+              id='error-workbench-details'
+              minSize='24rem'
+              className='flex min-h-[24rem] min-w-0 flex-col max-lg:mt-3'
+            >
+              <ErrorClusterDetails
+                record={selectedRecord}
+                startTime={summary.start_time}
+                endTime={summary.end_time}
+                testingChannelId={testingChannelId}
+                onTestChannel={(channelId, modelName) =>
+                  testMutation.mutate({ channelId, modelName })
+                }
+              />
+            </ResizablePanel>
+          </ResizablePanelGroup>
         </div>
       </SectionPageLayout.Content>
     </SectionPageLayout>

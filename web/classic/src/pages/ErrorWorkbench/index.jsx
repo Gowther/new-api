@@ -17,7 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
@@ -25,6 +31,12 @@ import {
   Input,
   InputNumber,
   List,
+  Popover,
+  Radio,
+  RadioGroup,
+  ResizeGroup,
+  ResizeHandler,
+  ResizeItem,
   Select,
   Space,
   Spin,
@@ -33,7 +45,9 @@ import {
   Typography,
 } from '@douyinfe/semi-ui';
 import {
+  IconClose,
   IconExternalOpen,
+  IconFilter,
   IconHelpCircle,
   IconRefresh,
 } from '@douyinfe/semi-icons';
@@ -59,6 +73,28 @@ const DEFAULT_FILTERS = {
 };
 
 const FILTER_INPUT_DEBOUNCE_MS = 500;
+
+const SPLIT_LAYOUT_STORAGE_KEY = 'error-workbench-split';
+const SPLIT_LIST_DEFAULT_PERCENT = 36;
+const SPLIT_LIST_MIN_PERCENT = 20;
+const SPLIT_LIST_MAX_PERCENT = 60;
+const SPLIT_LIST_MIN_WIDTH = '288px';
+const SPLIT_DETAILS_MIN_WIDTH = '384px';
+
+// 比这更窄的时候两栏放不下各自的最小宽度，于是不再分栏，改成上下堆叠。
+const SPLIT_VIEWPORT_QUERY = '(min-width: 1024px)';
+
+function useSplitViewport() {
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      const query = window.matchMedia(SPLIT_VIEWPORT_QUERY);
+      query.addEventListener('change', onStoreChange);
+      return () => query.removeEventListener('change', onStoreChange);
+    },
+    () => window.matchMedia(SPLIT_VIEWPORT_QUERY).matches,
+    () => false,
+  );
+}
 
 function renderChannelStatus(status, t) {
   const meta = {
@@ -283,49 +319,25 @@ function getUrgentClusterCount(items) {
   ).length;
 }
 
-function ErrorProblemOverview({
-  problems,
-  briefingAvailable,
+/**
+ * 生成的简报总结的是整个筛选视图，而不是某一个故障簇，所以它放在分栏上方，
+ * 而不是放进任意一栏里面。只有真正生成了简报才占高度，默认状态下工作区保持满高。
+ */
+function ErrorBriefingBand({
   briefing,
   briefingModel,
   briefingCached,
-  briefingLoading,
-  onGenerateBriefing,
-  onSelectProblem,
+  onDismiss,
   t,
 }) {
-  if (!problems || problems.length === 0) {
+  if (!briefing) {
     return null;
   }
 
   return (
-    <div className='shrink-0 rounded border border-solid border-gray-200 bg-white'>
-      <div className='flex flex-wrap items-center justify-between gap-2 border-b border-solid border-gray-200 px-3 py-2'>
-        <Typography.Text strong>
-          <ErrorMetricHelp
-            description={t(
-              '问题是故障簇按共同点折叠后的结果。同一条渠道在多个模型上以相同方式失败会折成一个渠道级问题；同一个模型在多条渠道上失败会折成一个模型级问题。每个故障簇只属于一个问题。',
-            )}
-          >
-            {t('问题')}
-          </ErrorMetricHelp>
-          <Typography.Text type='tertiary' size='small' className='ml-2'>
-            {problems.length}
-          </Typography.Text>
-        </Typography.Text>
-        {briefingAvailable && (
-          <Button
-            size='small'
-            loading={briefingLoading}
-            onClick={onGenerateBriefing}
-          >
-            {t('生成 AI 简报')}
-          </Button>
-        )}
-      </div>
-
-      {briefing && (
-        <div className='border-b border-solid border-gray-200 px-3 py-2'>
+    <section className='shrink-0 rounded border border-solid border-gray-200 bg-gray-50 px-3 py-2'>
+      <div className='flex items-start gap-2'>
+        <div className='min-w-0 flex-1'>
           <Typography.Paragraph style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
             {briefing}
           </Typography.Paragraph>
@@ -334,167 +346,175 @@ function ErrorProblemOverview({
             {briefingCached ? ` · ${t('缓存结果')}` : ''}
           </Typography.Text>
         </div>
-      )}
-
-      <div className='max-h-56 divide-y divide-solid divide-gray-100 overflow-y-auto'>
-        {problems.map((problem) => {
-          let primary = problem.model_name || problem.channel_name || '-';
-          let secondary =
-            problem.channel_name && problem.model_name
-              ? problem.channel_name
-              : '';
-          if (problem.scope === 'channel') {
-            primary = problem.channel_name || `#${problem.channel}`;
-            secondary =
-              (problem.affected_models || []).length > 1
-                ? t('{{count}} 个模型', {
-                    count: problem.affected_models.length,
-                  })
-                : '';
-          } else if (problem.scope === 'model') {
-            primary = problem.model_name;
-            secondary =
-              (problem.affected_channels || []).length > 1
-                ? t('{{count}} 条渠道', {
-                    count: problem.affected_channels.length,
-                  })
-                : '';
-          }
-          return (
-            <button
-              key={problem.key}
-              type='button'
-              onClick={() => onSelectProblem(problem)}
-              className='flex w-full cursor-pointer flex-wrap items-center gap-2 border-0 bg-transparent px-3 py-2 text-left text-xs hover:bg-gray-50'
-            >
-              {renderSeverity(problem.severity, t)}
-              {renderStatusCode(problem.status_code, t)}
-              <span className='min-w-0 truncate font-medium'>{primary}</span>
-              {secondary && (
-                <span className='shrink-0 text-gray-500'>{secondary}</span>
-              )}
-              <span className='ml-auto shrink-0 tabular-nums text-gray-500'>
-                {t('{{count}} 个故障簇', { count: problem.cluster_count })}
-                {' · '}
-                {t('{{count}} 个请求', { count: problem.affected_requests })}
-              </span>
-            </button>
-          );
-        })}
+        <Button
+          size='small'
+          theme='borderless'
+          type='tertiary'
+          icon={<IconClose />}
+          aria-label={t('关闭简报')}
+          onClick={onDismiss}
+        />
       </div>
+    </section>
+  );
+}
+
+/**
+ * 折叠后的问题，一行一个。它和故障簇列表展示的是同一批数据的两种视图，所以以标签页的
+ * 形式和它共用左栏，而不是压在它上面、让两栏都变矮。
+ */
+function ErrorProblemList({ problems, onSelectProblem, t }) {
+  if (!problems || problems.length === 0) {
+    return (
+      <div className='flex h-full items-center justify-center px-6 text-center'>
+        <Empty title={t('当前范围没有问题')} />
+      </div>
+    );
+  }
+
+  return (
+    <div className='h-full overscroll-contain divide-y divide-solid divide-gray-100 overflow-y-auto'>
+      {problems.map((problem) => {
+        let primary = problem.model_name || problem.channel_name || '-';
+        let secondary =
+          problem.channel_name && problem.model_name
+            ? problem.channel_name
+            : '';
+        if (problem.scope === 'channel') {
+          primary = problem.channel_name || `#${problem.channel}`;
+          secondary =
+            (problem.affected_models || []).length > 1
+              ? t('{{count}} 个模型', {
+                  count: problem.affected_models.length,
+                })
+              : '';
+        } else if (problem.scope === 'model') {
+          primary = problem.model_name;
+          secondary =
+            (problem.affected_channels || []).length > 1
+              ? t('{{count}} 条渠道', {
+                  count: problem.affected_channels.length,
+                })
+              : '';
+        }
+        return (
+          <button
+            key={problem.key}
+            type='button'
+            onClick={() => onSelectProblem(problem)}
+            className='flex w-full cursor-pointer flex-wrap items-center gap-2 border-0 bg-transparent px-3 py-2.5 text-left text-xs hover:bg-gray-50'
+          >
+            {renderSeverity(problem.severity, t)}
+            {renderStatusCode(problem.status_code, t)}
+            <span className='min-w-0 truncate font-medium'>{primary}</span>
+            {secondary && (
+              <span className='shrink-0 text-gray-500'>{secondary}</span>
+            )}
+            <span className='ml-auto shrink-0 tabular-nums text-gray-500'>
+              {t('{{count}} 个故障簇', { count: problem.cluster_count })}
+              {' · '}
+              {t('{{count}} 个请求', { count: problem.affected_requests })}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
 
 function ErrorClusterList({ items, selectedKey, loading, onSelect, t }) {
   return (
-    <section className='flex h-[36rem] min-w-0 flex-col overflow-hidden rounded border border-solid border-gray-200 bg-white lg:h-full'>
-      <div className='flex items-center justify-between border-b border-solid border-gray-200 px-3 py-2'>
-        <Typography.Text strong>
-          <ErrorMetricHelp
-            description={t(
-              'A fault cluster groups error logs by model, group, channel, and a normalized error fingerprint. The visible list is ranked by severity and capped by the fault cluster limit.',
-            )}
-          >
-            {t('故障簇')}
-          </ErrorMetricHelp>
-        </Typography.Text>
-        <Typography.Text type='tertiary' size='small'>
-          {items.length}
-        </Typography.Text>
-      </div>
-      <div className='min-h-0 flex-1 overscroll-contain overflow-y-auto'>
-        {items.length === 0 ? (
-          <div className='flex min-h-80 items-center justify-center px-6'>
-            {loading ? <Spin /> : <Empty title={t('暂无错误日志')} />}
-          </div>
-        ) : (
-          <List
-            dataSource={items}
-            renderItem={(record) => {
-              const selected = selectedKey === record.key;
-              return (
-                <List.Item
-                  onClick={() => onSelect(record.key)}
-                  style={{
-                    cursor: 'pointer',
-                    padding: '12px 14px',
-                    background: selected
-                      ? 'var(--semi-color-fill-0)'
-                      : 'transparent',
-                    borderLeft: selected
-                      ? '3px solid var(--semi-color-primary)'
-                      : '3px solid transparent',
-                  }}
-                >
-                  <div className='w-full min-w-0'>
-                    <div className='flex min-w-0 items-start justify-between gap-3'>
-                      <div className='min-w-0'>
-                        <Space spacing={4} wrap>
-                          {renderSeverity(record.severity, t)}
-                          {record.status_code > 0 && (
-                            <Tag color='grey'>{record.status_code}</Tag>
-                          )}
-                          {renderTrend(record.trend, t)}
-                        </Space>
-                        <div className='mt-2'>
-                          <ErrorRouteIdentity record={record} compact t={t} />
-                        </div>
-                        <Typography.Text
-                          strong
-                          ellipsis={{ showTooltip: true, rows: 2 }}
-                          style={{ display: 'block', marginTop: 6 }}
-                        >
-                          {record.error_summary || t('无错误内容')}
-                        </Typography.Text>
+    <div className='h-full overscroll-contain overflow-y-auto'>
+      {items.length === 0 ? (
+        <div className='flex min-h-80 items-center justify-center px-6'>
+          {loading ? <Spin /> : <Empty title={t('暂无错误日志')} />}
+        </div>
+      ) : (
+        <List
+          dataSource={items}
+          renderItem={(record) => {
+            const selected = selectedKey === record.key;
+            return (
+              <List.Item
+                onClick={() => onSelect(record.key)}
+                style={{
+                  cursor: 'pointer',
+                  padding: '12px 14px',
+                  background: selected
+                    ? 'var(--semi-color-fill-0)'
+                    : 'transparent',
+                  borderLeft: selected
+                    ? '3px solid var(--semi-color-primary)'
+                    : '3px solid transparent',
+                }}
+              >
+                <div className='w-full min-w-0'>
+                  <div className='flex min-w-0 items-start justify-between gap-3'>
+                    <div className='min-w-0'>
+                      <Space spacing={4} wrap>
+                        {renderSeverity(record.severity, t)}
+                        {record.status_code > 0 && (
+                          <Tag color='grey'>{record.status_code}</Tag>
+                        )}
+                        {renderTrend(record.trend, t)}
+                      </Space>
+                      <div className='mt-2'>
+                        <ErrorRouteIdentity record={record} compact t={t} />
                       </div>
-                      <div className='shrink-0 text-right'>
-                        <RouteErrorRateHelp
-                          errors={record.route_error_count}
-                          attempts={record.route_attempt_count}
-                          rate={formatErrorRate(record.route_error_rate)}
-                          className='flex-col items-end gap-0'
-                        >
-                          <span className='text-lg font-semibold tabular-nums'>
-                            {formatErrorRate(record.route_error_rate)}
-                          </span>
-                          <Typography.Text type='tertiary' size='small'>
-                            {t('Route error rate')}
-                          </Typography.Text>
-                        </RouteErrorRateHelp>
-                      </div>
+                      <Typography.Text
+                        strong
+                        ellipsis={{ showTooltip: true, rows: 2 }}
+                        style={{ display: 'block', marginTop: 6 }}
+                      >
+                        {record.error_summary || t('无错误内容')}
+                      </Typography.Text>
                     </div>
-                    <div className='mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500'>
-                      <div className='flex flex-wrap items-center gap-x-3 gap-y-1'>
-                        <ErrorMetricHelp
-                          description={t(
-                            'Cluster error logs counts error-log rows with this exact fingerprint in the selected time range. Retries can produce more than one row for a request.',
-                          )}
-                        >
-                          <span>
-                            {t('Cluster error logs')}: {record.count}
-                          </span>
-                        </ErrorMetricHelp>
-                        <ErrorMetricHelp
-                          description={t(
-                            'Affected requests counts distinct failed requests in this fault cluster. It deduplicates by request ID, then upstream request ID, and falls back to log ID. It is not used to calculate route error rate.',
-                          )}
-                        >
-                          <span>
-                            {t('受影响请求')}: {record.affected_requests}
-                          </span>
-                        </ErrorMetricHelp>
-                      </div>
-                      <span>{renderTime(record.last_seen)}</span>
+                    <div className='shrink-0 text-right'>
+                      <RouteErrorRateHelp
+                        errors={record.route_error_count}
+                        attempts={record.route_attempt_count}
+                        rate={formatErrorRate(record.route_error_rate)}
+                        className='flex-col items-end gap-0'
+                      >
+                        <span className='text-lg font-semibold tabular-nums'>
+                          {formatErrorRate(record.route_error_rate)}
+                        </span>
+                        <Typography.Text type='tertiary' size='small'>
+                          {t('Route error rate')}
+                        </Typography.Text>
+                      </RouteErrorRateHelp>
                     </div>
                   </div>
-                </List.Item>
-              );
-            }}
-          />
-        )}
-      </div>
-    </section>
+                  <div className='mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500'>
+                    <div className='flex flex-wrap items-center gap-x-3 gap-y-1'>
+                      <ErrorMetricHelp
+                        description={t(
+                          'Cluster error logs counts error-log rows with this exact fingerprint in the selected time range. Retries can produce more than one row for a request.',
+                        )}
+                      >
+                        <span>
+                          {t('Cluster error logs')}: {record.count}
+                        </span>
+                      </ErrorMetricHelp>
+                      <ErrorMetricHelp
+                        description={t(
+                          'Affected requests counts distinct failed requests in this fault cluster. It deduplicates by request ID, then upstream request ID, and falls back to log ID. It is not used to calculate route error rate.',
+                        )}
+                      >
+                        <span>
+                          {t('受影响请求')}: {record.affected_requests}
+                        </span>
+                      </ErrorMetricHelp>
+                    </div>
+                    <span>{renderTime(record.last_seen)}</span>
+                  </div>
+                </div>
+              </List.Item>
+            );
+          }}
+        />
+      )}
+    </div>
   );
 }
 
@@ -507,7 +527,7 @@ function ErrorClusterDetails({
 }) {
   if (!record) {
     return (
-      <section className='flex h-[36rem] items-center justify-center rounded border border-solid border-gray-200 bg-white px-6 text-center lg:h-full'>
+      <section className='flex h-full items-center justify-center rounded border border-solid border-gray-200 bg-white px-6 text-center'>
         <Typography.Text type='tertiary'>{t('请选择故障簇')}</Typography.Text>
       </section>
     );
@@ -577,7 +597,7 @@ function ErrorClusterDetails({
 
   const currentTestKey = `${record.key}:test:${record.channel}`;
   return (
-    <section className='flex h-[36rem] min-w-0 flex-col overflow-hidden rounded border border-solid border-gray-200 bg-white lg:h-full'>
+    <section className='flex h-full min-w-0 flex-col overflow-hidden rounded border border-solid border-gray-200 bg-white'>
       <div className='flex flex-wrap items-start justify-between gap-3 border-b border-solid border-gray-200 px-4 py-3'>
         <div className='min-w-0'>
           <Space spacing={4} wrap>
@@ -805,16 +825,35 @@ export default function ErrorWorkbench() {
   const [selectedKey, setSelectedKey] = useState(null);
   const [briefing, setBriefing] = useState(null);
   const [briefingLoading, setBriefingLoading] = useState(false);
+  // 左栏显示故障簇，或者它们折叠成的问题。
+  const [listView, setListView] = useState('clusters');
   const summaryRequestVersion = useRef(0);
   const briefingRequestVersion = useRef(0);
+  const splitRef = useRef(null);
+  const isSplitViewport = useSplitViewport();
   const briefingLanguage = i18n.resolvedLanguage || i18n.language;
 
-  const statCards = useMemo(
+  // Semi 只在初始化时读一次 defaultSize，所以存下来的比例不需要跟着状态更新。
+  const storedListPercent = useMemo(() => {
+    const stored = Number(
+      window.localStorage.getItem(SPLIT_LAYOUT_STORAGE_KEY),
+    );
+    if (!Number.isFinite(stored) || stored <= 0) {
+      return SPLIT_LIST_DEFAULT_PERCENT;
+    }
+    return Math.min(
+      Math.max(stored, SPLIT_LIST_MIN_PERCENT),
+      SPLIT_LIST_MAX_PERCENT,
+    );
+  }, []);
+
+  // 四个数字放在一行里。原先是工作区上方的四张卡片，为了几个只读一次的数字
+  // 占掉了大约五分之一的视口高度。
+  const statMetrics = useMemo(
     () => [
       [
         t('错误日志'),
         summary.total_logs,
-        summary.truncated ? t('仅聚合最近扫描记录') : t('已覆盖当前筛选范围'),
         t(
           'Error logs is the total number of matching error-log rows in the selected time range. If scanning is truncated, this total still covers all matches while fault clusters use only the latest scanned rows.',
         ),
@@ -822,7 +861,6 @@ export default function ErrorWorkbench() {
       [
         t('故障簇'),
         summary.items.length,
-        t('按稳定错误指纹聚合'),
         t(
           'A fault cluster groups error logs by model, group, channel, and a normalized error fingerprint. The visible list is ranked by severity and capped by the fault cluster limit.',
         ),
@@ -833,7 +871,6 @@ export default function ErrorWorkbench() {
           (total, item) => total + (item.affected_requests || 0),
           0,
         ),
-        t('当前可见故障簇'),
         t(
           "Visible affected requests is the sum of each visible fault cluster's distinct failed-request count. The same request can be counted more than once if it appears in multiple clusters.",
         ),
@@ -841,7 +878,6 @@ export default function ErrorWorkbench() {
       [
         t('紧急故障簇'),
         getUrgentClusterCount(summary.items),
-        t('高和严重等级'),
         t(
           'Urgent clusters are visible clusters classified as high or critical by channel status, HTTP status, route error rate, route attempts, and cluster error-log count.',
         ),
@@ -970,6 +1006,8 @@ export default function ErrorWorkbench() {
     const firstKey = (problem.cluster_keys || [])[0];
     if (firstKey) {
       setSelectedKey(firstKey);
+      // 切回去，好让刚被选中的那一行出现在屏幕上。
+      setListView('clusters');
     }
   };
 
@@ -999,8 +1037,80 @@ export default function ErrorWorkbench() {
     }
   };
 
+  // 渠道 ID 从 1 起，所以取假值就等于没填。
+  const activeFilterCount = [
+    Boolean(filters.model_name?.trim()),
+    Boolean(filters.channel),
+    Boolean(filters.group?.trim()),
+    filters.limit !== DEFAULT_FILTERS.limit,
+  ].filter(Boolean).length;
+
+  const listPane = (
+    <div className='flex h-full min-w-0 flex-col overflow-hidden rounded border border-solid border-gray-200 bg-white'>
+      <div className='shrink-0 border-b border-solid border-gray-200 p-2'>
+        <RadioGroup
+          type='button'
+          value={listView}
+          onChange={(event) => setListView(event?.target?.value ?? event)}
+        >
+          <Radio value='clusters'>
+            <ErrorMetricHelp
+              description={t(
+                'A fault cluster groups error logs by model, group, channel, and a normalized error fingerprint. The visible list is ranked by severity and capped by the fault cluster limit.',
+              )}
+            >
+              {t('故障簇')}
+            </ErrorMetricHelp>
+            <span className='ml-1.5 tabular-nums text-gray-500'>
+              {summary.items.length}
+            </span>
+          </Radio>
+          <Radio value='problems'>
+            <ErrorMetricHelp
+              description={t(
+                '问题是故障簇按共同点折叠后的结果。同一条渠道在多个模型上以相同方式失败会折成一个渠道级问题；同一个模型在多条渠道上失败会折成一个模型级问题。每个故障簇只属于一个问题。',
+              )}
+            >
+              {t('问题')}
+            </ErrorMetricHelp>
+            <span className='ml-1.5 tabular-nums text-gray-500'>
+              {(summary.problems || []).length}
+            </span>
+          </Radio>
+        </RadioGroup>
+      </div>
+      <div className='min-h-0 flex-1'>
+        {listView === 'clusters' ? (
+          <ErrorClusterList
+            items={summary.items || []}
+            selectedKey={selectedRecord?.key || null}
+            loading={loading}
+            onSelect={setSelectedKey}
+            t={t}
+          />
+        ) : (
+          <ErrorProblemList
+            problems={summary.problems || []}
+            onSelectProblem={selectProblem}
+            t={t}
+          />
+        )}
+      </div>
+    </div>
+  );
+
+  const detailsPane = (
+    <ErrorClusterDetails
+      record={selectedRecord}
+      summary={summary}
+      actionLoading={actionLoading}
+      testChannel={testChannel}
+      t={t}
+    />
+  );
+
   return (
-    <div className='mt-[60px] flex flex-col gap-3 px-2 pb-2 lg:h-[calc(100dvh-60px)] lg:overflow-y-auto'>
+    <div className='mt-[60px] flex flex-col gap-3 px-2 pb-2 lg:h-[calc(100dvh-60px)] lg:overflow-hidden'>
       <div className='flex shrink-0 flex-wrap items-center justify-between gap-2'>
         <div className='min-w-0'>
           <Typography.Title heading={5} style={{ margin: 0 }}>
@@ -1010,7 +1120,123 @@ export default function ErrorWorkbench() {
             {t('按稳定错误指纹聚合故障，并提供日志与路由证据。')}
           </Typography.Text>
         </div>
-        <Space spacing={8}>
+        <Space spacing={8} wrap>
+          <Select
+            aria-label={t('时间范围')}
+            value={filters.time_range}
+            size='small'
+            onChange={(value) => setFilterValue('time_range', value)}
+          >
+            <Select.Option value='today'>{t('今天')}</Select.Option>
+            <Select.Option value='yesterday'>{t('昨天')}</Select.Option>
+            <Select.Option value='1'>{t('最近 1 小时')}</Select.Option>
+            <Select.Option value='6'>{t('最近 6 小时')}</Select.Option>
+            <Select.Option value='24'>{t('最近 24 小时')}</Select.Option>
+            <Select.Option value='72'>{t('最近 3 天')}</Select.Option>
+            <Select.Option value='168'>{t('最近 7 天')}</Select.Option>
+          </Select>
+          <Popover
+            trigger='click'
+            position='bottomRight'
+            showArrow
+            content={
+              <div className='w-72 space-y-3 p-3'>
+                <div className='min-w-0'>
+                  <Typography.Text type='tertiary' size='small'>
+                    {t('模型')}
+                  </Typography.Text>
+                  <Input
+                    value={filters.model_name}
+                    placeholder='gpt-4o'
+                    className='mt-1 w-full'
+                    onChange={(value) => setFilterValue('model_name', value)}
+                  />
+                </div>
+                <div className='grid grid-cols-2 gap-3'>
+                  <div className='min-w-0'>
+                    <Typography.Text type='tertiary' size='small'>
+                      {t('渠道 ID')}
+                    </Typography.Text>
+                    <InputNumber
+                      value={filters.channel}
+                      min={1}
+                      className='mt-1 w-full'
+                      onChange={(value) =>
+                        setFilterValue('channel', value || '')
+                      }
+                    />
+                  </div>
+                  <div className='min-w-0'>
+                    <Typography.Text type='tertiary' size='small'>
+                      {t('分组')}
+                    </Typography.Text>
+                    <Input
+                      value={filters.group}
+                      placeholder='default'
+                      className='mt-1 w-full'
+                      onChange={(value) => setFilterValue('group', value)}
+                    />
+                  </div>
+                </div>
+                <div className='min-w-0'>
+                  <Typography.Text type='tertiary' size='small'>
+                    <ErrorMetricHelp
+                      description={t(
+                        'Limit controls how many fault clusters are returned after severity ranking. It does not limit the route attempts used to calculate each route error rate.',
+                      )}
+                    >
+                      {t('Fault cluster limit')}
+                    </ErrorMetricHelp>
+                  </Typography.Text>
+                  <InputNumber
+                    value={filters.limit}
+                    min={1}
+                    max={200}
+                    className='mt-1 w-full'
+                    onChange={(value) => setFilterValue('limit', value || 50)}
+                  />
+                </div>
+                <Button
+                  size='small'
+                  className='w-full'
+                  onClick={() => {
+                    setFilters(DEFAULT_FILTERS);
+                    setSelectedKey(null);
+                    briefingRequestVersion.current += 1;
+                    setBriefing(null);
+                    setBriefingLoading(false);
+                  }}
+                >
+                  {t('重置')}
+                </Button>
+              </div>
+            }
+          >
+            <Button size='small' icon={<IconFilter />}>
+              {t('筛选')}
+              {activeFilterCount > 0 && (
+                <span className='ml-1 tabular-nums'>{activeFilterCount}</span>
+              )}
+            </Button>
+          </Popover>
+          <Button
+            type='primary'
+            size='small'
+            icon={<IconRefresh />}
+            loading={loading}
+            onClick={() => fetchSummary()}
+          >
+            {t('刷新')}
+          </Button>
+          {summary.briefing_available && !loading && (
+            <Button
+              size='small'
+              loading={briefingLoading}
+              onClick={generateBriefing}
+            >
+              {t('生成 AI 简报')}
+            </Button>
+          )}
           <Button
             size='small'
             icon={<IconExternalOpen />}
@@ -1028,159 +1254,72 @@ export default function ErrorWorkbench() {
         </Space>
       </div>
 
-      <div className='grid shrink-0 grid-cols-2 gap-2 lg:grid-cols-4'>
-        {statCards.map(([label, value, hint, description]) => (
-          <div
-            key={label}
-            className='min-w-0 rounded border border-solid border-gray-200 bg-gray-50 px-3 py-2'
-          >
-            <Typography.Text type='tertiary' size='small'>
-              <ErrorMetricHelp description={description}>
-                {label}
-              </ErrorMetricHelp>
-            </Typography.Text>
-            <div className='mt-0.5 flex items-baseline justify-between gap-2'>
-              <span className='text-xl font-semibold tabular-nums'>
-                {value}
-              </span>
-              <span className='truncate text-xs text-gray-500'>{hint}</span>
-            </div>
-          </div>
+      <div className='flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-gray-500'>
+        {statMetrics.map(([label, value, description]) => (
+          <span key={label} className='flex items-center gap-1.5'>
+            <ErrorMetricHelp description={description}>{label}</ErrorMetricHelp>
+            <span className='font-semibold tabular-nums text-gray-900'>
+              {value.toLocaleString()}
+            </span>
+          </span>
         ))}
+        {summary.truncated && (
+          <Tag color='orange'>
+            {t(
+              '错误日志较多，本页仅聚合最近扫描到的部分记录。可缩短时间范围或增加筛选条件。',
+            )}
+          </Tag>
+        )}
+        {summary.items.length > 0 && (
+          <span className='ml-auto'>
+            {t('最后更新')}: {renderTime(summary.end_time)}
+          </span>
+        )}
       </div>
 
-      <div className='shrink-0 rounded border border-solid border-gray-200 bg-white p-3'>
-        <div className='grid gap-2 sm:grid-cols-2 md:grid-cols-6'>
-          <div className='min-w-0'>
-            <Typography.Text type='tertiary' size='small'>
-              {t('时间范围')}
-            </Typography.Text>
-            <Select
-              value={filters.time_range}
-              className='mt-1 w-full'
-              onChange={(value) => setFilterValue('time_range', value)}
-            >
-              <Select.Option value='today'>{t('今天')}</Select.Option>
-              <Select.Option value='yesterday'>{t('昨天')}</Select.Option>
-              <Select.Option value='1'>{t('最近 1 小时')}</Select.Option>
-              <Select.Option value='6'>{t('最近 6 小时')}</Select.Option>
-              <Select.Option value='24'>{t('最近 24 小时')}</Select.Option>
-              <Select.Option value='72'>{t('最近 3 天')}</Select.Option>
-              <Select.Option value='168'>{t('最近 7 天')}</Select.Option>
-            </Select>
-          </div>
-          <div className='min-w-0'>
-            <Typography.Text type='tertiary' size='small'>
-              <ErrorMetricHelp
-                description={t(
-                  'Limit controls how many fault clusters are returned after severity ranking. It does not limit the route attempts used to calculate each route error rate.',
-                )}
-              >
-                {t('Fault cluster limit')}
-              </ErrorMetricHelp>
-            </Typography.Text>
-            <InputNumber
-              value={filters.limit}
-              min={1}
-              max={200}
-              className='mt-1 w-full'
-              onChange={(value) => setFilterValue('limit', value || 50)}
-            />
-          </div>
-          <div className='min-w-0 md:col-span-2'>
-            <Typography.Text type='tertiary' size='small'>
-              {t('模型')}
-            </Typography.Text>
-            <Input
-              value={filters.model_name}
-              placeholder='gpt-4o'
-              className='mt-1 w-full'
-              onChange={(value) => setFilterValue('model_name', value)}
-            />
-          </div>
-          <div className='min-w-0'>
-            <Typography.Text type='tertiary' size='small'>
-              {t('渠道 ID')}
-            </Typography.Text>
-            <InputNumber
-              value={filters.channel}
-              min={1}
-              className='mt-1 w-full'
-              onChange={(value) => setFilterValue('channel', value || '')}
-            />
-          </div>
-          <div className='min-w-0'>
-            <Typography.Text type='tertiary' size='small'>
-              {t('分组')}
-            </Typography.Text>
-            <Input
-              value={filters.group}
-              placeholder='default'
-              className='mt-1 w-full'
-              onChange={(value) => setFilterValue('group', value)}
-            />
-          </div>
-        </div>
-        <div className='mt-3 flex flex-wrap items-center gap-2'>
-          <Button
-            type='primary'
-            size='small'
-            icon={<IconRefresh />}
-            loading={loading}
-            onClick={() => fetchSummary()}
-          >
-            {t('刷新')}
-          </Button>
-          <Button
-            size='small'
-            onClick={() => {
-              setFilters(DEFAULT_FILTERS);
-              setSelectedKey(null);
-              briefingRequestVersion.current += 1;
-              setBriefing(null);
-              setBriefingLoading(false);
-            }}
-          >
-            {t('重置')}
-          </Button>
-          {summary.truncated && (
-            <Tag color='orange'>
-              {t(
-                '错误日志较多，本页仅聚合最近扫描到的部分记录。可缩短时间范围或增加筛选条件。',
-              )}
-            </Tag>
-          )}
-        </div>
-      </div>
-
-      <ErrorProblemOverview
-        problems={summary.problems || []}
-        briefingAvailable={summary.briefing_available && !loading}
+      <ErrorBriefingBand
         briefing={briefing?.briefing || ''}
         briefingModel={briefing?.model || ''}
         briefingCached={briefing?.cached || false}
-        briefingLoading={briefingLoading}
-        onGenerateBriefing={generateBriefing}
-        onSelectProblem={selectProblem}
+        onDismiss={() => {
+          briefingRequestVersion.current += 1;
+          setBriefing(null);
+          setBriefingLoading(false);
+        }}
         t={t}
       />
 
-      <div className='grid min-h-[36rem] w-full grid-cols-1 gap-3 lg:min-h-[40rem] lg:flex-1 lg:grid-cols-[minmax(22rem,0.8fr)_minmax(0,1.5fr)]'>
-        <ErrorClusterList
-          items={summary.items || []}
-          selectedKey={selectedRecord?.key || null}
-          loading={loading}
-          onSelect={setSelectedKey}
-          t={t}
-        />
-        <ErrorClusterDetails
-          record={selectedRecord}
-          summary={summary}
-          actionLoading={actionLoading}
-          testChannel={testChannel}
-          t={t}
-        />
-      </div>
+      {isSplitViewport ? (
+        <div ref={splitRef} className='min-h-0 flex-1'>
+          <ResizeGroup direction='horizontal'>
+            <ResizeItem
+              className='min-w-0'
+              min={SPLIT_LIST_MIN_WIDTH}
+              defaultSize={`${storedListPercent}%`}
+              onResizeEnd={(size) => {
+                const groupWidth = splitRef.current?.clientWidth || 0;
+                if (groupWidth > 0) {
+                  window.localStorage.setItem(
+                    SPLIT_LAYOUT_STORAGE_KEY,
+                    String((size.width / groupWidth) * 100),
+                  );
+                }
+              }}
+            >
+              {listPane}
+            </ResizeItem>
+            <ResizeHandler className='!bg-transparent' />
+            <ResizeItem className='min-w-0' min={SPLIT_DETAILS_MIN_WIDTH}>
+              {detailsPane}
+            </ResizeItem>
+          </ResizeGroup>
+        </div>
+      ) : (
+        <div className='flex flex-col gap-3'>
+          <div className='h-[28rem]'>{listPane}</div>
+          <div className='h-[36rem]'>{detailsPane}</div>
+        </div>
+      )}
     </div>
   );
 }

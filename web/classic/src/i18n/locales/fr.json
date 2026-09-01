@@ -2690,6 +2690,8 @@
     "生产环境 Waffo API 密钥": "",
     "生产环境 Waffo 公钥 Base64 (X.509 DER)": "Clé publique Waffo Base64 (X.509 DER) de production",
     "生成 AI 简报": "Générer le résumé IA",
+    "当前范围没有问题": "Aucun problème sur cette période",
+    "关闭简报": "Ignorer le résumé",
     "生成令牌": "Générer un jeton",
     "生成并填入": "Générer et remplir",
     "生成数量": "Générer la quantité",

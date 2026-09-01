@@ -65,4 +65,12 @@ function ResizableHandle({
   )
 }
 
-export { ResizableHandle, ResizablePanel, ResizablePanelGroup }
+/** Persists a group's layout in localStorage, keyed by the group id. */
+const useResizableLayout = ResizablePrimitive.useDefaultLayout
+
+export {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+  useResizableLayout,
+}

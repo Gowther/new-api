@@ -2802,6 +2802,8 @@
     "生产环境 Waffo 公钥 Base64 (X.509 DER)": "Khóa công khai Waffo Base64 (X.509 DER) môi trường sản xuất",
     "生成": "Tạo",
     "生成 AI 简报": "Tạo tóm tắt AI",
+    "当前范围没有问题": "Không có sự cố trong khoảng này",
+    "关闭简报": "Bỏ qua tóm tắt",
     "生成中...": "Đang tạo...",
     "生成令牌": "Tạo mã thông báo",
     "生成兑换码": "Tạo mã đổi thưởng",

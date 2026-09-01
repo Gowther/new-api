@@ -179,7 +179,7 @@ export function ErrorClusterDetails(props: ErrorClusterDetailsProps) {
 
   if (!record) {
     return (
-      <section className='bg-background text-muted-foreground flex h-[36rem] items-center justify-center rounded-lg border px-6 text-center text-sm lg:h-full'>
+      <section className='bg-background text-muted-foreground flex h-full items-center justify-center rounded-lg border px-6 text-center text-sm'>
         {t('Select a fault cluster')}
       </section>
     )
@@ -200,7 +200,7 @@ export function ErrorClusterDetails(props: ErrorClusterDetailsProps) {
   }
 
   return (
-    <section className='bg-background flex h-[36rem] min-w-0 flex-col overflow-hidden rounded-lg border lg:h-full'>
+    <section className='bg-background flex h-full min-w-0 flex-col overflow-hidden rounded-lg border'>
       <div className='flex flex-wrap items-start justify-between gap-3 border-b px-4 py-3'>
         <div className='min-w-0 space-y-1'>
           <div className='flex flex-wrap items-center gap-1.5'>

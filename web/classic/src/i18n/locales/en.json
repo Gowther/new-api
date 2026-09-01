@@ -2758,6 +2758,8 @@
     "生产环境 Waffo API 密钥": "",
     "生产环境 Waffo 公钥 Base64 (X.509 DER)": "Production Waffo public key Base64 (X.509 DER)",
     "生成 AI 简报": "Generate AI briefing",
+    "当前范围没有问题": "No problems in this range",
+    "关闭简报": "Dismiss briefing",
     "生成令牌": "Generate Token",
     "生成并填入": "Generate and Fill",
     "生成数量": "Generate quantity",

@@ -548,18 +548,11 @@ function tryParseRuleGroupFactor(part: string): RequestRuleGroup | null {
   const m = part.match(/^\((.+) \? ([\d.eE+-]+) : 1\)$/s)
   if (!m) return null
 
-  const conditionStr = m[1]
-  const multiplier = m[2]
-
-  const andParts = splitTopLevelAnd(conditionStr)
-  const conditions: RequestCondition[] = []
-  for (const ap of andParts) {
-    const cond = tryParseRequestCondition(ap.trim())
-    if (!cond) return null
-    conditions.push(cond)
-  }
-  if (conditions.length === 0) return null
-  return { conditions, multiplier }
+  // tryParseRequestConditions 会把相邻的时间上下界合并成单个 MATCH_RANGE，
+  // 与后端对时间规则的解释保持一致（恒真表达式修复）。
+  const conditions = tryParseRequestConditions(m[1])
+  if (!conditions) return null
+  return { conditions, multiplier: m[2] }
 }
 
 export function tryParseRequestRuleExpr(

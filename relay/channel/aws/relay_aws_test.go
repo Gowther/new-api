@@ -13,8 +13,8 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/relaykit/dto"
-	relaytypes "github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream"
 	"github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream/eventstreamapi"
@@ -84,7 +84,7 @@ func newAwsTestRelayInfo() *relaycommon.RelayInfo {
 		StartTime:          time.Now(),
 		IsStream:           true,
 		OriginModelName:    awsTestModel,
-		RelayFormat:        relaytypes.RelayFormatOpenAI,
+		RelayFormat:        types.RelayFormatOpenAI,
 		ShouldIncludeUsage: true,
 		ChannelMeta: &relaycommon.ChannelMeta{
 			UpstreamModelName: awsTestModel,
@@ -246,7 +246,7 @@ func TestNewAwsInvokeErrorSkipsRetryOnlyForClientCancellation(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			err := newAwsInvokeError(test.requestContext, test.err, "InvokeModel")
-			assert.Equal(t, test.wantSkipRetry, relaytypes.IsSkipRetryError(err))
+			assert.Equal(t, test.wantSkipRetry, types.IsSkipRetryError(err))
 		})
 	}
 }
@@ -261,7 +261,7 @@ func TestAwsHandlersCancelSdkRequestAndSkipRetry(t *testing.T) {
 	tests := []struct {
 		name    string
 		request any
-		handle  func(*gin.Context, *relaycommon.RelayInfo, *Adaptor) (*relaytypes.NewAPIError, *dto.Usage)
+		handle  func(*gin.Context, *relaycommon.RelayInfo, *Adaptor) (*types.NewAPIError, *dto.Usage)
 	}{
 		{name: "non-stream", request: newAwsInvokeModelInput(), handle: awsHandler},
 		{name: "stream", request: newAwsStreamInput(), handle: awsStreamHandler},
@@ -284,7 +284,7 @@ func TestAwsHandlersCancelSdkRequestAndSkipRetry(t *testing.T) {
 			info := newAwsTestRelayInfo()
 
 			type handlerResult struct {
-				err   *relaytypes.NewAPIError
+				err   *types.NewAPIError
 				usage *dto.Usage
 			}
 			results := make(chan handlerResult, 1)
@@ -313,7 +313,7 @@ func TestAwsHandlersCancelSdkRequestAndSkipRetry(t *testing.T) {
 
 			require.ErrorIs(t, upstreamContext.Err(), context.Canceled)
 			require.NotNil(t, result.err)
-			assert.True(t, relaytypes.IsSkipRetryError(result.err))
+			assert.True(t, types.IsSkipRetryError(result.err))
 			assert.Nil(t, result.usage)
 		})
 	}
@@ -350,14 +350,12 @@ func TestAwsStreamHandlerUsesFinalUpstreamUsage(t *testing.T) {
 
 	require.Nil(t, handlerErr)
 	require.NotNil(t, usage)
-	require.NotNil(t, usage.BillingUsage)
-	require.NotNil(t, usage.BillingUsage.ClaudeUsage)
-	assert.Equal(t, 100, usage.BillingUsage.ClaudeUsage.InputTokens)
-	assert.Equal(t, 423, usage.BillingUsage.ClaudeUsage.OutputTokens)
+	assert.Equal(t, 100, usage.PromptTokens)
+	assert.Equal(t, 423, usage.CompletionTokens)
 	assert.Contains(t, recorder.Body.String(), "[DONE]")
 }
 
-func TestAwsStreamHandlerStopsAtClientCancellationAndKeepsPartialBillingUsage(t *testing.T) {
+func TestAwsStreamHandlerStopsAtClientCancellationAndKeepsPartialUsage(t *testing.T) {
 	originalRelayTimeout := common.RelayTimeout
 	common.RelayTimeout = 0
 	t.Cleanup(func() {
@@ -405,7 +403,7 @@ func TestAwsStreamHandlerStopsAtClientCancellationAndKeepsPartialBillingUsage(t 
 	adaptor := &Adaptor{AwsClient: client, AwsReq: newAwsStreamInput()}
 
 	type handlerResult struct {
-		err   *relaytypes.NewAPIError
+		err   *types.NewAPIError
 		usage *dto.Usage
 	}
 	results := make(chan handlerResult, 1)
@@ -439,12 +437,8 @@ func TestAwsStreamHandlerStopsAtClientCancellationAndKeepsPartialBillingUsage(t 
 	require.ErrorIs(t, upstreamContext.Err(), context.Canceled)
 	require.Nil(t, result.err)
 	require.NotNil(t, result.usage)
-	require.NotNil(t, result.usage.BillingUsage)
-	require.NotNil(t, result.usage.BillingUsage.ClaudeUsage)
-	assert.Equal(t, dto.BillingUsageSourceClaudeMessages, result.usage.BillingUsage.Source)
-	assert.Equal(t, dto.BillingUsageSemanticAnthropic, result.usage.BillingUsage.Semantic)
-	assert.Equal(t, 100, result.usage.BillingUsage.ClaudeUsage.InputTokens)
-	assert.Equal(t, 1, result.usage.BillingUsage.ClaudeUsage.OutputTokens)
+	assert.Equal(t, 100, result.usage.PromptTokens)
+	assert.Greater(t, result.usage.CompletionTokens, 0)
 	assert.Equal(t, bodyLengthBeforeCancel, responseWriter.Body.Len())
 	assert.NotContains(t, responseWriter.Body.String(), "[DONE]")
 

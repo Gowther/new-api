@@ -415,5 +415,11 @@ func extractErrorBriefingText(response *http.Response) (string, error) {
 	if len(payload.Choices) == 0 {
 		return "", errors.New("briefing response had no choices")
 	}
-	return strings.TrimSpace(payload.Choices[0].Message.StringContent()), nil
+	message := &payload.Choices[0].Message
+	content := strings.TrimSpace(message.StringContent())
+	if content == "" {
+		// Reasoning models may return reasoning_content but empty content
+		content = strings.TrimSpace(message.GetReasoningContent())
+	}
+	return content, nil
 }

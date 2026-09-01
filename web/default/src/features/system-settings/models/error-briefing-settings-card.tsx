@@ -36,7 +36,7 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
-import { getEnabledModels } from '@/features/channels/api'
+import { getEnabledModels, getGroups } from '@/features/channels/api'
 
 import {
   SettingsForm,
@@ -147,6 +147,18 @@ export function ErrorBriefingSettingsCard(props: Props) {
         .sort((left, right) => left.localeCompare(right))
         .map((model) => ({ label: model, value: model })),
     [enabledModelsQuery.data]
+  )
+  const groupsQuery = useQuery({
+    queryKey: ['groups'],
+    queryFn: getGroups,
+    staleTime: 5 * 60 * 1000,
+  })
+  const groupOptions = useMemo(
+    () =>
+      [...new Set(groupsQuery.data?.data ?? [])]
+        .sort((left, right) => left.localeCompare(right))
+        .map((group) => ({ label: group, value: group })),
+    [groupsQuery.data]
   )
 
   const formDefaults = useMemo(
@@ -276,11 +288,18 @@ export function ErrorBriefingSettingsCard(props: Props) {
               <FormItem className='max-w-sm'>
                 <FormLabel>{t('Briefing group')}</FormLabel>
                 <FormControl>
-                  <Input {...field} placeholder='default' />
+                  <Combobox
+                    options={groupOptions}
+                    value={field.value}
+                    onValueChange={(value) => field.onChange(value ?? '')}
+                    placeholder={t('Select or enter group name')}
+                    emptyText={t('No groups found')}
+                    allowCustomValue
+                  />
                 </FormControl>
                 <FormDescription>
                   {t(
-                    'The group whose routing picks the channel. Normal routing and failover apply.'
+                    'The group whose routing picks the channel. Normal routing and failover apply. A group with no channel serving the briefing model makes the briefing fail.'
                   )}
                 </FormDescription>
                 <FormMessage />

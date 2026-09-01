@@ -44,6 +44,7 @@ export default function SettingsErrorBriefing(props) {
   const [inputs, setInputs] = useState(DEFAULT_INPUTS);
   const [inputsRow, setInputsRow] = useState(inputs);
   const [enabledModels, setEnabledModels] = useState([]);
+  const [groups, setGroups] = useState([]);
   const refForm = useRef();
 
   const enabled = inputs['error_briefing_setting.enabled'];
@@ -128,6 +129,25 @@ export default function SettingsErrorBriefing(props) {
     };
   }, [t]);
 
+  useEffect(() => {
+    let active = true;
+    API.get('/api/group/')
+      .then((response) => {
+        if (!active) return;
+        if (response.data.success) {
+          setGroups(response.data.data || []);
+        } else {
+          showError(response.data.message || t('获取分组失败'));
+        }
+      })
+      .catch((error) => {
+        if (active) showError(error);
+      });
+    return () => {
+      active = false;
+    };
+  }, [t]);
+
   const modelOptions = Array.from(
     new Set([
       ...enabledModels,
@@ -137,6 +157,13 @@ export default function SettingsErrorBriefing(props) {
     .filter(Boolean)
     .sort((left, right) => left.localeCompare(right))
     .map((model) => ({ label: model, value: model }));
+
+  const groupOptions = Array.from(
+    new Set([...groups, String(inputs['error_briefing_setting.group'] || '')]),
+  )
+    .filter(Boolean)
+    .sort((left, right) => left.localeCompare(right))
+    .map((group) => ({ label: group, value: group }));
 
   return (
     <>
@@ -188,17 +215,23 @@ export default function SettingsErrorBriefing(props) {
                 />
               </Col>
               <Col xs={24} sm={12} md={8} lg={8} xl={8}>
-                <Form.Input
+                <Form.Select
+                  // 与简报模型同理：受控 Select 配合 allowCreate 时，异步到达的
+                  // optionList 会被同一次更新里的旧 options 覆盖。
+                  key={groupOptions.length}
                   field={'error_briefing_setting.group'}
                   label={t('简报分组')}
                   placeholder='default'
+                  optionList={groupOptions}
+                  filter={selectFilter}
+                  allowCreate
                   extraText={t(
-                    '用哪个分组的路由来选渠道。正常的路由和故障转移逻辑照常生效。',
+                    '用哪个分组的路由来选渠道。正常的路由和故障转移逻辑照常生效。如果该分组下没有渠道提供简报模型，简报会失败。',
                   )}
                   onChange={(value) =>
                     setInputs({
                       ...inputs,
-                      'error_briefing_setting.group': value,
+                      'error_briefing_setting.group': value || '',
                     })
                   }
                 />

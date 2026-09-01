@@ -165,6 +165,10 @@ export default function SettingsErrorBriefing(props) {
               </Col>
               <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                 <Form.Select
+                  // 受控 Select 配合 allowCreate 时，Semi 会在 optionList 变化的
+                  // 同一次更新里用旧的 options 覆盖新收集到的列表，导致异步拿到的
+                  // 模型全部丢失。按列表长度重建字段，让它挂载时就拿到完整列表。
+                  key={modelOptions.length}
                   field={'error_briefing_setting.model'}
                   label={t('简报模型')}
                   placeholder={t('选择或输入模型名称')}

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 
@@ -200,4 +201,29 @@ func TestErrorBriefingRelayPathUsesPlaygroundBilling(t *testing.T) {
 
 	assert.True(t, relayInfo.IsPlayground)
 	assert.Equal(t, "/v1/chat/completions", relayInfo.RequestURLPath)
+}
+
+// The briefing relays under a synthetic token so its row in the usage log is not
+// nameless. That token has no id and no key, which is only safe because the /pg
+// path marks the call as playground billing and every token quota write is gated
+// on that flag.
+func TestErrorBriefingTokenIdentityNamesTheLogWithoutARealToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Request = httptest.NewRequest(http.MethodPost, errorBriefingRelayPath, strings.NewReader(`{}`))
+	require.NoError(t, middleware.SetupContextForToken(context, &model.Token{
+		UserId: 4242,
+		Name:   errorBriefingTokenName,
+		Group:  "briefing-group",
+	}))
+
+	relayInfo := relaycommon.GenRelayInfoOpenAI(context, &dto.GeneralOpenAIRequest{})
+
+	// The consume log writer reads token_name straight off the context.
+	assert.Equal(t, errorBriefingTokenName, context.GetString("token_name"))
+	assert.Equal(t, 4242, relayInfo.UserId)
+	assert.Equal(t, "briefing-group", relayInfo.TokenGroup)
+	assert.Zero(t, relayInfo.TokenId)
+	assert.Empty(t, relayInfo.TokenKey)
+	assert.True(t, relayInfo.IsPlayground)
 }

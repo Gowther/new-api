@@ -19,6 +19,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/cachex"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
@@ -53,6 +54,11 @@ const (
 	errorBriefingRateWindow     = 60
 	errorBriefingRateMax        = 6
 	errorBriefingRelayPath      = "/pg/chat/completions"
+	// errorBriefingTokenName labels the briefing in the usage log. No real token
+	// backs the call — it is issued in-process on the operator's behalf — so a
+	// synthetic name keeps the log filterable instead of leaving the column
+	// blank. The group is already its own column, so it stays out of the name.
+	errorBriefingTokenName = "error-briefing"
 )
 
 var (
@@ -346,14 +352,23 @@ func generateErrorBriefing(
 	relayCtx, _ := gin.CreateTestContext(recorder)
 	relayCtx.Request = httptest.NewRequestWithContext(ctx, http.MethodPost, errorBriefingRelayPath, bytes.NewReader(body))
 	relayCtx.Request.Header.Set("Content-Type", "application/json")
-	relayCtx.Set("id", userId)
-	common.SetContextKey(relayCtx, constant.ContextKeyUserId, userId)
 	common.SetContextKey(relayCtx, constant.ContextKeyOriginalModel, setting.Model)
 	common.SetContextKey(relayCtx, constant.ContextKeyUsingGroup, setting.Group)
-	common.SetContextKey(relayCtx, constant.ContextKeyTokenGroup, setting.Group)
 	common.SetContextKey(relayCtx, constant.ContextKeyRequestStartTime, time.Now())
 	common.SetContextKey(relayCtx, common.RequestIdKey, common.GetContextKeyString(c, common.RequestIdKey))
 	userCache.WriteContext(relayCtx)
+
+	// A synthetic token, the way the playground builds one: it carries the user
+	// id and the group into the relay and gives the consume log a name. Its zero
+	// id and empty key never reach a token quota write, because every one of
+	// those is gated on IsPlayground, which the /pg relay path sets.
+	if err := middleware.SetupContextForToken(relayCtx, &model.Token{
+		UserId: userId,
+		Name:   errorBriefingTokenName,
+		Group:  setting.Group,
+	}); err != nil {
+		return "", err
+	}
 
 	// Relay performs channel selection itself. Preselecting here would advance a
 	// multi-key channel once and then let Relay select again, which is both

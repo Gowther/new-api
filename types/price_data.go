@@ -42,6 +42,13 @@ func (p *PriceData) AddOtherRatio(key string, ratio float64) {
 	p.OtherRatios[key] = ratio
 }
 
+// HasOtherRatio reports whether a valid (positive, non-+Inf) multiplier is
+// registered under key.
+func (p *PriceData) HasOtherRatio(key string) bool {
+	ratio, ok := p.OtherRatios[key]
+	return ok && ratio > 0 && !math.IsInf(ratio, 1)
+}
+
 func (p *PriceData) ToSetting() string {
 	return fmt.Sprintf("ModelPrice: %f, ModelRatio: %f, CompletionRatio: %f, CacheRatio: %f, GroupRatio: %f, UsePrice: %t, CacheCreationRatio: %f, CacheCreation5mRatio: %f, CacheCreation1hRatio: %f, QuotaToPreConsume: %d, ImageRatio: %f, AudioRatio: %f, AudioCompletionRatio: %f", p.ModelPrice, p.ModelRatio, p.CompletionRatio, p.CacheRatio, p.GroupRatioInfo.GroupRatio, p.UsePrice, p.CacheCreationRatio, p.CacheCreation5mRatio, p.CacheCreation1hRatio, p.QuotaToPreConsume, p.ImageRatio, p.AudioRatio, p.AudioCompletionRatio)
 }

@@ -155,6 +155,11 @@ func cacheGetUserBase(userId int) (*UserBase, error) {
 // Add atomic quota operations using hash fields.
 // 通过守卫式 Lua 脚本执行：哈希不存在时直接跳过（下次读取会从数据库水合），
 // 不会像裸 HINCRBY 那样创建只含 Quota 字段的残缺哈希。
+//
+// 本地缓存水合不写入 CacheSchema 标记，因此 schema 版本固定为 0：
+// Lua 守卫中的 schema 比较退化为恒真，只保留"哈希缺失即回源"的保护。
+const userCacheSchemaVersion = 0
+
 func cacheIncrUserQuota(userId int, delta int64) error {
 	if !common.RedisEnabled {
 		return nil

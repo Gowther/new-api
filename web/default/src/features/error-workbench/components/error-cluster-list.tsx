@@ -81,7 +81,7 @@ export function ErrorClusterList(props: ErrorClusterListProps) {
   const { t } = useTranslation()
 
   return (
-    <section className='bg-background flex h-[32rem] min-w-0 flex-col overflow-hidden rounded-lg border lg:h-full'>
+    <section className='bg-background flex h-[36rem] min-w-0 flex-col overflow-hidden rounded-lg border lg:h-full'>
       <div className='flex items-center justify-between gap-3 border-b px-3 py-2.5'>
         <h2 className='text-sm font-semibold'>
           <ErrorMetricHelp

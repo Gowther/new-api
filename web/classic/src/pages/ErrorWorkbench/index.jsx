@@ -388,7 +388,7 @@ function ErrorProblemOverview({
 
 function ErrorClusterList({ items, selectedKey, loading, onSelect, t }) {
   return (
-    <section className='flex h-[32rem] min-w-0 flex-col overflow-hidden rounded border border-solid border-gray-200 bg-white lg:h-full'>
+    <section className='flex h-[36rem] min-w-0 flex-col overflow-hidden rounded border border-solid border-gray-200 bg-white lg:h-full'>
       <div className='flex items-center justify-between border-b border-solid border-gray-200 px-3 py-2'>
         <Typography.Text strong>
           <ErrorMetricHelp
@@ -507,7 +507,7 @@ function ErrorClusterDetails({
 }) {
   if (!record) {
     return (
-      <section className='flex h-[32rem] items-center justify-center rounded border border-solid border-gray-200 bg-white px-6 text-center lg:h-full'>
+      <section className='flex h-[36rem] items-center justify-center rounded border border-solid border-gray-200 bg-white px-6 text-center lg:h-full'>
         <Typography.Text type='tertiary'>{t('请选择故障簇')}</Typography.Text>
       </section>
     );
@@ -577,7 +577,7 @@ function ErrorClusterDetails({
 
   const currentTestKey = `${record.key}:test:${record.channel}`;
   return (
-    <section className='flex h-[32rem] min-w-0 flex-col overflow-hidden rounded border border-solid border-gray-200 bg-white lg:h-full'>
+    <section className='flex h-[36rem] min-w-0 flex-col overflow-hidden rounded border border-solid border-gray-200 bg-white lg:h-full'>
       <div className='flex flex-wrap items-start justify-between gap-3 border-b border-solid border-gray-200 px-4 py-3'>
         <div className='min-w-0'>
           <Space spacing={4} wrap>
@@ -1000,7 +1000,7 @@ export default function ErrorWorkbench() {
   };
 
   return (
-    <div className='mt-[60px] flex flex-col gap-3 px-2 pb-2 lg:h-[calc(100dvh-60px)] lg:overflow-hidden'>
+    <div className='mt-[60px] flex flex-col gap-3 px-2 pb-2 lg:h-[calc(100dvh-60px)] lg:overflow-y-auto'>
       <div className='flex shrink-0 flex-wrap items-center justify-between gap-2'>
         <div className='min-w-0'>
           <Typography.Title heading={5} style={{ margin: 0 }}>
@@ -1165,7 +1165,7 @@ export default function ErrorWorkbench() {
         t={t}
       />
 
-      <div className='grid min-h-[32rem] w-full grid-cols-1 gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(20rem,0.85fr)_minmax(0,1.4fr)]'>
+      <div className='grid min-h-[36rem] w-full grid-cols-1 gap-3 lg:min-h-[40rem] lg:flex-1 lg:grid-cols-[minmax(22rem,0.8fr)_minmax(0,1.5fr)]'>
         <ErrorClusterList
           items={summary.items || []}
           selectedKey={selectedRecord?.key || null}

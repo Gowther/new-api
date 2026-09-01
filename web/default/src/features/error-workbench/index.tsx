@@ -262,7 +262,7 @@ export function ErrorWorkbench() {
         </Button>
       </SectionPageLayout.Actions>
       <SectionPageLayout.Content>
-        <div className='flex h-full min-h-0 flex-col gap-3 overflow-y-auto lg:overflow-hidden'>
+        <div className='flex h-full min-h-0 flex-col gap-3 overflow-y-auto'>
           <div className='grid shrink-0 gap-3 sm:grid-cols-2 xl:grid-cols-4'>
             <div className='rounded-lg border px-4 py-2.5'>
               <div className='text-muted-foreground text-xs'>
@@ -485,7 +485,7 @@ export function ErrorWorkbench() {
             onSelectProblem={selectProblem}
           />
 
-          <div className='grid min-h-[32rem] gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(20rem,0.85fr)_minmax(0,1.4fr)]'>
+          <div className='grid min-h-[36rem] gap-4 lg:min-h-[40rem] lg:flex-1 lg:grid-cols-[minmax(22rem,0.8fr)_minmax(0,1.5fr)]'>
             <ErrorClusterList
               items={summary.items}
               selectedKey={selectedRecord?.key ?? null}

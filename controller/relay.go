@@ -291,7 +291,13 @@ func fastTokenCountMetaForPricing(request dto.Request) *types.TokenCountMeta {
 }
 
 func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service.RetryParam) (*model.Channel, *types.NewAPIError) {
-	if info.ChannelMeta == nil {
+	// ChannelMeta is only filled in by the relay handlers, so a nil value means
+	// this is the first attempt and middleware.Distribute already preselected a
+	// channel. Callers that invoke Relay directly without Distribute in front of
+	// them (the AI error briefing) leave channel_id unset, and trusting that
+	// would relay to channel 0 with an empty base url and key. Select for them.
+	preselectedChannelId := c.GetInt("channel_id")
+	if info.ChannelMeta == nil && preselectedChannelId != 0 {
 		autoBan := c.GetBool("auto_ban")
 		autoBanInt := 1
 		if !autoBan {
@@ -300,7 +306,7 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		priority, _ := common.GetContextKeyType[int64](c, constant.ContextKeyChannelPriority)
 		retryParam.SetPreviousChannelPriority(priority)
 		return &model.Channel{
-			Id:       c.GetInt("channel_id"),
+			Id:       preselectedChannelId,
 			Type:     c.GetInt("channel_type"),
 			Name:     c.GetString("channel_name"),
 			Priority: &priority,

@@ -230,7 +230,13 @@ function renderUseTime(type, t) {
 }
 
 function renderFirstUseTime(type, t) {
+  if (type === undefined || type === null || type === '') {
+    return null;
+  }
   let time = parseFloat(type) / 1000.0;
+  if (isNaN(time)) {
+    return null;
+  }
   time = time.toFixed(1);
   if (time < 3) {
     return (

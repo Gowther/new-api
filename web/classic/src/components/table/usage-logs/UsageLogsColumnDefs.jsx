@@ -41,7 +41,7 @@ import {
   IconCopy,
   IconHelpCircle,
 } from '@douyinfe/semi-icons';
-import { CircleAlert, ExternalLink, Route, Sparkles } from 'lucide-react';
+import { CircleAlert, ExternalLink, Route, Sparkles, Zap } from 'lucide-react';
 import { ChannelRemarkTooltip } from '../../common/ChannelRemarkTooltip';
 
 const colors = [
@@ -493,6 +493,33 @@ function getPromptCacheSummary(other, promptTokens) {
   };
 }
 
+function buildPromptCacheTooltip(cacheSummary, t) {
+  if (!cacheSummary) {
+    return null;
+  }
+  const lines = [];
+  if (cacheSummary.cacheReadRate) {
+    lines.push(`${t('命中率')}：${cacheSummary.cacheReadRate}`);
+  }
+  if (cacheSummary.cacheReadTokens > 0) {
+    lines.push(
+      `${t('缓存读取')}：${formatTokenCount(cacheSummary.cacheReadTokens)} tokens`,
+    );
+  }
+  if (cacheSummary.cacheWriteTokens > 0) {
+    lines.push(
+      `${t('缓存写入')}：${formatTokenCount(cacheSummary.cacheWriteTokens)} tokens`,
+    );
+  }
+  return (
+    <div style={{ lineHeight: 1.6, display: 'flex', flexDirection: 'column' }}>
+      {lines.map((line, i) => (
+        <div key={i}>{line}</div>
+      ))}
+    </div>
+  );
+}
+
 function normalizeDetailText(detail) {
   return String(detail || '')
     .replace(/\n\r/g, '\n')
@@ -899,6 +926,7 @@ export const getLogsColumns = ({
       key: COLUMN_KEYS.USE_TIME,
       title: t('用时/首字'),
       dataIndex: 'use_time',
+      width: 190,
       render: (text, record, index) => {
         if (!(record.type === 2 || record.type === 5)) {
           return <></>;
@@ -916,24 +944,20 @@ export const getLogsColumns = ({
         if (record.is_stream) {
           let other = getLogOther(record.other);
           return (
-            <>
-              <Space>
-                {renderUseTime(text, t)}
-                {renderFirstUseTime(other?.frt, t)}
-                {throughputTag}
-                {renderIsStream(record.is_stream, t, other?.stream_status)}
-              </Space>
-            </>
+            <Space wrap={false} style={{ flexWrap: 'nowrap' }}>
+              {renderUseTime(text, t)}
+              {renderFirstUseTime(other?.frt, t)}
+              {throughputTag}
+              {renderIsStream(record.is_stream, t, other?.stream_status)}
+            </Space>
           );
         } else {
           return (
-            <>
-              <Space>
-                {renderUseTime(text, t)}
-                {throughputTag}
-                {renderIsStream(record.is_stream, t)}
-              </Space>
-            </>
+            <Space wrap={false} style={{ flexWrap: 'nowrap' }}>
+              {renderUseTime(text, t)}
+              {throughputTag}
+              {renderIsStream(record.is_stream, t)}
+            </Space>
           );
         }
       },
@@ -953,21 +977,48 @@ export const getLogsColumns = ({
         </div>
       ),
       dataIndex: 'prompt_tokens',
+      width: 110,
       render: (text, record, index) => {
         const other = getLogOther(record.other);
         const cacheSummary = getPromptCacheSummary(other, text);
         const hasCacheRead = (cacheSummary?.cacheReadTokens || 0) > 0;
         const hasCacheWrite = (cacheSummary?.cacheWriteTokens || 0) > 0;
-        const cacheReadText = hasCacheRead
-          ? `${t('缓存读')} ${formatTokenCount(cacheSummary.cacheReadTokens)}${cacheSummary.cacheReadRate ? ` (${cacheSummary.cacheReadRate})` : ''}`
-          : '';
-        let cacheText = '';
-        if (hasCacheRead && hasCacheWrite) {
-          cacheText = `${cacheReadText} · ${t('写')} ${formatTokenCount(cacheSummary.cacheWriteTokens)}`;
-        } else if (hasCacheRead) {
-          cacheText = cacheReadText;
-        } else if (hasCacheWrite) {
-          cacheText = `${t('缓存写')} ${formatTokenCount(cacheSummary.cacheWriteTokens)}`;
+
+        let cacheBadge = null;
+        if (hasCacheRead || hasCacheWrite) {
+          const tooltipContent = buildPromptCacheTooltip(cacheSummary, t);
+          cacheBadge = (
+            <Tooltip content={tooltipContent}>
+              <span
+                style={{
+                  marginTop: 2,
+                  fontSize: 11,
+                  color: hasCacheRead
+                    ? 'var(--semi-color-primary)'
+                    : 'var(--semi-color-text-2)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 2,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {hasCacheRead && (
+                  <>
+                    <Zap size={11} strokeWidth={2.5} style={{ flexShrink: 0 }} />
+                    <span>
+                      {cacheSummary.cacheReadRate ||
+                        formatTokenCount(cacheSummary.cacheReadTokens)}
+                    </span>
+                  </>
+                )}
+                {hasCacheRead && hasCacheWrite && <span>·</span>}
+                {hasCacheWrite && (
+                  <span>↑{formatTokenCount(cacheSummary.cacheWriteTokens)}</span>
+                )}
+              </span>
+            </Tooltip>
+          );
         }
 
         return record.type === 0 ||
@@ -983,18 +1034,7 @@ export const getLogsColumns = ({
             }}
           >
             <span>{text}</span>
-            {cacheText ? (
-              <span
-                style={{
-                  marginTop: 2,
-                  fontSize: 11,
-                  color: 'var(--semi-color-text-2)',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {cacheText}
-              </span>
-            ) : null}
+            {cacheBadge}
           </div>
         ) : (
           <></>
@@ -1005,6 +1045,7 @@ export const getLogsColumns = ({
       key: COLUMN_KEYS.COMPLETION,
       title: t('输出'),
       dataIndex: 'completion_tokens',
+      width: 90,
       render: (text, record, index) => {
         return parseInt(text) > 0 &&
           (record.type === 0 ||

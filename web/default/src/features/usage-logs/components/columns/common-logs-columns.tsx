@@ -27,6 +27,7 @@ import {
   GitBranch,
   Sparkles,
   KeyRound,
+  Zap,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -767,6 +768,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
     {
       accessorKey: 'use_time',
       header: t('Timing'),
+      size: 165,
       cell: ({ row }) => {
         const log = row.original
         if (!isTimingLogType(log.type)) return null
@@ -875,6 +877,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
     {
       accessorKey: 'prompt_tokens',
       header: 'Tokens',
+      size: 140,
       cell: ({ row }) => {
         const log = row.original
         if (!isDisplayableLogType(log.type)) return null
@@ -902,19 +905,52 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
               {completionTokens.toLocaleString()}
             </span>
             {(cacheReadTokens > 0 || cacheWriteTokens > 0) && (
-              <div className='flex items-center gap-1 text-[11px]'>
-                {cacheReadTokens > 0 && (
-                  <span className='text-muted-foreground/60'>
-                    {t('Cache')}↓ {cacheReadTokens.toLocaleString()}
-                    {cacheReadRate && ` (${cacheReadRate})`}
-                  </span>
-                )}
-                {cacheWriteTokens > 0 && (
-                  <span className='text-muted-foreground/60'>
-                    ↑ {cacheWriteTokens.toLocaleString()}
-                  </span>
-                )}
-              </div>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <div className='text-muted-foreground/65 hover:text-foreground flex cursor-pointer items-center gap-1 text-[11px] transition-colors'>
+                        {cacheReadTokens > 0 && (
+                          <span className='text-primary inline-flex items-center gap-0.5'>
+                            <Zap className='size-3 shrink-0' />
+                            <span>
+                              {cacheReadRate ||
+                                cacheReadTokens.toLocaleString()}
+                            </span>
+                          </span>
+                        )}
+                        {cacheReadTokens > 0 && cacheWriteTokens > 0 && (
+                          <span>·</span>
+                        )}
+                        {cacheWriteTokens > 0 && (
+                          <span>↑{cacheWriteTokens.toLocaleString()}</span>
+                        )}
+                      </div>
+                    }
+                  />
+                  <TooltipContent>
+                    <div className='space-y-0.5 text-xs'>
+                      {cacheReadRate && (
+                        <p>
+                          {t('Hit Rate')}: {cacheReadRate}
+                        </p>
+                      )}
+                      {cacheReadTokens > 0 && (
+                        <p>
+                          {t('Cache Read')}: {cacheReadTokens.toLocaleString()}{' '}
+                          tokens
+                        </p>
+                      )}
+                      {cacheWriteTokens > 0 && (
+                        <p>
+                          {t('Cache Write')}:{' '}
+                          {cacheWriteTokens.toLocaleString()} tokens
+                        </p>
+                      )}
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             )}
           </div>
         )

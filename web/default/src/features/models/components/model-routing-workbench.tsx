@@ -938,6 +938,14 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     providerDefaultSelections
   )
 
+  // While the URL names a target model the workbench hasn't selected yet,
+  // keep the stored last-selection fallback effects out: the jump must wait
+  // for the target (via the queue above) instead of landing on the previous
+  // model the operator last stayed on in the routing table.
+  const isTargetPending =
+    props.targetModelName !== undefined &&
+    selectedModelName !== props.targetModelName
+
   const selectedModelNames = useMemo(
     () => getRoutingModelNames(selectedModel),
     [selectedModel]
@@ -983,6 +991,19 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     setSelectedProviderKey(targetRoutingSelection.providerKey)
     setSelectedModelName(targetRoutingSelection.modelName)
   }, [targetRoutingSelection])
+
+  // A deep link (paste-created channel flow) may name a model that only
+  // appears in the routing catalog after the channel-list refetch lands, e.g.
+  // when the new channel is its only enabled channel. The selection effect
+  // above can't land on it until then, so queue it through the same pendingCreated
+  // path: it waits for the catalog to catch up instead of letting the stored
+  // last-selection fallback take over.
+  useEffect(() => {
+    if (!props.targetModelName || props.targetModelName === targetQueuedRef.current) return
+    if (models.some((model) => model.model_name === props.targetModelName)) return
+    targetQueuedRef.current = props.targetModelName
+    setPendingCreated({ models: [props.targetModelName], channelsAtQueue: channels })
+  }, [channels, models, props.targetModelName])
 
   // Follow a channel created from here: land on the vendor and model it serves.
   // Waits for the refetched channel list, since a model whose only channel is
@@ -1049,6 +1070,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
   }, [matchedModels, searchMode, selectedModelName, trimmedQuery])
 
   useEffect(() => {
+    if (isTargetPending) return
     if (selectedProviderKey && providerOptions.length > 0) {
       const exists = providerOptions.some(
         (provider) => provider.key === selectedProviderKey
@@ -1067,9 +1089,10 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     setSelectedProviderKey(
       firstProvider?.key ?? providerOptions[0]?.key ?? null
     )
-  }, [initialRoutingSelection, providerOptions, selectedProviderKey])
+  }, [initialRoutingSelection, isTargetPending, providerOptions, selectedProviderKey])
 
   useEffect(() => {
+    if (isTargetPending) return
     if (!selectedProviderKey) {
       setSelectedModelName(null)
       return
@@ -1099,6 +1122,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     )
   }, [
     initialRoutingSelection,
+    isTargetPending,
     providerDefaultSelections,
     providerModels,
     selectedModelName,

@@ -152,7 +152,7 @@ export function ChannelPasteListener() {
       void navigate({
         to: '/models/$section',
         params: { section: 'routing' },
-        search: { routingModel: firstByName },
+        search: () => ({ routingModel: firstByName }),
       })
     },
     [navigate]

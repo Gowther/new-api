@@ -569,6 +569,15 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   const [searchQuery, setSearchQuery] = useState('');
   // Which query the auto-jump has already been applied for.
   const appliedSearchTokenRef = useRef(null);
+  // Which deep-link target model has already been queued as a pending landing,
+  // so a target missing from the catalog is queued once per URL value instead
+  // of being re-queued on every catalog/channel update (which would undo the
+  // give-up in the pendingCreated effect).
+  const targetQueuedRef = useRef(null);
+  // Snapshot of channels when targetModelName was set, used to detect when
+  // loadRoutingData has completed after navigation from clipboard paste.
+  const [targetModelChannelsSnapshot, setTargetModelChannelsSnapshot] =
+    useState(null);
   // Holds the channel list as it was when the create finished, so the jump can
   // tell "the catalog has not caught up yet" from "this model is unknown".
   const [pendingCreated, setPendingCreated] = useState(null);
@@ -715,8 +724,17 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     const targetModel = visibleModels.find(
       (model) => model.model_name === targetModelName,
     );
-    return targetModel ? getRoutingSelectionFromModel(targetModel) : null;
-  }, [targetModelName, visibleModels]);
+    if (targetModel) {
+      return getRoutingSelectionFromModel(targetModel);
+    }
+    // Model not in visibleModels yet; mark for pending resolution if this is
+    // a fresh target from the URL.
+    if (targetModelName !== targetQueuedRef.current) {
+      setTargetModelChannelsSnapshot(channels);
+      targetQueuedRef.current = targetModelName;
+    }
+    return null;
+  }, [targetModelName, visibleModels, channels]);
 
   const trimmedQuery = searchQuery.trim().toLowerCase();
   const isSearching = trimmedQuery !== '';
@@ -900,6 +918,37 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     setSelectedProviderKey(targetRoutingSelection.providerKey);
     setSelectedModelName(targetRoutingSelection.modelName);
   }, [targetRoutingSelection]);
+
+  // When targetModelName is set from URL but the model isn't in visibleModels yet,
+  // wait for channels to reload, then retry. This handles the clipboard-paste flow
+  // where navigation happens before loadRoutingData completes.
+  useEffect(() => {
+    if (!targetModelName || targetRoutingSelection) return;
+    if (!targetModelChannelsSnapshot) return;
+    // Give up once channels have reloaded and the model is still missing.
+    if (channels === targetModelChannelsSnapshot) return;
+
+    const targetModel = visibleModels.find(
+      (model) => model.model_name === targetModelName,
+    );
+    if (targetModel) {
+      const selection = getRoutingSelectionFromModel(targetModel);
+      setSelectedProviderKey(selection.providerKey);
+      setSelectedModelName(selection.modelName);
+      setTargetModelChannelsSnapshot(null);
+      targetQueuedRef.current = null;
+    } else {
+      // Channels reloaded but model still not found; give up.
+      setTargetModelChannelsSnapshot(null);
+      targetQueuedRef.current = null;
+    }
+  }, [
+    targetModelName,
+    targetRoutingSelection,
+    targetModelChannelsSnapshot,
+    channels,
+    visibleModels,
+  ]);
 
   // Follow a channel created from here: land on the vendor and model it serves.
   // Waits for the reloaded channel list, since a model whose only channel is the

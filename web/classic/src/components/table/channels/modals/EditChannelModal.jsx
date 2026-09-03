@@ -2659,7 +2659,15 @@ const EditChannelModal = (props) => {
         // Let callers follow the channel they just created. Read from
         // localInputs, not normalizedModels: confirming the missing-mapping
         // prompt above can add models to what actually gets submitted.
-        props.onCreated?.(localInputs.models || []);
+        // localInputs.models was joined to a comma-separated string above,
+        // so split it back to an array for the callback.
+        const createdModels =
+          typeof localInputs.models === 'string'
+            ? localInputs.models.split(',').filter(Boolean)
+            : Array.isArray(localInputs.models)
+              ? localInputs.models
+              : [];
+        props.onCreated?.(createdModels);
       }
       props.refresh();
       props.handleClose();

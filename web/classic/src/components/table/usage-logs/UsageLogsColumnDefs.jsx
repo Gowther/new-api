@@ -645,11 +645,50 @@ export const getLogsColumns = ({
       key: COLUMN_KEYS.TIME,
       title: t('时间'),
       dataIndex: 'timestamp2string',
+      width: 95,
+      render: (text) => {
+        if (!text) return '-';
+        const parts = String(text).split(' ');
+        const datePart = parts[0] || '';
+        const timePart = parts[1] || '';
+        return (
+          <div
+            style={{
+              display: 'inline-flex',
+              flexDirection: 'column',
+              lineHeight: 1.25,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <span
+              style={{
+                fontSize: 11,
+                color: 'var(--semi-color-text-2)',
+                fontFamily: 'monospace',
+              }}
+            >
+              {datePart}
+            </span>
+            {timePart ? (
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 500,
+                  fontFamily: 'monospace',
+                }}
+              >
+                {timePart}
+              </span>
+            ) : null}
+          </div>
+        );
+      },
     },
     {
       key: COLUMN_KEYS.CHANNEL,
       title: t('渠道'),
       dataIndex: 'channel',
+      width: 115,
       render: (text, record, index) => {
         let isMultiKey = false;
         let multiKeyIndex = -1;
@@ -830,15 +869,29 @@ export const getLogsColumns = ({
       key: COLUMN_KEYS.TOKEN,
       title: t('令牌'),
       dataIndex: 'token_name',
+      width: 130,
       render: (text, record, index) => {
         return record.type === 0 ||
           record.type === 2 ||
           record.type === 5 ||
           record.type === 6 ? (
-          <div>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              maxWidth: '100%',
+              whiteSpace: 'nowrap',
+            }}
+          >
             <Tag
               color='grey'
               shape='circle'
+              style={{
+                maxWidth: 100,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
               onClick={(event) => {
                 event.stopPropagation();
                 applyColumnFilter?.('token_name', text);
@@ -895,6 +948,7 @@ export const getLogsColumns = ({
       key: COLUMN_KEYS.TYPE,
       title: t('类型'),
       dataIndex: 'type',
+      width: 65,
       render: (text, record, index) => {
         return <>{renderType(text, t)}</>;
       },
@@ -903,6 +957,7 @@ export const getLogsColumns = ({
       key: COLUMN_KEYS.MODEL,
       title: t('模型'),
       dataIndex: 'model_name',
+      width: 160,
       render: (text, record, index) => {
         return record.type === 0 ||
           record.type === 2 ||
@@ -926,7 +981,7 @@ export const getLogsColumns = ({
       key: COLUMN_KEYS.USE_TIME,
       title: t('用时/首字'),
       dataIndex: 'use_time',
-      width: 190,
+      width: 185,
       render: (text, record, index) => {
         if (!(record.type === 2 || record.type === 5)) {
           return <></>;
@@ -977,7 +1032,7 @@ export const getLogsColumns = ({
         </div>
       ),
       dataIndex: 'prompt_tokens',
-      width: 110,
+      width: 90,
       render: (text, record, index) => {
         const other = getLogOther(record.other);
         const cacheSummary = getPromptCacheSummary(other, text);
@@ -1031,6 +1086,7 @@ export const getLogsColumns = ({
               flexDirection: 'column',
               alignItems: 'flex-start',
               lineHeight: 1.2,
+              whiteSpace: 'nowrap',
             }}
           >
             <span>{text}</span>
@@ -1045,14 +1101,14 @@ export const getLogsColumns = ({
       key: COLUMN_KEYS.COMPLETION,
       title: t('输出'),
       dataIndex: 'completion_tokens',
-      width: 90,
+      width: 75,
       render: (text, record, index) => {
         return parseInt(text) > 0 &&
           (record.type === 0 ||
             record.type === 2 ||
             record.type === 5 ||
             record.type === 6) ? (
-          <>{<span> {text} </span>}</>
+          <span style={{ whiteSpace: 'nowrap' }}>{text}</span>
         ) : (
           <></>
         );
@@ -1062,6 +1118,7 @@ export const getLogsColumns = ({
       key: COLUMN_KEYS.COST,
       title: t('花费'),
       dataIndex: 'quota',
+      width: 90,
       render: (text, record, index) => {
         if (
           !(
@@ -1079,11 +1136,11 @@ export const getLogsColumns = ({
           // Subscription billed: show only tag (no $0), but keep tooltip for equivalent cost.
           return (
             <Tooltip content={`${t('由订阅抵扣')}：${renderQuota(text, 6)}`}>
-              <span>{renderBillingTag(record, t)}</span>
+              <span style={{ whiteSpace: 'nowrap' }}>{renderBillingTag(record, t)}</span>
             </Tooltip>
           );
         }
-        return <>{renderQuota(text, 6)}</>;
+        return <span style={{ whiteSpace: 'nowrap' }}>{renderQuota(text, 6)}</span>;
       },
     },
     {
@@ -1101,6 +1158,7 @@ export const getLogsColumns = ({
         </div>
       ),
       dataIndex: 'ip',
+      width: 95,
       render: (text, record, index) => {
         const showIp =
           (record.type === 2 ||
@@ -1130,29 +1188,37 @@ export const getLogsColumns = ({
       key: COLUMN_KEYS.RETRY,
       title: t('重试'),
       dataIndex: 'retry',
+      width: 75,
       render: (text, record, index) => {
         if (!(record.type === 2 || record.type === 5)) {
           return <></>;
         }
-        let content = t('渠道') + `：${record.channel}`;
+        if (!isAdminUser) {
+          return <></>;
+        }
+        let useChannel = [];
         if (record.other !== '') {
-          let other = JSON.parse(record.other);
-          if (other === null) {
-            return <></>;
-          }
-          if (other.admin_info !== undefined) {
-            if (
-              other.admin_info.use_channel !== null &&
-              other.admin_info.use_channel !== undefined &&
-              other.admin_info.use_channel !== ''
-            ) {
-              let useChannel = other.admin_info.use_channel;
-              let useChannelStr = useChannel.join('->');
-              content = t('渠道') + `：${useChannelStr}`;
+          try {
+            let other = JSON.parse(record.other);
+            if (Array.isArray(other?.admin_info?.use_channel)) {
+              useChannel = other.admin_info.use_channel.filter(Boolean);
             }
+          } catch (e) {
+            // ignore
           }
         }
-        return isAdminUser ? <div>{content}</div> : <></>;
+        const hasRetryChain = useChannel.length > 1;
+        if (!hasRetryChain) {
+          return <span style={{ color: 'var(--semi-color-text-2)' }}>-</span>;
+        }
+        const chainStr = useChannel.join(' → ');
+        return (
+          <Tooltip content={`${t('重试链路')}：${chainStr}`}>
+            <Tag color='amber' shape='circle' style={{ whiteSpace: 'nowrap' }}>
+              {chainStr}
+            </Tag>
+          </Tooltip>
+        );
       },
     },
     {
@@ -1160,7 +1226,7 @@ export const getLogsColumns = ({
       title: t('详情'),
       dataIndex: 'content',
       fixed: 'right',
-      width: 200,
+      width: 170,
       render: (text, record, index) => {
         const detailSummary = getUsageLogDetailSummary(
           record,
@@ -1183,7 +1249,7 @@ export const getLogsColumns = ({
                   opts: { style: { width: 240 } },
                 },
               }}
-              style={{ maxWidth: 200, marginBottom: 0 }}
+              style={{ maxWidth: 170, marginBottom: 0 }}
             >
               {text}
             </Typography.Paragraph>

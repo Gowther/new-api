@@ -55,9 +55,8 @@ function resolveModelProvider(modelName: string): ModelProvider | null {
       'omni-moderation',
       'dall-e',
       'whisper',
-      'tts-',
     ]) ||
-    /\bo[134](?:-|$)/.test(model)
+    /(?:^|[/.:])(?:o[134](?=$|[-.:])|tts-)/.test(model)
   ) {
     return { icon: 'OpenAI.Color', label: 'OpenAI' }
   }

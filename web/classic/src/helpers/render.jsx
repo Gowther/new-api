@@ -62,6 +62,8 @@ import {
   Perplexity,
   Replicate,
 } from '@lobehub/icons';
+import { IconSub2api } from '../assets/IconSub2api';
+import { Logo } from '../assets/Logo';
 
 import {
   LayoutDashboard,
@@ -413,6 +415,10 @@ export function getChannelIcon(channelType) {
       return <Doubao.Color size={iconSize} />;
     case 56: // Replicate
       return <Replicate size={iconSize} />;
+    case 59: // Sub2API
+      return <IconSub2api size={iconSize} />;
+    case 60: // New API
+      return <Logo size={iconSize} />;
     case 8: // 自定义渠道
     case 22: // 知识库：FastGPT
       return <FastGPT.Color size={iconSize} />;

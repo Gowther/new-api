@@ -38,7 +38,7 @@ function StatBadge(props: {
   accent: string
 }) {
   return (
-    <span className='border-border/60 bg-muted/25 inline-flex h-7 items-center gap-2 rounded-md border px-2.5 text-xs shadow-xs'>
+    <span className='border-border/60 bg-muted/25 inline-flex min-h-7 max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-2.5 py-1 text-xs shadow-xs'>
       <span className={cn('h-3.5 w-0.5 rounded-full', props.accent)} />
       <span className='text-muted-foreground'>{props.label}</span>
       <span className='text-foreground/85 font-mono font-semibold tabular-nums'>
@@ -84,15 +84,16 @@ export function CommonLogsStats() {
     return (
       <div className='flex flex-wrap items-center gap-2'>
         <Skeleton className='h-7 w-[150px] rounded-md' />
-        <Skeleton className='h-7 w-[320px] rounded-md' />
+        <Skeleton className='h-7 w-[100px] rounded-md' />
         <Skeleton className='h-7 w-[120px] rounded-md' />
+        <Skeleton className='h-7 w-[180px] rounded-md' />
         <Skeleton className='h-7 w-[140px] rounded-md' />
       </div>
     )
   }
 
   const successCount = Math.max(0, stats?.success_count ?? 0)
-  const totalCount = Math.max(0, stats?.total_count ?? stats?.rpm ?? 0)
+  const totalCount = Math.max(0, stats?.total_count ?? 0)
   const reportedSuccessRate = stats?.success_rate
   let successRate = 0
   if (
@@ -103,7 +104,7 @@ export function CommonLogsStats() {
   } else if (totalCount > 0) {
     successRate = Math.min(100, (successCount / totalCount) * 100)
   }
-  const successRateText = `${Number(successRate.toFixed(1))}%`
+  const successRateText = totalCount > 0 ? `${Number(successRate.toFixed(1))}%` : '-'
 
   return (
     <div className='flex flex-wrap items-center gap-2'>
@@ -113,14 +114,19 @@ export function CommonLogsStats() {
         accent='bg-sky-500/70'
       />
       <StatBadge
-        label={`${t('RPM')}:`}
-        value={`${t('Success')} ${successCount} / ${t('Total')} ${totalCount} / ${t('Success rate')} ${successRateText}`}
+        label={t('RPM')}
+        value={formatCompactNumber(stats?.rpm || 0, 'en')}
         accent='bg-rose-500/65'
       />
       <StatBadge
         label={t('TPM')}
         value={formatCompactNumber(stats?.tpm || 0, 'en')}
         accent='bg-slate-400/70'
+      />
+      <StatBadge
+        label={t('Success rate')}
+        value={`${successRateText} (${successCount} / ${totalCount})`}
+        accent='bg-amber-500/70'
       />
       <StatBadge
         label={t('Total Tokens')}

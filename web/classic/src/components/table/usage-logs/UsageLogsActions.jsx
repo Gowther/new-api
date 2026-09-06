@@ -41,7 +41,7 @@ const LogsActions = ({
   const showSkeleton = useMinimumLoadingTime(loadingStat);
   const needSkeleton = !showStat || showSkeleton;
   const successCount = Math.max(0, Number(stat.success_count ?? 0));
-  const totalCount = Math.max(0, Number(stat.total_count ?? stat.rpm ?? 0));
+  const totalCount = Math.max(0, Number(stat.total_count ?? 0));
   const reportedSuccessRate = Number(stat.success_rate);
   let successRate = 0;
   if (Number.isFinite(reportedSuccessRate)) {
@@ -49,13 +49,15 @@ const LogsActions = ({
   } else if (totalCount > 0) {
     successRate = Math.min(100, (successCount / totalCount) * 100);
   }
-  const successRateText = `${Number(successRate.toFixed(1))}%`;
+  const successRateText =
+    totalCount > 0 ? `${Number(successRate.toFixed(1))}%` : '-';
 
   const placeholder = (
     <Space wrap>
       <Skeleton.Title style={{ width: 108, height: 21, borderRadius: 6 }} />
-      <Skeleton.Title style={{ width: 320, height: 21, borderRadius: 6 }} />
+      <Skeleton.Title style={{ width: 80, height: 21, borderRadius: 6 }} />
       <Skeleton.Title style={{ width: 64, height: 21, borderRadius: 6 }} />
+      <Skeleton.Title style={{ width: 180, height: 21, borderRadius: 6 }} />
       <Skeleton.Title style={{ width: 120, height: 21, borderRadius: 6 }} />
     </Space>
   );
@@ -84,8 +86,7 @@ const LogsActions = ({
             }}
             className='!rounded-lg'
           >
-            RPM: {t('成功')} {successCount} / {t('总计')} {totalCount} /{' '}
-            {t('成功率')} {successRateText}
+            RPM: {compactNumberFormatter.format(stat.rpm || 0)}
           </Tag>
           <Tag
             color='white'
@@ -98,6 +99,13 @@ const LogsActions = ({
             className='!rounded-lg'
           >
             TPM: {compactNumberFormatter.format(stat.tpm || 0)}
+          </Tag>
+          <Tag
+            color='amber'
+            style={{ fontWeight: 500, padding: 13 }}
+            className='!rounded-lg'
+          >
+            {t('成功率')}: {successRateText} ({successCount} / {totalCount})
           </Tag>
           <Tag
             color='green'

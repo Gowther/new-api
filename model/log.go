@@ -1440,73 +1440,87 @@ type Stat struct {
 	SuccessRate  float64 `json:"success_rate"`
 }
 
-func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string) (stat Stat, err error) {
-	tx := LOG_DB.Table("logs").Select("COALESCE(sum(quota), 0) quota, COALESCE(sum(prompt_tokens), 0) + COALESCE(sum(completion_tokens), 0) total_tokens")
+type LogStatQuery struct {
+	LogType           int
+	StartTimestamp    int64
+	EndTimestamp      int64
+	UserId            int
+	Username          string
+	ModelName         string
+	TokenName         string
+	Channel           int
+	Group             string
+	RequestId         string
+	UpstreamRequestId string
+}
 
-	// RPM/TPM and success statistics use a separate recent-request query. Error
-	// logs are included as failed requests, while only consume logs with both
-	// input and output tokens are considered successful.
-	rpmTpmQuery := LOG_DB.Table("logs").Select(
-		"count(*) rpm, COALESCE(sum(prompt_tokens), 0) + COALESCE(sum(completion_tokens), 0) tpm, "+
-			"COALESCE(sum(CASE WHEN type = ? AND prompt_tokens > 0 AND completion_tokens > 0 THEN 1 ELSE 0 END), 0) success_count, "+
-			"count(*) total_count",
-		LogTypeConsume,
+func SumUsedQuota(ctx context.Context, query LogStatQuery) (stat Stat, err error) {
+	base := LOG_DB.WithContext(ctx).Table("logs").Where("type IN ?", []int{LogTypeConsume, LogTypeError})
+	if query.UserId != 0 {
+		base = base.Where("user_id = ?", query.UserId)
+	}
+	if base, err = applyExplicitLogTextFilter(base, "username", query.Username); err != nil {
+		return stat, err
+	}
+	if base, err = applyLogModelNameFilter(base, "model_name", query.ModelName); err != nil {
+		return stat, err
+	}
+	if query.TokenName != "" {
+		base = base.Where("token_name = ?", query.TokenName)
+	}
+	if query.Channel != 0 {
+		base = base.Where("channel_id = ?", query.Channel)
+	}
+	if query.Group != "" {
+		base = base.Where(logGroupCol+" = ?", query.Group)
+	}
+	if query.RequestId != "" {
+		base = base.Where("request_id = ?", query.RequestId)
+	}
+	if query.UpstreamRequestId != "" {
+		base = base.Where("upstream_request_id = ?", query.UpstreamRequestId)
+	}
+
+	requestTypes := []int{LogTypeConsume, LogTypeError}
+	if query.LogType != LogTypeUnknown {
+		requestTypes = []int{query.LogType}
+	}
+	// Quota and tokens retain their consumption-only meaning. Request success
+	// follows the selected log type and the entire selected time range.
+	tx := base.Session(&gorm.Session{}).Select(
+		"COALESCE(sum(CASE WHEN type = ? THEN quota ELSE 0 END), 0) quota, "+
+			"COALESCE(sum(CASE WHEN type = ? THEN COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0) ELSE 0 END), 0) total_tokens, "+
+			"COALESCE(sum(CASE WHEN type = ? AND type IN ? AND prompt_tokens > 0 AND completion_tokens > 0 THEN 1 ELSE 0 END), 0) success_count, "+
+			"COALESCE(sum(CASE WHEN type IN ? THEN 1 ELSE 0 END), 0) total_count",
+		LogTypeConsume, LogTypeConsume, LogTypeConsume, requestTypes, requestTypes,
 	)
-
-	if tx, err = applyExplicitLogTextFilter(tx, "username", username); err != nil {
-		return stat, err
+	if query.StartTimestamp != 0 {
+		tx = tx.Where("created_at >= ?", query.StartTimestamp)
 	}
-	if rpmTpmQuery, err = applyExplicitLogTextFilter(rpmTpmQuery, "username", username); err != nil {
-		return stat, err
+	if query.EndTimestamp != 0 {
+		tx = tx.Where("created_at <= ?", query.EndTimestamp)
 	}
-	if tokenName != "" {
-		tx = tx.Where("token_name = ?", tokenName)
-		rpmTpmQuery = rpmTpmQuery.Where("token_name = ?", tokenName)
-	}
-	if startTimestamp != 0 {
-		tx = tx.Where("created_at >= ?", startTimestamp)
-	}
-	if endTimestamp != 0 {
-		tx = tx.Where("created_at <= ?", endTimestamp)
-	}
-	if tx, err = applyLogModelNameFilter(tx, "model_name", modelName); err != nil {
-		return stat, err
-	}
-	if rpmTpmQuery, err = applyLogModelNameFilter(rpmTpmQuery, "model_name", modelName); err != nil {
-		return stat, err
-	}
-	if channel != 0 {
-		tx = tx.Where("channel_id = ?", channel)
-		rpmTpmQuery = rpmTpmQuery.Where("channel_id = ?", channel)
-	}
-	if group != "" {
-		tx = tx.Where(logGroupCol+" = ?", group)
-		rpmTpmQuery = rpmTpmQuery.Where(logGroupCol+" = ?", group)
-	}
-
-	tx = tx.Where("type = ?", LogTypeConsume)
-	if logType == LogTypeError {
-		rpmTpmQuery = rpmTpmQuery.Where("type = ?", LogTypeError)
-	} else if logType == LogTypeConsume {
-		rpmTpmQuery = rpmTpmQuery.Where("type = ?", LogTypeConsume)
-	} else if logType == LogTypeUnknown {
-		rpmTpmQuery = rpmTpmQuery.Where("type IN ?", []int{LogTypeConsume, LogTypeError})
-	} else {
-		rpmTpmQuery = rpmTpmQuery.Where("1 = 0")
-	}
-
-	// 只统计最近60秒的rpm和tpm
-	rpmTpmQuery = rpmTpmQuery.Where("created_at >= ?", time.Now().Add(-60*time.Second).Unix())
-
-	// 执行查询
 	if err := tx.Scan(&stat).Error; err != nil {
 		common.SysError("failed to query log stat: " + err.Error())
 		return stat, errors.New("查询统计数据失败")
 	}
-	if err := rpmTpmQuery.Scan(&stat).Error; err != nil {
+
+	// RPM/TPM always describe the last 60 seconds with the same non-time filters.
+	now := time.Now().Unix()
+	var recent struct {
+		Rpm int
+		Tpm int
+	}
+	rpmTpmQuery := base.Session(&gorm.Session{}).
+		Select("count(*) rpm, COALESCE(sum(prompt_tokens), 0) + COALESCE(sum(completion_tokens), 0) tpm").
+		Where("type IN ?", requestTypes).
+		Where("created_at >= ? AND created_at <= ?", now-60, now)
+	if err := rpmTpmQuery.Scan(&recent).Error; err != nil {
 		common.SysError("failed to query rpm/tpm stat: " + err.Error())
 		return stat, errors.New("查询统计数据失败")
 	}
+	stat.Rpm = recent.Rpm
+	stat.Tpm = recent.Tpm
 	if stat.TotalCount > 0 {
 		stat.SuccessRate = float64(stat.SuccessCount) / float64(stat.TotalCount) * 100
 	}

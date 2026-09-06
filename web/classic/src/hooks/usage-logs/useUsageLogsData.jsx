@@ -390,6 +390,8 @@ export const useLogsData = () => {
       start_timestamp,
       end_timestamp,
       group,
+      request_id,
+      upstream_request_id,
       logType: formLogType,
     } = getFormValues(dateRangeOverride);
     const currentLogType = formLogType !== undefined ? formLogType : logType;
@@ -402,6 +404,8 @@ export const useLogsData = () => {
       start_timestamp: localStartTimestamp,
       end_timestamp: localEndTimestamp,
       group,
+      request_id,
+      upstream_request_id,
     });
     const url = `/api/log/self/stat?${queryString}`;
     let res = await API.get(url, silent ? SILENT_REQUEST_CONFIG : undefined);
@@ -422,6 +426,8 @@ export const useLogsData = () => {
       end_timestamp,
       channel,
       group,
+      request_id,
+      upstream_request_id,
       logType: formLogType,
     } = getFormValues(dateRangeOverride);
     const currentLogType = formLogType !== undefined ? formLogType : logType;
@@ -436,6 +442,8 @@ export const useLogsData = () => {
       end_timestamp: localEndTimestamp,
       channel,
       group,
+      request_id,
+      upstream_request_id,
     });
     const url = `/api/log/stat?${queryString}`;
     let res = await API.get(url, silent ? SILENT_REQUEST_CONFIG : undefined);

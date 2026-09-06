@@ -127,14 +127,14 @@ export function CommonLogsStats() {
         accent='bg-slate-400/70'
       />
       <StatBadge
-        label={t('Success rate')}
-        value={`${successRateText} (${successCount} / ${totalCount})`}
-        accent='bg-amber-500/70'
-      />
-      <StatBadge
         label={t('Total Tokens')}
         value={formatCompactNumber(stats?.total_tokens || 0, 'en')}
         accent='bg-emerald-500/70'
+      />
+      <StatBadge
+        label={t('Success rate')}
+        value={`${successRateText} (${successCount} / ${totalCount})`}
+        accent='bg-amber-500/70'
       />
     </div>
   )

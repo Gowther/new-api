@@ -101,13 +101,6 @@ const LogsActions = ({
             TPM: {compactNumberFormatter.format(stat.tpm || 0)}
           </Tag>
           <Tag
-            color='amber'
-            style={{ fontWeight: 500, padding: 13 }}
-            className='!rounded-lg'
-          >
-            {t('成功率')}: {successRateText} ({successCount} / {totalCount})
-          </Tag>
-          <Tag
             color='green'
             style={{
               fontWeight: 500,
@@ -118,6 +111,13 @@ const LogsActions = ({
           >
             {t('总 Tokens')}:{' '}
             {compactNumberFormatter.format(stat.total_tokens || 0)}
+          </Tag>
+          <Tag
+            color='amber'
+            style={{ fontWeight: 500, padding: 13 }}
+            className='!rounded-lg'
+          >
+            {t('成功率')}: {successRateText} ({successCount} / {totalCount})
           </Tag>
         </Space>
       </Skeleton>

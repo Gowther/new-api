@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Linux.do → new-api 渠道提取器
 // @namespace    https://linux.do/
-// @version      0.3.6
+// @version      0.3.7
 // @description  解析 linux.do 楼层里的 API 地址与密钥（明文 / Base64 / 多重 Base64 / URL-safe / URL+Key 合并编码 / JSON 配置 / 仅密钥官方直连），一键复制成 new-api「添加渠道」可识别的剪贴板配置
 // @author       shiki
 // @match        https://linux.do/*
@@ -29,7 +29,7 @@
  *    OpenCode 就是这样：Zen（按量）和 Go（$10/月）共用一个 key，但网关和模型集不同。
  * 3. 回 new-api 打开「添加渠道」，顶部会提示「检测到剪贴板中的连接信息」，点「自动填入」，
  *    API 地址、密钥、名称、备注一次填好。
- * 4. 面板顶部可以存自己的 new-api 渠道页地址，之后用「复制并打开」少一步。
+ * 4. 面板顶部可以存自己的站点基础地址并选择平台类型，之后用「复制并打开」直达使用日志。
  *
  * 兼容性注意：脚本刻意不使用正则后行断言 (?<!...)。它在 Safari < 16.4 和部分
  * 脚本管理器内核上是解析期 SyntaxError，会导致整个脚本一行都不执行、且没有任何
@@ -39,10 +39,11 @@
  * 「临时-」前缀是固定的：论坛上捞的 key 随时会失效，靠名字前缀跟正式渠道区分开，
  * 列表按名字排序时也会自动聚成一堆，方便批量清理。标题过长会被截断，厂商和楼层号保留。
  *
- * 备注固定三行，对应手动加渠道的习惯：
+ * 备注前面三行对应手动加渠道的习惯，配置了站点基础地址后再追加一行使用日志地址：
  *   第 1 行  帖子 URL
  *   第 2 行  发密钥那层楼作者的最近活动页
  *   第 3 行  API 地址（省略地址走官方时写「官方直连」）
+ *   第 4 行  使用日志地址（可选，按 newapi 旧版 / newapi 新版 / sub2api 拼接）
  *
  * 覆盖的编码情况
  * ──────────────────────────────────────────────
@@ -1036,11 +1037,12 @@
      * 备注三行：帖子 URL / 发密钥那层楼作者的最近活动 / API 地址。
      * 超 255 字符时从后往前丢，保证第一行一定在。
      */
-    function buildRemark(topicUrl, username, url, official) {
+    function buildRemark(topicUrl, username, url, official, usageUrl) {
       const lines = [
         topicUrl || '',
         activityUrl(username),
         url || (official ? '官方直连' : ''),
+        usageUrl || '',
       ].filter(Boolean);
       let out = lines.join('\n');
       while (out.length > REMARK_MAX && lines.length > 1) {
@@ -1094,9 +1096,16 @@
   /* ═══════════════════════════════ 页面部分 ═══════════════════════════════ */
 
   const TAG = '[ld→newapi]';
-  const VERSION = '0.3.6'; // 与文件头 @version 保持一致
+  const VERSION = '0.3.7'; // 与文件头 @version 保持一致
   const LS_TARGET = 'ld-napi-target-url';
+  const LS_TARGET_TYPE = 'ld-napi-target-type';
   const LS_PRESETS = 'ld-napi-url-presets';
+  const REMARK_LINK_TYPES = [
+    { id: 'newapi-classic', label: 'newapi（旧版）', path: '/console/log' },
+    { id: 'newapi-default', label: 'newapi（新版）', path: '/usage-logs/common' },
+    { id: 'sub2api', label: 'sub2api', path: '/usage' },
+  ];
+  const DEFAULT_REMARK_LINK_TYPE = 'newapi-default';
   /*
    * 地址下拉里「— 手动填写 —」那一项的哨兵值。预设和扫到的地址都是 http(s) 开头的
    * 正规地址，撞不上这个值。不要用空白字符当哨兵：option 的 value 不保证保留前导空白，
@@ -1321,22 +1330,37 @@
   // 手动卡折叠状态：null = 还没人动过，由有没有自动结果决定；true/false = 用户自己点过，说话算话
   let manualFold = null;
 
-  /**
-   * 只填了域名就补默认渠道页路径；已经带路径的按原样用。
-   * classic 主题是 /console/channel，default 主题是 /channels，两边路径不同，
-   * 所以让用户直接存自己那套的完整地址最稳。
-   */
-  function channelPageUrl(raw) {
+  function remarkLinkType(raw) {
+    const value = String(raw || '').trim();
+    return REMARK_LINK_TYPES.some((item) => item.id === value) ? value : DEFAULT_REMARK_LINK_TYPE;
+  }
+
+  /** 站点基础地址补成所选平台的使用日志页面；已经带路径的按原样使用。 */
+  function channelPageUrl(raw, type) {
     let v = String(raw || '').trim();
     if (!/^https?:\/\//i.test(v)) v = 'https://' + v.replace(/^\/+/, '');
     try {
       const u = new URL(v);
-      if (u.pathname && u.pathname !== '/') return u.toString();
-      u.pathname = '/console/channel';
+      const knownPaths = new Set([
+        '',
+        '/',
+        '/console/channel',
+        '/channels',
+        ...REMARK_LINK_TYPES.map((item) => item.path),
+      ]);
+      if (knownPaths.has(u.pathname)) {
+        const target = REMARK_LINK_TYPES.find((item) => item.id === remarkLinkType(type));
+        u.pathname = target.path;
+      }
       return u.toString();
     } catch (e) {
       return v;
     }
+  }
+
+  function remarkUsageUrl() {
+    const target = store.get(LS_TARGET).trim();
+    return target ? channelPageUrl(target, store.get(LS_TARGET_TYPE)) : '';
   }
 
   function recordJson(rec, url, key) {
@@ -1344,7 +1368,7 @@
       key,
       url,
       name: CORE.buildName(state.title, rec.floor, rec.vendor),
-      remark: CORE.buildRemark(state.topicUrl, rec.username, url, rec.official),
+      remark: CORE.buildRemark(state.topicUrl, rec.username, url, rec.official, remarkUsageUrl()),
     });
   }
 
@@ -1510,6 +1534,7 @@
         rec.username,
         urlInput.value.trim(),
         !urlInput.value.trim() && rec.official,
+        remarkUsageUrl(),
       );
     };
 
@@ -1609,9 +1634,9 @@
       const ok = await copyText(currentJson());
       const target = store.get(LS_TARGET).trim();
       if (!ok) return toast('复制失败');
-      if (!target) return toast('已复制。先在顶部填 new-api 渠道页地址才能直接打开');
-      window.open(channelPageUrl(target), '_blank', 'noopener');
-      toast('已复制并打开 new-api');
+      if (!target) return toast('已复制。先在顶部填写站点基础地址才能直接打开');
+      window.open(channelPageUrl(target, store.get(LS_TARGET_TYPE)), '_blank', 'noopener');
+      toast('已复制并打开使用日志');
     });
     row.appendChild(actions);
     return row;
@@ -1680,6 +1705,14 @@
     }
   }
 
+  function refreshRemarkPreviews() {
+    const list = document.getElementById('ld-napi-list');
+    if (!list) return;
+    for (const row of list.querySelectorAll('.ld-napi-row')) {
+      if (row.ldRefreshRemark) row.ldRefreshRemark();
+    }
+  }
+
   /** 换帖子了才清空重来 */
   function resetPanel() {
     renderedKeys.clear();
@@ -1708,6 +1741,8 @@
 #ld-napi-bar button:hover{background:#343a41}
 #ld-napi-target{flex:1;min-width:150px;background:#17191c;border:1px solid #3a3f46;color:#e6e6e6;
  border-radius:6px;padding:4px 8px;font-size:12px}
+#ld-napi-target-type{min-width:128px;background:#17191c;border:1px solid #3a3f46;color:#e6e6e6;
+ border-radius:6px;padding:4px 6px;font-size:12px}
 #ld-napi-list{overflow-y:auto;padding:4px 12px 12px}
 .ld-napi-empty{padding:22px 8px;color:#9aa1a9;text-align:center;line-height:1.7}
 .ld-napi-row{border-bottom:1px solid #2c3138;padding:10px 0}
@@ -1787,14 +1822,32 @@
 
     const target = document.createElement('input');
     target.id = 'ld-napi-target';
-    target.placeholder = 'new-api 渠道页地址（可选）';
+    target.placeholder = '站点基础地址（可选）';
     target.value = store.get(LS_TARGET);
     target.spellcheck = false;
     target.addEventListener('change', () => {
       store.set(LS_TARGET, target.value.trim());
-      toast('已记住 new-api 地址');
+      refreshRemarkPreviews();
+      toast('已记住站点基础地址');
     });
     bar.appendChild(target);
+
+    const targetType = document.createElement('select');
+    targetType.id = 'ld-napi-target-type';
+    targetType.title = '备注和“复制并打开”使用的日志页面类型';
+    for (const item of REMARK_LINK_TYPES) {
+      const option = document.createElement('option');
+      option.value = item.id;
+      option.textContent = item.label;
+      targetType.appendChild(option);
+    }
+    targetType.value = remarkLinkType(store.get(LS_TARGET_TYPE));
+    targetType.addEventListener('change', () => {
+      store.set(LS_TARGET_TYPE, remarkLinkType(targetType.value));
+      refreshRemarkPreviews();
+      toast('已更新使用日志类型');
+    });
+    bar.appendChild(targetType);
 
     const mkBarBtn = (text, handler) => {
       const b = document.createElement('button');

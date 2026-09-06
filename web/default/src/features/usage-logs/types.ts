@@ -38,6 +38,8 @@ export type LogCategory = 'common' | 'drawing' | 'task'
  * Common filters (shared across all log types)
  */
 export interface CommonFilters {
+  timeMode?: 'today' | 'recent' | 'fixed'
+  recentHours?: number
   startTime?: Date
   endTime?: Date
   channel?: string
@@ -376,6 +378,7 @@ export interface GetTaskLogsParams {
  * Configuration for fetching logs by category
  */
 export interface FetchLogsConfig {
+  signal?: AbortSignal
   logCategory: LogCategory
   isAdmin: boolean
   page: number

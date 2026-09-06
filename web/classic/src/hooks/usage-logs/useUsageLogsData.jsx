@@ -46,7 +46,11 @@ import ParamOverrideEntry from '../../components/table/usage-logs/components/Par
 
 const AUTO_REFRESH_STORAGE_KEY = 'logs-auto-refresh-seconds';
 const AUTO_REFRESH_INTERVALS = [0, 5, 10, 30, 60];
-const SILENT_REQUEST_CONFIG = { skipErrorHandler: true };
+const LOG_REQUEST_CONFIG = {
+  skipErrorHandler: true,
+  timeout: 15000,
+  disableDuplicate: true,
+};
 
 function getInitialAutoRefreshSeconds() {
   const stored = Number(localStorage.getItem(AUTO_REFRESH_STORAGE_KEY));
@@ -66,6 +70,8 @@ function getInitialUrlFilters() {
     searchParams.get('end_timestamp') || searchParams.get('endTime'),
   );
   return {
+    timeMode: searchParams.get('timeMode'),
+    recentHours: Number(searchParams.get('recentHours')),
     channel:
       searchParams.get('channel') || searchParams.get('channel_id') || '',
     tokenName:
@@ -87,7 +93,19 @@ function getInitialUrlFilters() {
 
 function getDefaultLogFormValues(initialFilters = {}) {
   const now = new Date();
+  let timeMode =
+    initialFilters.startTimestamp || initialFilters.endTimestamp
+      ? 'fixed'
+      : 'today';
+  if (['today', 'recent', 'fixed'].includes(initialFilters.timeMode)) {
+    timeMode = initialFilters.timeMode;
+  }
+  const hours = initialFilters.recentHours;
+  const recentHours =
+    Number.isInteger(hours) && hours >= 1 && hours <= 24 ? hours : 1;
   return {
+    timeMode,
+    recentHours,
     username: '',
     token_name: initialFilters.tokenName || '',
     model_name: initialFilters.modelName || '',
@@ -97,11 +115,11 @@ function getDefaultLogFormValues(initialFilters = {}) {
     upstream_request_id: initialFilters.upstreamRequestId || '',
     dateRange: [
       timestamp2string(
-        initialFilters.startTimestamp || getTodayStartTimestamp(),
+        timeMode === 'recent'
+          ? now.getTime() / 1000 - recentHours * 3600
+          : initialFilters.startTimestamp || getTodayStartTimestamp(),
       ),
-      timestamp2string(
-        initialFilters.endTimestamp || now.getTime() / 1000 + 3600,
-      ),
+      timestamp2string(initialFilters.endTimestamp || now.getTime() / 1000),
     ],
     logType: initialFilters.logType || '0',
   };
@@ -130,6 +148,8 @@ function clearInitialSearchParams() {
     'startTime',
     'end_timestamp',
     'endTime',
+    'timeMode',
+    'recentHours',
   ].forEach((key) => url.searchParams.delete(key));
   window.history.replaceState(
     {},
@@ -187,6 +207,10 @@ export const useLogsData = () => {
   );
   const autoRefreshCallbackRef = useRef(null);
   const autoRefreshInFlightRef = useRef(false);
+  const logsRequestRef = useRef(null);
+  const statsRequestRef = useRef(null);
+  const appliedFiltersRef = useRef(null);
+  const dateChangeTimerRef = useRef(null);
 
   const setAutoRefreshSeconds = (seconds) => {
     const next = AUTO_REFRESH_INTERVALS.includes(Number(seconds))
@@ -220,7 +244,14 @@ export const useLogsData = () => {
 
   // Form state
   const [formApi, setFormApi] = useState(null);
-  const formInitValues = getDefaultLogFormValues(initialUrlFiltersRef.current);
+  const [formInitValues] = useState(() =>
+    getDefaultLogFormValues(initialUrlFiltersRef.current),
+  );
+  const [timeRange, setTimeRange] = useState(() => ({
+    timeMode: formInitValues.timeMode,
+    recentHours: formInitValues.recentHours,
+  }));
+  const timeRangeRef = useRef(timeRange);
 
   // Get default column visibility based on user role
   const getDefaultColumnVisibility = () => {
@@ -349,26 +380,30 @@ export const useLogsData = () => {
   }, [BILLING_DISPLAY_MODE_STORAGE_KEY, billingDisplayMode]);
 
   // 获取表单值的辅助函数，确保所有值都是字符串
-  const getFormValues = (dateRangeOverride = null) => {
-    const defaultFormValues = getDefaultLogFormValues();
-    const formValues = formApi ? formApi.getValues() : formInitValues;
-
-    let start_timestamp = defaultFormValues.dateRange[0];
-    let end_timestamp = defaultFormValues.dateRange[1];
-
-    if (Array.isArray(dateRangeOverride) && dateRangeOverride.length === 2) {
-      start_timestamp = dateRangeOverride[0];
-      end_timestamp = dateRangeOverride[1];
-    } else if (
-      formValues.dateRange &&
-      Array.isArray(formValues.dateRange) &&
-      formValues.dateRange.length === 2
-    ) {
-      start_timestamp = formValues.dateRange[0];
-      end_timestamp = formValues.dateRange[1];
+  const getFormValues = (valuesOverride = null) => {
+    const formValues = valuesOverride || {
+      ...(formApi ? formApi.getValues() : formInitValues),
+      ...timeRangeRef.current,
+    };
+    const { timeMode, recentHours } = formValues;
+    const now = Math.floor(Date.now() / 1000);
+    let start_timestamp = getTodayStartTimestamp();
+    let end_timestamp = now;
+    if (timeMode === 'recent') {
+      start_timestamp = now - recentHours * 3600;
+    } else if (timeMode === 'fixed') {
+      start_timestamp = formValues.dateRange?.[0]
+        ? Math.floor(new Date(formValues.dateRange[0]).getTime() / 1000)
+        : undefined;
+      end_timestamp = formValues.dateRange?.[1]
+        ? Math.floor(new Date(formValues.dateRange[1]).getTime() / 1000)
+        : undefined;
     }
 
     return {
+      timeMode,
+      recentHours,
+      dateRange: formValues.dateRange,
       username: formValues.username || '',
       token_name: formValues.token_name || '',
       model_name: formValues.model_name || '',
@@ -383,96 +418,57 @@ export const useLogsData = () => {
   };
 
   // Statistics functions
-  const getLogSelfStat = async (silent = false, dateRangeOverride = null) => {
-    const {
-      token_name,
-      model_name,
-      start_timestamp,
-      end_timestamp,
-      group,
-      request_id,
-      upstream_request_id,
-      logType: formLogType,
-    } = getFormValues(dateRangeOverride);
-    const currentLogType = formLogType !== undefined ? formLogType : logType;
-    let localStartTimestamp = Date.parse(start_timestamp) / 1000;
-    let localEndTimestamp = Date.parse(end_timestamp) / 1000;
-    const queryString = buildLogQueryString({
-      type: currentLogType,
-      token_name,
-      model_name,
-      start_timestamp: localStartTimestamp,
-      end_timestamp: localEndTimestamp,
-      group,
-      request_id,
-      upstream_request_id,
-    });
-    const url = `/api/log/self/stat?${queryString}`;
-    let res = await API.get(url, silent ? SILENT_REQUEST_CONFIG : undefined);
-    const { success, message, data } = res.data;
-    if (success) {
-      setStat(data);
-    } else if (!silent) {
-      showError(message);
-    }
-  };
-
-  const getLogStat = async (silent = false, dateRangeOverride = null) => {
-    const {
-      username,
-      token_name,
-      model_name,
-      start_timestamp,
-      end_timestamp,
-      channel,
-      group,
-      request_id,
-      upstream_request_id,
-      logType: formLogType,
-    } = getFormValues(dateRangeOverride);
-    const currentLogType = formLogType !== undefined ? formLogType : logType;
-    let localStartTimestamp = Date.parse(start_timestamp) / 1000;
-    let localEndTimestamp = Date.parse(end_timestamp) / 1000;
-    const queryString = buildLogQueryString({
-      type: currentLogType,
-      username,
-      token_name,
-      model_name,
-      start_timestamp: localStartTimestamp,
-      end_timestamp: localEndTimestamp,
-      channel,
-      group,
-      request_id,
-      upstream_request_id,
-    });
-    const url = `/api/log/stat?${queryString}`;
-    let res = await API.get(url, silent ? SILENT_REQUEST_CONFIG : undefined);
-    const { success, message, data } = res.data;
-    if (success) {
-      setStat(data);
-    } else if (!silent) {
-      showError(message);
-    }
-  };
-
-  const handleEyeClick = async (silent = false, dateRangeOverride = null) => {
-    if (loadingStat) {
-      return;
-    }
-    setLoadingStat(true);
+  const handleEyeClick = async (silent = false, filtersOverride = null) => {
+    statsRequestRef.current?.abort();
+    const request = new AbortController();
+    statsRequestRef.current = request;
+    if (!silent) setLoadingStat(true);
     try {
-      if (isAdminUser) {
-        await getLogStat(silent, dateRangeOverride);
-      } else {
-        await getLogSelfStat(silent, dateRangeOverride);
+      const {
+        username,
+        channel,
+        token_name,
+        model_name,
+        start_timestamp,
+        end_timestamp,
+        group,
+        request_id,
+        upstream_request_id,
+        logType: type,
+      } = filtersOverride || getFormValues();
+      const queryString = buildLogQueryString({
+        type,
+        token_name,
+        model_name,
+        start_timestamp,
+        end_timestamp,
+        group,
+        request_id,
+        upstream_request_id,
+        ...(isAdminUser ? { username, channel } : {}),
+      });
+      const path = isAdminUser ? '/api/log/stat' : '/api/log/self/stat';
+      const res = await API.get(`${path}?${queryString}`, {
+        ...LOG_REQUEST_CONFIG,
+        signal: request.signal,
+      });
+      if (request.signal.aborted) return;
+      const { success, message, data } = res.data;
+      if (success) {
+        setStat(data);
+      } else if (!silent) {
+        showError(message);
       }
     } catch (reason) {
-      if (!silent) {
+      if (!silent && !request.signal.aborted) {
         showError(reason);
       }
     } finally {
-      setShowStat(true);
-      setLoadingStat(false);
+      if (statsRequestRef.current === request) {
+        statsRequestRef.current = null;
+        setShowStat(true);
+        setLoadingStat(false);
+      }
     }
   };
 
@@ -945,9 +941,12 @@ export const useLogsData = () => {
     pageSize,
     customLogType = null,
     silent = false,
-    dateRangeOverride = null,
+    filtersOverride = null,
   ) => {
-    setLoading(true);
+    logsRequestRef.current?.abort();
+    const request = new AbortController();
+    logsRequestRef.current = request;
+    if (!silent) setLoading(true);
     try {
       const {
         username,
@@ -960,7 +959,7 @@ export const useLogsData = () => {
         request_id,
         upstream_request_id,
         logType: formLogType,
-      } = getFormValues(dateRangeOverride);
+      } = filtersOverride || getFormValues(appliedFiltersRef.current);
 
       const currentLogType =
         customLogType !== null
@@ -969,16 +968,14 @@ export const useLogsData = () => {
             ? formLogType
             : logType;
 
-      let localStartTimestamp = Date.parse(start_timestamp) / 1000;
-      let localEndTimestamp = Date.parse(end_timestamp) / 1000;
       const queryParams = {
         p: startIdx,
         page_size: pageSize,
         type: currentLogType,
         token_name,
         model_name,
-        start_timestamp: localStartTimestamp,
-        end_timestamp: localEndTimestamp,
+        start_timestamp,
+        end_timestamp,
         group,
         request_id,
         upstream_request_id,
@@ -990,10 +987,11 @@ export const useLogsData = () => {
         queryParams.channel = channel;
       }
       const url = `${path}?${buildLogQueryString(queryParams)}`;
-      const res = await API.get(
-        url,
-        silent ? SILENT_REQUEST_CONFIG : undefined,
-      );
+      const res = await API.get(url, {
+        ...LOG_REQUEST_CONFIG,
+        signal: request.signal,
+      });
+      if (request.signal.aborted) return;
       const { success, message, data } = res.data;
       if (success) {
         const newPageData = data.items;
@@ -1006,11 +1004,14 @@ export const useLogsData = () => {
         showError(message);
       }
     } catch (reason) {
-      if (!silent) {
+      if (!silent && !request.signal.aborted) {
         showError(reason);
       }
     } finally {
-      setLoading(false);
+      if (logsRequestRef.current === request) {
+        logsRequestRef.current = null;
+        setLoading(false);
+      }
     }
   };
 
@@ -1024,22 +1025,52 @@ export const useLogsData = () => {
     localStorage.setItem('page-size', size + '');
     setPageSize(size);
     setActivePage(1);
-    void loadLogs(activePage, size);
+    void loadLogs(1, size);
   };
 
   // Refresh function
-  const refresh = async () => {
+  const refresh = async (valuesOverride = null) => {
+    const filters = getFormValues(valuesOverride);
+    appliedFiltersRef.current = filters;
     setActivePage(1);
-    handleEyeClick();
-    await loadLogs(1, pageSize);
+    await Promise.all([
+      handleEyeClick(false, filters),
+      loadLogs(1, pageSize, null, false, filters),
+    ]);
   };
 
-  const refreshTimeRange = () => {
-    const dateRange = getDefaultLogFormValues().dateRange;
-    if (formApi) {
-      formApi.setValue('dateRange', dateRange);
+  const handleTimeModeChange = (value, refreshNow = true) => {
+    const hours = Number(value);
+    const next =
+      Number.isInteger(hours) && hours >= 1 && hours <= 24
+        ? { timeMode: 'recent', recentHours: hours }
+        : {
+            timeMode: value === 'today' ? 'today' : 'fixed',
+            recentHours: timeRangeRef.current.recentHours,
+          };
+    timeRangeRef.current = next;
+    setTimeRange(next);
+    if (!refreshNow) return;
+    clearTimeout(dateChangeTimerRef.current);
+    const values = { ...(formApi?.getValues() || formInitValues), ...next };
+    if (next.timeMode !== 'fixed') {
+      values.dateRange = getDefaultLogFormValues(next).dateRange;
+      formApi?.setValue('dateRange', values.dateRange);
     }
-    return dateRange;
+    void refresh(values);
+  };
+
+  const handleDateRangeChange = (value) => {
+    if (value?.length && (value.length !== 2 || !value.every(Boolean))) return;
+    handleTimeModeChange(value?.length ? 'fixed' : 'today', false);
+    clearTimeout(dateChangeTimerRef.current);
+    dateChangeTimerRef.current = setTimeout(() => {
+      void refresh({
+        ...(formApi?.getValues() || formInitValues),
+        ...timeRangeRef.current,
+        dateRange: value,
+      });
+    }, 0);
   };
 
   const resetFilters = () => {
@@ -1051,11 +1082,12 @@ export const useLogsData = () => {
     initialUrlFiltersRef.current = {};
     clearInitialSearchParams();
     formApi.setValues(resetValues);
+    const next = { timeMode: 'today', recentHours: 1 };
+    timeRangeRef.current = next;
+    setTimeRange(next);
     setLogType(0);
-
-    setTimeout(() => {
-      refresh();
-    }, 100);
+    clearTimeout(dateChangeTimerRef.current);
+    void refresh(resetValues);
   };
 
   const applyColumnFilter = (field, value) => {
@@ -1064,11 +1096,11 @@ export const useLogsData = () => {
       return;
     }
     formApi.setValue(field, filterValue);
-    setActivePage(1);
-    setTimeout(() => {
-      handleEyeClick();
-      void loadLogs(1, pageSize);
-    }, 0);
+    void refresh({
+      ...formApi.getValues(),
+      ...timeRangeRef.current,
+      [field]: filterValue,
+    });
   };
 
   // Copy text function
@@ -1083,17 +1115,22 @@ export const useLogsData = () => {
 
   useEffect(() => {
     autoRefreshCallbackRef.current = async () => {
-      if (autoRefreshInFlightRef.current) {
+      if (
+        autoRefreshInFlightRef.current ||
+        logsRequestRef.current ||
+        statsRequestRef.current ||
+        document.hidden
+      ) {
         return;
       }
 
       autoRefreshInFlightRef.current = true;
       try {
-        const dateRange = refreshTimeRange();
-        await loadLogs(activePage, pageSize, null, true, dateRange);
-        if (showStat) {
-          await handleEyeClick(true, dateRange);
-        }
+        const filters = getFormValues(appliedFiltersRef.current);
+        await Promise.all([
+          loadLogs(activePage, pageSize, null, true, filters),
+          handleEyeClick(true, filters),
+        ]);
       } finally {
         autoRefreshInFlightRef.current = false;
       }
@@ -1104,10 +1141,20 @@ export const useLogsData = () => {
     if (autoRefreshSeconds <= 0) {
       return undefined;
     }
-    const timer = setInterval(() => {
-      void autoRefreshCallbackRef.current?.();
-    }, autoRefreshSeconds * 1000);
-    return () => clearInterval(timer);
+    let stopped = false;
+    let timer;
+    const tick = async () => {
+      try {
+        await autoRefreshCallbackRef.current?.();
+      } finally {
+        if (!stopped) timer = setTimeout(tick, autoRefreshSeconds * 1000);
+      }
+    };
+    timer = setTimeout(tick, autoRefreshSeconds * 1000);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
   }, [autoRefreshSeconds]);
 
   // Initialize data
@@ -1115,13 +1162,22 @@ export const useLogsData = () => {
     const localPageSize =
       parseInt(localStorage.getItem('page-size')) || ITEMS_PER_PAGE;
     setPageSize(localPageSize);
-    void loadLogs(activePage, localPageSize);
+    const filters = getFormValues();
+    appliedFiltersRef.current = filters;
+    void loadLogs(activePage, localPageSize, null, false, filters);
+    return () => {
+      logsRequestRef.current?.abort();
+      statsRequestRef.current?.abort();
+      logsRequestRef.current = null;
+      statsRequestRef.current = null;
+      clearTimeout(dateChangeTimerRef.current);
+    };
   }, []);
 
   // Initialize statistics when formApi is available
   useEffect(() => {
     if (formApi) {
-      handleEyeClick();
+      void handleEyeClick(false, getFormValues(appliedFiltersRef.current));
     }
   }, [formApi]);
 
@@ -1153,6 +1209,9 @@ export const useLogsData = () => {
     setFormApi,
     formInitValues,
     getFormValues,
+    timeRange,
+    handleTimeModeChange,
+    handleDateRangeChange,
 
     // Column visibility
     visibleColumns,

@@ -39,6 +39,7 @@ import type {
   GetMidjourneyLogsParams,
   GetTaskLogsParams,
 } from '../types'
+import { resolveLogTimeRange } from './time-range'
 
 // ============================================================================
 // Type Checkers & Utilities
@@ -73,15 +74,13 @@ export function isPerCallBilling(modelPrice?: number): boolean {
 }
 
 /**
- * Get default time range (today 00:00:00 to now + 1 hour)
+ * Get default time range (today 00:00:00 to now)
  */
 export function getDefaultTimeRange(): { start: Date; end: Date } {
   const now = new Date()
   const start = new Date(now)
   start.setHours(0, 0, 0, 0)
-  const end = new Date(now.getTime() + 3600 * 1000) // +1 hour
-
-  return { start, end }
+  return { start, end: now }
 }
 
 /**
@@ -99,23 +98,13 @@ function buildTimeRangeParams(
   searchParams: Record<string, unknown>,
   useMilliseconds: boolean
 ): { start_timestamp?: number; end_timestamp?: number } {
-  const hasTimeParams = searchParams.startTime ?? searchParams.endTime
-  const defaultTimeRange = !hasTimeParams ? getDefaultTimeRange() : null
-
+  const { start, end } = resolveLogTimeRange(searchParams)
   const convertTimestamp = (timestamp: number) =>
     useMilliseconds ? timestamp : timestampToSeconds(timestamp)
 
-  const getTimestamp = (paramTime?: unknown, defaultTime?: Date) => {
-    const time = (paramTime as number) || defaultTime?.getTime()
-    return time ? convertTimestamp(time) : undefined
-  }
-
   return {
-    start_timestamp: getTimestamp(
-      searchParams.startTime,
-      defaultTimeRange?.start
-    ),
-    end_timestamp: getTimestamp(searchParams.endTime, defaultTimeRange?.end),
+    start_timestamp: start ? convertTimestamp(start.getTime()) : undefined,
+    end_timestamp: end ? convertTimestamp(end.getTime()) : undefined,
   }
 }
 
@@ -249,6 +238,7 @@ export async function fetchLogsByCategory(
     searchParams,
     columnFilters,
     suppressErrorToast = false,
+    signal,
   } = config
 
   if (logCategory === 'common') {
@@ -260,8 +250,8 @@ export async function fetchLogsByCategory(
       isAdmin,
     })
     return isAdmin
-      ? await getAllLogs(params, suppressErrorToast)
-      : await getUserLogs(params, suppressErrorToast)
+      ? await getAllLogs(params, suppressErrorToast, signal)
+      : await getUserLogs(params, suppressErrorToast, signal)
   }
 
   // For drawing and task logs
@@ -286,11 +276,13 @@ export async function fetchLogsByCategory(
     return isAdmin
       ? await getAllMidjourneyLogs(
           paramsWithFilter as GetMidjourneyLogsParams,
-          suppressErrorToast
+          suppressErrorToast,
+          signal
         )
       : await getUserMidjourneyLogs(
           paramsWithFilter as GetMidjourneyLogsParams,
-          suppressErrorToast
+          suppressErrorToast,
+          signal
         )
   }
 
@@ -298,10 +290,12 @@ export async function fetchLogsByCategory(
   return isAdmin
     ? await getAllTaskLogs(
         paramsWithFilter as GetTaskLogsParams,
-        suppressErrorToast
+        suppressErrorToast,
+        signal
       )
     : await getUserTaskLogs(
         paramsWithFilter as GetTaskLogsParams,
-        suppressErrorToast
+        suppressErrorToast,
+        signal
       )
 }

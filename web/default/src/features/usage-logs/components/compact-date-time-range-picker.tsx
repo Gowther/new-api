@@ -27,13 +27,29 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import dayjs from '@/lib/dayjs'
 import { cn } from '@/lib/utils'
+
+import {
+  resolveLogTimeRange,
+  type LogTimeMode,
+  type LogTimeRange,
+} from '../lib/time-range'
 
 interface CompactDateTimeRangePickerProps {
   start?: Date
   end?: Date
-  onChange: (range: { start?: Date; end?: Date }) => void
+  timeMode?: LogTimeMode
+  recentHours?: number
+  onChange: (range: LogTimeRange) => void
   className?: string
 }
 
@@ -50,6 +66,8 @@ function fromInputValue(value: string): Date | undefined {
 export function CompactDateTimeRangePicker({
   start,
   end,
+  timeMode = 'fixed',
+  recentHours = 1,
   onChange,
   className,
 }: CompactDateTimeRangePickerProps) {
@@ -57,8 +75,21 @@ export function CompactDateTimeRangePicker({
   const [open, setOpen] = useState(false)
   const [draftStart, setDraftStart] = useState(toInputValue(start))
   const [draftEnd, setDraftEnd] = useState(toInputValue(end))
+  const hourItems = Array.from({ length: 24 }, (_, index) => ({
+    value: String(index + 1),
+    label:
+      index === 0
+        ? t('Last hour')
+        : t('Last {{hours}} hours', { hours: index + 1 }),
+  }))
 
   const label = useMemo(() => {
+    if (timeMode === 'today') return t('Today')
+    if (timeMode === 'recent') {
+      return recentHours === 1
+        ? t('Last hour')
+        : t('Last {{hours}} hours', { hours: recentHours })
+    }
     if (!start && !end) return t('Date Range')
     // The popover's <input type="datetime-local"> only supports minute
     // precision, so seconds are always 00 (manual pick) or 59 (preset
@@ -67,18 +98,25 @@ export function CompactDateTimeRangePicker({
     const startText = start ? dayjs(start).format('YYYY-MM-DD HH:mm') : '-'
     const endText = end ? dayjs(end).format('YYYY-MM-DD HH:mm') : '-'
     return `${startText} ~ ${endText}`
-  }, [end, start, t])
+  }, [end, start, t, timeMode, recentHours])
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (nextOpen) {
-      setDraftStart(toInputValue(start))
-      setDraftEnd(toInputValue(end))
+      const range = resolveLogTimeRange({
+        timeMode,
+        recentHours,
+        startTime: start?.getTime(),
+        endTime: end?.getTime(),
+      })
+      setDraftStart(toInputValue(range.start))
+      setDraftEnd(toInputValue(range.end))
     }
     setOpen(nextOpen)
   }
 
   const applyDraft = () => {
     onChange({
+      timeMode: draftStart || draftEnd ? 'fixed' : 'today',
       start: fromInputValue(draftStart),
       end: fromInputValue(draftEnd),
     })
@@ -96,7 +134,7 @@ export function CompactDateTimeRangePicker({
       },
       today: {
         start: now.startOf('day').toDate(),
-        end: now.endOf('day').toDate(),
+        end: now.toDate(),
       },
       '7d': {
         start: now.subtract(6, 'day').startOf('day').toDate(),
@@ -118,7 +156,7 @@ export function CompactDateTimeRangePicker({
     const range = presets[kind]
     setDraftStart(toInputValue(range.start))
     setDraftEnd(toInputValue(range.end))
-    onChange(range)
+    onChange({ ...range, timeMode: kind === 'today' ? 'today' : 'fixed' })
     setOpen(false)
   }
 
@@ -152,6 +190,7 @@ export function CompactDateTimeRangePicker({
               </div>
               <Input
                 type='datetime-local'
+                aria-label={t('Start Time')}
                 value={draftStart}
                 onChange={(e) => setDraftStart(e.target.value)}
                 className='h-8 text-sm leading-5 tabular-nums'
@@ -166,12 +205,41 @@ export function CompactDateTimeRangePicker({
               </div>
               <Input
                 type='datetime-local'
+                aria-label={t('End Time')}
                 value={draftEnd}
                 onChange={(e) => setDraftEnd(e.target.value)}
                 className='h-8 text-sm leading-5 tabular-nums'
               />
             </div>
           </div>
+
+          <Select
+            items={hourItems}
+            value={timeMode === 'recent' ? String(recentHours) : null}
+            onValueChange={(value) => {
+              if (!value) return
+              onChange(
+                resolveLogTimeRange({
+                  timeMode: 'recent',
+                  recentHours: Number(value),
+                })
+              )
+              setOpen(false)
+            }}
+          >
+            <SelectTrigger className='w-full' aria-label={t('Recent hours')}>
+              <SelectValue placeholder={t('Recent hours')} />
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              <SelectGroup>
+                {hourItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
 
           <div className='flex flex-wrap gap-1.5'>
             <Button
@@ -231,7 +299,14 @@ export function CompactDateTimeRangePicker({
           </div>
 
           <div className='flex justify-end'>
-            <Button size='sm' className='h-8' onClick={applyDraft}>
+            <Button
+              size='sm'
+              className='h-8'
+              onClick={applyDraft}
+              disabled={Boolean(
+                draftStart && draftEnd && draftStart > draftEnd
+              )}
+            >
               {t('Confirm')}
             </Button>
           </div>

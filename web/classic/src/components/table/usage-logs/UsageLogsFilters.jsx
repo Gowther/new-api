@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import { Button, Form } from '@douyinfe/semi-ui';
+import { Button, Form, Select } from '@douyinfe/semi-ui';
 import { IconSearch } from '@douyinfe/semi-icons';
 
 import { DATE_RANGE_PRESETS } from '../../../constants/console.constants';
@@ -29,6 +29,9 @@ const LogsFilters = ({
   refresh,
   setShowColumnSelector,
   resetFilters,
+  timeRange,
+  handleTimeModeChange,
+  handleDateRangeChange,
   loading,
   isAdminUser,
   t,
@@ -37,7 +40,7 @@ const LogsFilters = ({
     <Form
       initValues={formInitValues}
       getFormApi={(api) => setFormApi(api)}
-      onSubmit={refresh}
+      onSubmit={() => refresh()}
       allowEmpty={true}
       autoComplete='off'
       layout='vertical'
@@ -47,7 +50,29 @@ const LogsFilters = ({
       <div className='flex flex-col gap-2'>
         <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2'>
           {/* 时间选择器 */}
-          <div className='col-span-1 lg:col-span-2'>
+          <div className='col-span-1 lg:col-span-2 flex flex-col sm:flex-row gap-2 min-w-0'>
+            <Select
+              aria-label={t('时间范围')}
+              size='small'
+              className='w-full sm:w-44 shrink-0'
+              value={
+                timeRange.timeMode === 'recent'
+                  ? String(timeRange.recentHours)
+                  : timeRange.timeMode
+              }
+              onChange={(value) => handleTimeModeChange(value)}
+              optionList={[
+                { value: 'today', label: t('今天') },
+                { value: 'fixed', label: t('自定义时间') },
+                ...Array.from({ length: 24 }, (_, index) => ({
+                  value: String(index + 1),
+                  label:
+                    index === 0
+                      ? t('最近 1 小时')
+                      : t('最近 {{hours}} 小时', { hours: index + 1 }),
+                })),
+              ]}
+            />
             <Form.DatePicker
               field='dateRange'
               className='w-full'
@@ -58,21 +83,14 @@ const LogsFilters = ({
               size='small'
               presets={DATE_RANGE_PRESETS.map((preset) => ({
                 text: t(preset.text),
-                start: preset.start(),
-                end: preset.end(),
+                start: preset.start,
+                end: preset.text === '今天' ? () => new Date() : preset.end,
+                timeMode: preset.text === '今天' ? 'today' : 'fixed',
               }))}
-              onChange={(value) => {
-                if (
-                  !value ||
-                  (Array.isArray(value) &&
-                    (value.length === 0 ||
-                      (value.length === 2 && value.every(Boolean))))
-                ) {
-                  setTimeout(() => {
-                    refresh();
-                  }, 0);
-                }
-              }}
+              onPresetClick={(preset) =>
+                handleTimeModeChange(preset.timeMode, false)
+              }
+              onChange={handleDateRangeChange}
             />
           </div>
 

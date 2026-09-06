@@ -16,7 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { api, type ApiRequestConfig } from '@/lib/api'
+import { isAxiosError } from 'axios'
+import { t } from 'i18next'
+import { toast } from 'sonner'
+
+import { api } from '@/lib/api'
 
 import { buildQueryParams } from './lib/query-params'
 import type {
@@ -33,9 +37,29 @@ import type {
 // Generic API Helpers
 // ============================================================================
 
-const suppressErrorToastConfig: ApiRequestConfig = {
-  skipBusinessError: true,
-  skipErrorHandler: true,
+async function requestLogData<T>(
+  url: string,
+  silent: boolean,
+  signal?: AbortSignal
+): Promise<T> {
+  try {
+    const response = await api.get<T>(url, {
+      timeout: 15000,
+      signal,
+      disableDuplicate: true,
+      skipBusinessError: silent,
+      skipErrorHandler: true,
+    })
+    return response.data
+  } catch (error) {
+    if (!silent && !signal?.aborted) {
+      const message = isAxiosError(error)
+        ? error.response?.data?.message || error.message
+        : t('Request failed')
+      toast.error(message)
+    }
+    throw error
+  }
 }
 
 function buildApiPath(endpoint: string, isAdmin: boolean): string {
@@ -46,7 +70,8 @@ async function fetchLogs<T>(
   endpoint: string,
   params: T,
   isAdmin: boolean,
-  suppressErrorToast = false
+  suppressErrorToast = false,
+  signal?: AbortSignal
 ): Promise<GetLogsResponse> {
   const paramRecord = params as unknown as Record<string, unknown>
   const queryParams = buildQueryParams({
@@ -55,28 +80,29 @@ async function fetchLogs<T>(
     ...params,
   })
   const path = buildApiPath(endpoint, isAdmin)
-  const res = await api.get(
+  return requestLogData<GetLogsResponse>(
     `${path}?${queryParams}`,
-    suppressErrorToast ? suppressErrorToastConfig : undefined
+    suppressErrorToast,
+    signal
   )
-  return res.data
 }
 
 async function fetchLogStats<T>(
   endpoint: string,
   params: T,
   isAdmin: boolean,
-  suppressErrorToast = false
+  suppressErrorToast = false,
+  signal?: AbortSignal
 ): Promise<GetLogStatsResponse> {
   const queryParams = buildQueryParams(
     params as unknown as Record<string, unknown>
   )
   const path = buildApiPath(endpoint, isAdmin)
-  const res = await api.get(
+  return requestLogData<GetLogStatsResponse>(
     `${path}/stat?${queryParams}`,
-    suppressErrorToast ? suppressErrorToastConfig : undefined
+    suppressErrorToast,
+    signal
   )
-  return res.data
 }
 
 // ============================================================================
@@ -85,23 +111,27 @@ async function fetchLogStats<T>(
 
 export const getAllLogs = (
   params: GetLogsParams = {},
-  suppressErrorToast = false
-) => fetchLogs('/api/log', params, true, suppressErrorToast)
+  suppressErrorToast = false,
+  signal?: AbortSignal
+) => fetchLogs('/api/log', params, true, suppressErrorToast, signal)
 
 export const getUserLogs = (
   params: Omit<GetLogsParams, 'username' | 'channel'> = {},
-  suppressErrorToast = false
-) => fetchLogs('/api/log', params, false, suppressErrorToast)
+  suppressErrorToast = false,
+  signal?: AbortSignal
+) => fetchLogs('/api/log', params, false, suppressErrorToast, signal)
 
 export const getLogStats = (
   params: GetLogStatsParams = {},
-  suppressErrorToast = false
-) => fetchLogStats('/api/log', params, true, suppressErrorToast)
+  suppressErrorToast = false,
+  signal?: AbortSignal
+) => fetchLogStats('/api/log', params, true, suppressErrorToast, signal)
 
 export const getUserLogStats = (
   params: Omit<GetLogStatsParams, 'username' | 'channel'> = {},
-  suppressErrorToast = false
-) => fetchLogStats('/api/log', params, false, suppressErrorToast)
+  suppressErrorToast = false,
+  signal?: AbortSignal
+) => fetchLogStats('/api/log', params, false, suppressErrorToast, signal)
 
 export async function getUserInfo(
   userId: number
@@ -116,13 +146,15 @@ export async function getUserInfo(
 
 export const getAllMidjourneyLogs = (
   params: GetMidjourneyLogsParams,
-  suppressErrorToast = false
-) => fetchLogs('/api/mj', params, true, suppressErrorToast)
+  suppressErrorToast = false,
+  signal?: AbortSignal
+) => fetchLogs('/api/mj', params, true, suppressErrorToast, signal)
 
 export const getUserMidjourneyLogs = (
   params: GetMidjourneyLogsParams,
-  suppressErrorToast = false
-) => fetchLogs('/api/mj', params, false, suppressErrorToast)
+  suppressErrorToast = false,
+  signal?: AbortSignal
+) => fetchLogs('/api/mj', params, false, suppressErrorToast, signal)
 
 // ============================================================================
 // Task Logs API
@@ -130,10 +162,12 @@ export const getUserMidjourneyLogs = (
 
 export const getAllTaskLogs = (
   params: GetTaskLogsParams,
-  suppressErrorToast = false
-) => fetchLogs('/api/task', params, true, suppressErrorToast)
+  suppressErrorToast = false,
+  signal?: AbortSignal
+) => fetchLogs('/api/task', params, true, suppressErrorToast, signal)
 
 export const getUserTaskLogs = (
   params: GetTaskLogsParams,
-  suppressErrorToast = false
-) => fetchLogs('/api/task', params, false, suppressErrorToast)
+  suppressErrorToast = false,
+  signal?: AbortSignal
+) => fetchLogs('/api/task', params, false, suppressErrorToast, signal)

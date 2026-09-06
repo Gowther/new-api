@@ -41,7 +41,7 @@ import { useIsAdmin } from '@/hooks/use-admin'
 
 import { LOG_TYPE_ALL_VALUE, LOG_TYPE_FILTERS } from '../constants'
 import { buildSearchParams } from '../lib/filter'
-import { getDefaultTimeRange } from '../lib/utils'
+import { resolveLogTimeRange, type LogTimeRange } from '../lib/time-range'
 import type { CommonLogFilters } from '../types'
 import { CommonLogsStats } from './common-logs-stats'
 import { CompactDateTimeRangePicker } from './compact-date-time-range-picker'
@@ -80,6 +80,8 @@ function getLogTypeValue(value: unknown): LogTypeValue {
 }
 
 function buildSearchSourceKey(values: {
+  timeMode?: unknown
+  recentHours?: unknown
   startTime?: unknown
   endTime?: unknown
   channel?: unknown
@@ -92,6 +94,8 @@ function buildSearchSourceKey(values: {
   type?: unknown
 }) {
   return [
+    values.timeMode,
+    values.recentHours,
     values.startTime,
     values.endTime,
     values.channel,
@@ -123,8 +127,15 @@ export function CommonLogsFilterBar<TData>(
   const fetchingLogs = useIsFetching({ queryKey: ['logs'] })
 
   const searchState = useMemo<CommonLogDraft>(() => {
-    const { start, end } = getDefaultTimeRange()
+    const { start, end, timeMode, recentHours } = resolveLogTimeRange({
+      timeMode: searchParams.timeMode,
+      recentHours: searchParams.recentHours,
+      startTime: searchParams.startTime,
+      endTime: searchParams.endTime,
+    })
     const sourceValues = {
+      timeMode: searchParams.timeMode,
+      recentHours: searchParams.recentHours,
       startTime: searchParams.startTime,
       endTime: searchParams.endTime,
       channel: searchParams.channel,
@@ -137,10 +148,10 @@ export function CommonLogsFilterBar<TData>(
       type: searchParams.type,
     }
     const filters: CommonLogFilters = {
-      startTime: searchParams.startTime
-        ? new Date(searchParams.startTime)
-        : start,
-      endTime: searchParams.endTime ? new Date(searchParams.endTime) : end,
+      timeMode,
+      recentHours,
+      startTime: start,
+      endTime: end,
       channel: searchParams.channel || undefined,
       model: searchParams.model || undefined,
       token: searchParams.token || undefined,
@@ -155,6 +166,8 @@ export function CommonLogsFilterBar<TData>(
       logType: getLogTypeValue(searchParams.type),
     }
   }, [
+    searchParams.timeMode,
+    searchParams.recentHours,
     searchParams.startTime,
     searchParams.endTime,
     searchParams.channel,
@@ -210,9 +223,11 @@ export function CommonLogsFilterBar<TData>(
   }, [applyFilters, filters, logType])
 
   const handleDateRangeChange = useCallback(
-    (range: { start?: Date; end?: Date }) => {
+    (range: LogTimeRange) => {
       const nextFilters = {
         ...filters,
+        timeMode: range.timeMode,
+        recentHours: range.recentHours,
         startTime: range.start,
         endTime: range.end,
       }
@@ -227,12 +242,15 @@ export function CommonLogsFilterBar<TData>(
   )
 
   const handleReset = useCallback(() => {
-    const { start, end } = getDefaultTimeRange()
-    const resetFilters: CommonLogFilters = { startTime: start, endTime: end }
+    const { start, end } = resolveLogTimeRange({})
+    const resetFilters: CommonLogFilters = {
+      timeMode: 'today',
+      startTime: start,
+      endTime: end,
+    }
     const resetSearch = {
       type: [LOG_TYPE_ALL_VALUE],
-      startTime: start.getTime(),
-      endTime: end.getTime(),
+      timeMode: 'today' as const,
       filter: undefined,
       channel: undefined,
       model: undefined,
@@ -332,6 +350,8 @@ export function CommonLogsFilterBar<TData>(
       <CompactDateTimeRangePicker
         start={filters.startTime}
         end={filters.endTime}
+        timeMode={filters.timeMode}
+        recentHours={filters.recentHours}
         onChange={handleDateRangeChange}
       />
     </LogsFilterField>
@@ -473,7 +493,7 @@ export function CommonLogsFilterBar<TData>(
       }
       hasAdvancedActiveFilters={hasExpandedFilters}
       advancedFilterCount={expandedFilterCount}
-      hasActiveFilters={hasAdditionalFilters}
+      hasActiveFilters={hasAdditionalFilters || filters.timeMode !== 'today'}
       onSearch={handleApply}
       searchLoading={fetchingLogs > 0}
       onReset={handleReset}

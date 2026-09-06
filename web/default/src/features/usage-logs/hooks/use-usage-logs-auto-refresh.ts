@@ -16,34 +16,41 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect } from 'react'
+import { useEffect, useEffectEvent } from 'react'
 
 export function useUsageLogsAutoRefresh(
   autoRefreshSeconds: number,
   refresh: () => Promise<unknown>,
   isAutoRefreshingRef: { current: boolean }
 ) {
+  const onRefresh = useEffectEvent(refresh)
   useEffect(() => {
     if (autoRefreshSeconds <= 0) {
       return
     }
 
-    const timer = window.setInterval(() => {
+    let stopped = false
+    let timer: number
+    const tick = async () => {
       if (
-        document.visibilityState === 'hidden' ||
-        isAutoRefreshingRef.current
+        document.visibilityState !== 'hidden' &&
+        !isAutoRefreshingRef.current
       ) {
-        return
-      }
-
-      isAutoRefreshingRef.current = true
-      void refresh()
-        .catch(() => undefined)
-        .finally(() => {
+        isAutoRefreshingRef.current = true
+        try {
+          await onRefresh()
+        } catch {
+          // The next refresh can recover without discarding the displayed data.
+        } finally {
           isAutoRefreshingRef.current = false
-        })
-    }, autoRefreshSeconds * 1000)
-
-    return () => window.clearInterval(timer)
-  }, [autoRefreshSeconds, isAutoRefreshingRef, refresh])
+        }
+      }
+      if (!stopped) timer = window.setTimeout(tick, autoRefreshSeconds * 1000)
+    }
+    timer = window.setTimeout(tick, autoRefreshSeconds * 1000)
+    return () => {
+      stopped = true
+      window.clearTimeout(timer)
+    }
+  }, [autoRefreshSeconds, isAutoRefreshingRef])
 }

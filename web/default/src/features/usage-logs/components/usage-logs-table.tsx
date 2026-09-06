@@ -40,7 +40,7 @@ import {
 import { useUsageLogsAutoRefresh } from '../hooks/use-usage-logs-auto-refresh'
 import { useColumnsByCategory } from '../lib/columns'
 import { parseLogOther } from '../lib/format'
-import { fetchLogsByCategory, getDefaultTimeRange } from '../lib/utils'
+import { fetchLogsByCategory } from '../lib/utils'
 import type { LogCategory } from '../types'
 import { CommonLogsFilterBar } from './common-logs-filter-bar'
 import { TaskLogsFilterBar } from './task-logs-filter-bar'
@@ -137,7 +137,8 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       searchParams,
       t,
     ],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
+      const silent = autoRefreshingRef.current
       const result = await fetchLogsByCategory({
         logCategory,
         isAdmin,
@@ -145,11 +146,12 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
         pageSize: pagination.pageSize,
         searchParams,
         columnFilters,
-        suppressErrorToast: autoRefreshingRef.current,
+        suppressErrorToast: silent,
+        signal,
       })
 
       if (!result?.success) {
-        if (autoRefreshingRef.current) {
+        if (silent) {
           throw new Error(result?.message)
         }
         return DEFAULT_LOGS_DATA
@@ -157,6 +159,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
 
       return result.data || DEFAULT_LOGS_DATA
     },
+    retry: false,
     placeholderData: (previousData, previousQuery) => {
       if (previousQuery?.queryKey[1] === logCategory) {
         return previousData
@@ -165,31 +168,26 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
     },
   })
 
-  const refreshTimeRange = useCallback(async () => {
-    const { start, end } = getDefaultTimeRange()
-
-    await navigate({
-      to: '/usage-logs/$section',
-      params: { section: logCategory },
-      replace: true,
-      search: (previous) => ({
-        ...previous,
-        startTime: start.getTime(),
-        endTime: end.getTime(),
-      }),
-    })
-
+  const refreshLogs = useCallback(async () => {
+    if (
+      queryClient.isFetching({ queryKey: ['logs'] }) ||
+      queryClient.isFetching({ queryKey: ['usage-logs-stats'] })
+    ) {
+      return
+    }
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['logs'] }),
-      queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] }),
+      queryClient.invalidateQueries(
+        { queryKey: ['logs'] },
+        { cancelRefetch: false }
+      ),
+      queryClient.invalidateQueries(
+        { queryKey: ['usage-logs-stats'] },
+        { cancelRefetch: false }
+      ),
     ])
-  }, [logCategory, navigate, queryClient])
+  }, [queryClient])
 
-  useUsageLogsAutoRefresh(
-    autoRefreshSeconds,
-    refreshTimeRange,
-    autoRefreshingRef
-  )
+  useUsageLogsAutoRefresh(autoRefreshSeconds, refreshLogs, autoRefreshingRef)
 
   const logs = data?.items || []
   const columns = useColumnsByCategory(logCategory, isAdmin)

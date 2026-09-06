@@ -56,7 +56,8 @@ export function CommonLogsStats() {
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ['usage-logs-stats', isAdmin, searchParams],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
+      const silent = autoRefreshingRef.current
       const params = buildApiParams({
         page: 1,
         pageSize: 1,
@@ -66,10 +67,10 @@ export function CommonLogsStats() {
       })
 
       const result = isAdmin
-        ? await getLogStats(params, autoRefreshingRef.current)
-        : await getUserLogStats(params, autoRefreshingRef.current)
+        ? await getLogStats(params, silent, signal)
+        : await getUserLogStats(params, silent, signal)
 
-      if (!result.success && autoRefreshingRef.current) {
+      if (!result.success && silent) {
         throw new Error(result.message)
       }
 
@@ -77,6 +78,7 @@ export function CommonLogsStats() {
         ? result.data || DEFAULT_LOG_STATS
         : DEFAULT_LOG_STATS
     },
+    retry: false,
     placeholderData: (previousData) => previousData,
   })
 
@@ -104,7 +106,8 @@ export function CommonLogsStats() {
   } else if (totalCount > 0) {
     successRate = Math.min(100, (successCount / totalCount) * 100)
   }
-  const successRateText = totalCount > 0 ? `${Number(successRate.toFixed(1))}%` : '-'
+  const successRateText =
+    totalCount > 0 ? `${Number(successRate.toFixed(1))}%` : '-'
 
   return (
     <div className='flex flex-wrap items-center gap-2'>

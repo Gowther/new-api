@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Linux.do → new-api 渠道提取器
 // @namespace    https://linux.do/
-// @version      0.3.9
+// @version      0.3.10
 // @description  解析 linux.do 楼层里的 API 地址与密钥（明文 / Base64 / 多重 Base64 / URL-safe / URL+Key 合并编码 / JSON 配置 / 仅密钥官方直连），一键复制成 new-api「添加渠道」可识别的剪贴板配置
 // @author       shiki
 // @match        https://linux.do/*
@@ -27,10 +27,11 @@
  *    预设可以在面板里增删改，存在本地。想手打就选「— 手动填写 —」，选它不会清掉已填的值。
  *    注意同一个 key 可能对应多条地址，光看 key 分不出来，得知道对方发的是哪个套餐。
  *    OpenCode 就是这样：Zen（按量）和 Go（$10/月）共用一个 key，但网关和模型集不同。
+ *    标题含 OpenCode 且正文没有提取到地址时，自动选 OpenCode Go 预设；仍可手动改选。
  * 3. 回 new-api 打开「添加渠道」，顶部会提示「检测到剪贴板中的连接信息」，点「自动填入」，
  *    API 地址、密钥、名称、备注一次填好。
  * 4. 面板顶部可以存自己的站点基础地址，「复制并打开」直接打开该站点（去「添加渠道」粘配置）。
- *    备注类型（newapi 旧版 / 新版 / sub2api）决定备注第 3 行上游使用日志地址的后缀。
+ *    备注类型（默认 newapi 旧版，可选新版 / sub2api）决定备注第 3 行上游使用日志地址的后缀。
  *
  * 兼容性注意：脚本刻意不使用正则后行断言 (?<!...)。它在 Safari < 16.4 和部分
  * 脚本管理器内核上是解析期 SyntaxError，会导致整个脚本一行都不执行、且没有任何
@@ -56,7 +57,7 @@
  *     徽标写「已拼合换行」。拼合后被截断的那半截前缀不会再当成一条独立密钥
  *   · 只给密钥、地址省略走官方：仅当前缀能确定厂商时才填官方地址并标记「官方直连」。
  *     认得出的（sk-ant- / sk-proj- / AIza / xai- …）直接给地址；认不出厂商的裸密钥
- *     （OpenCode 的 sk- 加 64 位、各中转站）地址一律留空，不猜 —— 猜错的地址比空地址难查
+ *     （OpenCode 的 sk- 加 64 位、各中转站）按前缀仍留空；仅标题含 OpenCode 且正文缺地址时补 Go 预设
  *   · 站内自建中转 hub.linux.do：密钥形如 ah- 加 64 位十六进制。这个前缀在 new-api 里
  *     没有对应渠道类型，地址留空会让 new-api 拿默认渠道类型的官方地址去请求，等于把
  *     密钥发给不相干的上游，所以地址由脚本按前缀补上，徽标写「已补网关地址」。
@@ -744,7 +745,7 @@
 
     /**
      * 分析一层楼。
-     * @param {{text:string, codeBlocks?:string[], linkUrls?:string[]}} post
+     * @param {{text:string, title?:string, codeBlocks?:string[], linkUrls?:string[]}} post
      * @returns {{url:string,key:string,method:string,official:boolean,vendor:string}[]}
      */
     function analyzePost(post) {
@@ -765,6 +766,8 @@
         merge(analyzeText(block, []));
       }
       merge(analyzeText(post.text || '', post.linkUrls));
+
+      const titleUrl = pool.length || raw.some((r) => r.url) ? '' : inferBaseUrlFromTitle(post.title);
 
       /*
        * 干扰字把密钥切成了几段，其中够长的那段自己也像个 token，会被当成独立密钥收进来
@@ -822,6 +825,9 @@
           if (best) url = best.url;
         }
 
+        const titleFilled = !url && !!titleUrl;
+        if (titleFilled) url = titleUrl;
+
         const official = !url && !!hint && !!hint.official;
         // 地址是脚本按前缀补的、不是帖子里写的，徽标要说出来，好让人核对
         const gatewayFilled = !r.url && !!hint && !!hint.gateway && url === hint.gateway;
@@ -838,9 +844,11 @@
             (split ? ' · 已拼合换行' : '') +
             (noise ? ' · 已剔干扰字' : '') +
             (official ? ' · 官方直连' : '') +
-            (gatewayFilled ? ' · 已补网关地址' : ''),
+            (gatewayFilled ? ' · 已补网关地址' : '') +
+            (titleFilled ? ' · 标题匹配 OpenCode Go' : ''),
           official,
-          vendor: hint ? hint.vendor : '',
+          titleFilled,
+          vendor: titleFilled ? 'OpenCode Go' : hint ? hint.vendor : '',
           // 剔掉的干扰字，界面上要能看到剔了什么，好让人核对
           noise,
           split,
@@ -968,15 +976,16 @@
      *   Go （$10/月订阅）https://opencode.ai/zen/go  → 官方 /zen/go/v1
      * Go 是挂在 zen 下面的独立网关，不是笔误：两边模型集不一样（Go 只有开源系那几十个，
      * 有一半 Zen 没有），但共用同一个 OPENCODE_API_KEY。所以光看 key 认不出该用哪条，
-     * 只能让人自己选 —— 这也是这个下拉存在的理由。
+     * 默认由人自己选；标题明确含 OpenCode 且正文没有地址时，按用户偏好补 Go。
      */
+    const OPENCODE_GO_URL = 'https://opencode.ai/zen/go';
     const DEFAULT_URL_PRESETS = [
       { name: 'OpenAI', url: 'https://api.openai.com' },
       { name: 'Anthropic', url: 'https://api.anthropic.com' },
       { name: 'Gemini', url: 'https://generativelanguage.googleapis.com' },
       { name: 'OpenRouter', url: 'https://openrouter.ai/api' },
       { name: 'OpenCode Zen', url: 'https://opencode.ai/zen' },
-      { name: 'OpenCode Go', url: 'https://opencode.ai/zen/go' },
+      { name: 'OpenCode Go', url: OPENCODE_GO_URL },
       { name: 'xAI', url: 'https://api.x.ai' },
       { name: 'Groq', url: 'https://api.groq.com/openai' },
       { name: 'DeepSeek', url: 'https://api.deepseek.com' },
@@ -986,6 +995,10 @@
       { name: 'HuggingFace', url: 'https://api-inference.huggingface.co' },
       { name: 'LinuxDo Hub', url: 'https://hub.linux.do' },
     ];
+
+    function inferBaseUrlFromTitle(title) {
+      return /open[\s_-]*code/i.test(String(title || '')) ? OPENCODE_GO_URL : '';
+    }
 
     /** 一行一条「名称|地址」；只写地址就拿域名当名称。空行和 # 注释跳过 */
     function parsePresets(text) {
@@ -1038,7 +1051,7 @@
       { id: 'newapi-default', label: 'newapi（新版）', path: '/usage-logs/common' },
       { id: 'sub2api', label: 'sub2api', path: '/usage' },
     ];
-    const DEFAULT_REMARK_LINK_TYPE = 'newapi-default';
+    const DEFAULT_REMARK_LINK_TYPE = 'newapi-classic';
 
     function remarkLinkType(raw) {
       const value = String(raw || '').trim();
@@ -1098,7 +1111,7 @@
       parseJsonMaybe, standaloneToken, firstTokenAfterUrls,
       evaluateLayer, analyzeB64Token, analyzeText, analyzePost,
       DECODE_METHODS, decodeWith, decodeLayers, aesDecrypt,
-      DEFAULT_URL_PRESETS, parsePresets, serializePresets,
+      DEFAULT_URL_PRESETS, parsePresets, serializePresets, inferBaseUrlFromTitle,
       REMARK_LINK_TYPES, remarkLinkType,
       activityUrl, buildRemark, buildName, buildChannelJson,
     };
@@ -1117,7 +1130,7 @@
   /* ═══════════════════════════════ 页面部分 ═══════════════════════════════ */
 
   const TAG = '[ld→newapi]';
-  const VERSION = '0.3.9'; // 与文件头 @version 保持一致
+  const VERSION = '0.3.10'; // 与文件头 @version 保持一致
   const LS_TARGET = 'ld-napi-target-url';
   const LS_TARGET_TYPE = 'ld-napi-target-type';
   const LS_PRESETS = 'ld-napi-url-presets';
@@ -1255,7 +1268,7 @@
         .map((el) => (el.textContent || '').trim())
         .filter((s) => s && s.length < 8000);
       const linkUrls = [...post.cooked.querySelectorAll('a[href]')].map((a) => a.getAttribute('href'));
-      for (const f of CORE.analyzePost({ text, codeBlocks, linkUrls })) {
+      for (const f of CORE.analyzePost({ text, title, codeBlocks, linkUrls })) {
         records.push({ ...f, floor: post.floor, username: post.username });
       }
       for (const u of CORE.extractUrls(text)) {
@@ -1536,12 +1549,18 @@
         urlInput.value = '';
         keyInput.value = '';
       } else {
-        urlInput.value = res.url || '';
+        const gateway = CORE.keyPrefixHint(res.key)?.gateway || '';
+        const hasPostUrl = state.postUrls.length || state.records.some((item) => item.url && !item.titleFilled);
+        const titleUrl = !res.url && !gateway && res.key && !hasPostUrl
+          ? CORE.inferBaseUrlFromTitle(state.title)
+          : '';
+        urlInput.value = res.url || gateway || titleUrl;
         keyInput.value = res.key || '';
         // 剔了干扰字、拼了换行都要说出来，否则用户没法核对密钥是不是被动坏了
         const parts = [];
         if (res.split) parts.push('已拼合分行的前缀');
         if (res.noise) parts.push('已剔除干扰字「' + res.noise + '」');
+        if (titleUrl) parts.push('标题匹配 OpenCode Go');
         if (res.plain && res.plain !== rawInput.value.trim()) parts.push('明文：' + res.plain.slice(0, 120));
         hint.textContent = parts.join('　');
         hint.className = 'ld-napi-hint';
@@ -1552,6 +1571,7 @@
         if (res.noise) tips.push('已剔除干扰字：' + res.noise);
         badge.title = tips.join('\n');
       }
+      syncUrlSel();
       syncPreview();
     };
 

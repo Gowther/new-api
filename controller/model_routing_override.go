@@ -175,18 +175,7 @@ func SetModelRoutingOverride(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	releasedChannelIDs := make([]string, 0, len(result.Conflicts))
-	for _, conflict := range result.Conflicts {
-		releasedChannelIDs = append(releasedChannelIDs, strconv.Itoa(conflict.ChannelId))
-	}
-	recordManageAudit(c, "channel.routing_override_set", map[string]interface{}{
-		"channel_id":        response.ChannelId,
-		"channel_name":      response.ChannelName,
-		"models":            strings.Join(response.Models, ","),
-		"model_count":       response.ModelCount,
-		"groups":            strings.Join(response.Groups, ","),
-		"released_channels": strings.Join(releasedChannelIDs, ","),
-	})
+	recordChannelRoutingOverrideAudit(c, response, result.Conflicts)
 	allOverrides, err := model.GetAllModelRoutingOverrides()
 	if err != nil {
 		common.ApiError(c, err)
@@ -198,6 +187,21 @@ func SetModelRoutingOverride(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, responses)
+}
+
+func recordChannelRoutingOverrideAudit(c *gin.Context, response modelRoutingOverrideResponse, conflicts []model.ModelRoutingOverrideConflict) {
+	releasedChannelIDs := make([]string, 0, len(conflicts))
+	for _, conflict := range conflicts {
+		releasedChannelIDs = append(releasedChannelIDs, strconv.Itoa(conflict.ChannelId))
+	}
+	recordManageAudit(c, "channel.routing_override_set", map[string]interface{}{
+		"channel_id":        response.ChannelId,
+		"channel_name":      response.ChannelName,
+		"models":            strings.Join(response.Models, ","),
+		"model_count":       response.ModelCount,
+		"groups":            strings.Join(response.Groups, ","),
+		"released_channels": strings.Join(releasedChannelIDs, ","),
+	})
 }
 
 func DeleteModelRoutingOverride(c *gin.Context) {

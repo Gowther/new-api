@@ -4215,7 +4215,11 @@
     "默认折叠侧边栏": "Default collapse sidebar",
     "默认测试模型": "Default Test Model",
     "默认用户消息": "Default User Message",
-    "默认补全倍率": "Default completion ratio"
+    "默认补全倍率": "Default completion ratio",
+    "Temporary single-channel mode": "Temporary single-channel mode",
+    "Temporary mode requires one enabled channel": "Temporary mode requires one enabled channel",
+    "Enable temporary single-channel mode?": "Enable temporary single-channel mode?",
+    "Replace and enable": "Replace and enable"
   },
   "已保存官方价格预览失败": "Failed to preview saved official prices",
   "查看官方价格变更": "Review official price changes",

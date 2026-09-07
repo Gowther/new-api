@@ -27,7 +27,11 @@ import {
 } from '@/lib/admin-permissions'
 import { useAuthStore } from '@/stores/auth-store'
 
-import { createChannel, updateChannel } from '../api'
+import {
+  createChannel,
+  updateChannel,
+  type ModelRoutingOverrideConflict,
+} from '../api'
 import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
 import {
   transformFormDataToCreatePayload,
@@ -42,6 +46,9 @@ type UseChannelMutateFormParams = {
   isMultiKeyChannel: boolean
   /** Receives the submitted values so callers can act on what was just saved. */
   onSuccess: (values: ChannelFormValues) => void
+  confirmRoutingConflicts: (
+    conflicts: ModelRoutingOverrideConflict[]
+  ) => Promise<boolean>
 }
 
 const SENSITIVE_UPDATE_FIELDS = [
@@ -91,7 +98,7 @@ export function useChannelMutateForm(props: UseChannelMutateFormParams) {
   )
 
   return useMutation({
-    mutationFn: async (data: ChannelFormValues): Promise<string> => {
+    mutationFn: async (data: ChannelFormValues): Promise<string | null> => {
       if (props.isEditing && props.currentRow) {
         const payload = transformFormDataToUpdatePayload(
           data,
@@ -127,13 +134,25 @@ export function useChannelMutateForm(props: UseChannelMutateFormParams) {
       }
 
       const payload = transformFormDataToCreatePayload(data)
-      const response = await createChannel(payload)
+      let response = await createChannel(payload)
+      if (
+        !response.success &&
+        payload.enable_routing_override &&
+        response.conflicts?.length
+      ) {
+        const confirmed = await props.confirmRoutingConflicts(
+          response.conflicts
+        )
+        if (!confirmed) return null
+        response = await createChannel({ ...payload, replace_conflicts: true })
+      }
       if (!response.success) {
         throw new Error(response.message || t(ERROR_MESSAGES.CREATE_FAILED))
       }
       return SUCCESS_MESSAGES.CREATED
     },
     onSuccess: (messageKey, values) => {
+      if (messageKey === null) return
       toast.success(t(messageKey))
       props.onSuccess(values)
     },

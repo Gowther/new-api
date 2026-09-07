@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -10,6 +11,56 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
+
+func TestCreateChannelWithRoutingOverrideRollsBackFailedReplacement(t *testing.T) {
+	db := setupModelRoutingOverrideTestDB(t)
+	existing := createRoutingTestChannel(t, db, 1, "shared,existing-only", "default")
+	originalOverrides := enableRoutingOverride(t, existing.Id)
+	failure := errors.New("routing write failed")
+	require.NoError(t, db.Callback().Create().Before("gorm:create").Register("fail_routing_write", func(tx *gorm.DB) {
+		if tx.Statement.Schema != nil && tx.Statement.Schema.Name == "ModelRoutingOverride" {
+			tx.AddError(failure)
+		}
+	}))
+	t.Cleanup(func() { require.NoError(t, db.Callback().Create().Remove("fail_routing_write")) })
+
+	result, err := CreateChannelWithRoutingOverride(&Channel{
+		Name: "replacement", Key: "test-key", Models: "shared", Group: "default",
+		Status: common.ChannelStatusEnabled,
+	}, true)
+	require.ErrorIs(t, err, failure)
+	assert.False(t, result.Applied)
+	var channels []Channel
+	require.NoError(t, db.Find(&channels).Error)
+	assert.Len(t, channels, 1)
+	var abilities []Ability
+	require.NoError(t, db.Find(&abilities).Error)
+	assert.Len(t, abilities, 2)
+	overrides, err := GetAllModelRoutingOverrides()
+	require.NoError(t, err)
+	assert.Equal(t, originalOverrides, overrides)
+}
+
+func TestCreateChannelWithRoutingOverrideRefreshesCachedTarget(t *testing.T) {
+	db := setupModelRoutingOverrideTestDB(t)
+	common.MemoryCacheEnabled = true
+	existing := createRoutingTestChannel(t, db, 1, "shared,existing-only", "default")
+	enableRoutingOverride(t, existing.Id)
+	created := Channel{
+		Name: "replacement", Key: "test-key", Models: "shared", Group: "default",
+		Status: common.ChannelStatusEnabled,
+	}
+	result, err := CreateChannelWithRoutingOverride(&created, true)
+	require.NoError(t, err)
+	require.True(t, result.Applied)
+	targetID, found, err := GetModelRoutingOverrideTarget("shared")
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, created.Id, targetID)
+	_, found, err = GetModelRoutingOverrideTarget("existing-only")
+	require.NoError(t, err)
+	assert.False(t, found)
+}
 
 func setupModelRoutingOverrideTestDB(t *testing.T) *gorm.DB {
 	t.Helper()

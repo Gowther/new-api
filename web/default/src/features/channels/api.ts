@@ -268,9 +268,11 @@ export async function previewChannelQuickMappings(
  * Create new channel(s)
  * Supports single, batch, and multi-key modes
  */
-export async function createChannel(
-  data: AddChannelRequest
-): Promise<{ success: boolean; message?: string }> {
+export async function createChannel(data: AddChannelRequest): Promise<{
+  success: boolean
+  message?: string
+  conflicts?: ModelRoutingOverrideConflict[]
+}> {
   const res = await api.post('/api/channel', data, channelActionConfig())
   return res.data
 }

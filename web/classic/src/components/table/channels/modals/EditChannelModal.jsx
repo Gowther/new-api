@@ -82,6 +82,7 @@ import {
   checkChannelModelOverlap,
   confirmModelOverlap,
 } from '../modelOverlapCheck';
+import { renderRoutingOverrideConflicts } from '../routingOverrideConflicts';
 import { useSecureVerification } from '../../../../hooks/common/useSecureVerification';
 import { parseChannelConnectionString } from '../../../../helpers/token';
 import { reconcileModelsForMapping } from '../../../../helpers/modelMapping';
@@ -352,8 +353,8 @@ function isOfficialClientPassthroughEnabled(values) {
   const headerOverride = parseHeaderOverride(values.header_override);
   return Boolean(
     headerOverride &&
-    Object.hasOwn(headerOverride, '*') &&
-    values.automatic_channel_test_disabled,
+      Object.hasOwn(headerOverride, '*') &&
+      values.automatic_channel_test_disabled,
   );
 }
 
@@ -376,8 +377,11 @@ const EditChannelModal = (props) => {
   const channelId = props.editingChannel.id;
   const isEdit = channelId !== undefined;
   const [loading, setLoading] = useState(isEdit);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [enableRoutingOverride, setEnableRoutingOverride] = useState(false);
   const isMobile = useIsMobile();
   const handleCancel = () => {
+    if (isSubmitting) return;
     props.handleClose();
   };
   const originInputs = {
@@ -1940,6 +1944,7 @@ const EditChannelModal = (props) => {
   // 统一的模态框重置函数
   const resetModalState = () => {
     resolveStatusCodeRiskConfirm(false);
+    setEnableRoutingOverride(false);
     formApiRef.current?.reset();
     // 重置渠道设置状态
     setChannelSettings({
@@ -2182,6 +2187,7 @@ const EditChannelModal = (props) => {
   };
 
   const submit = async () => {
+    if (isSubmitting) return;
     const formValues = formApiRef.current ? formApiRef.current.getValues() : {};
     let localInputs = { ...formValues };
     localInputs.param_override = inputs.param_override;
@@ -2632,25 +2638,56 @@ const EditChannelModal = (props) => {
       return;
     }
 
-    if (isEdit) {
-      res = await API.put(`/api/channel/`, {
-        ...localInputs,
-        id: parseInt(channelId),
-        key_mode: isMultiKeyChannel ? keyMode : undefined, // 只在多key模式下传递
-      });
-    } else {
-      res = await API.post(`/api/channel/`, {
-        mode: mode,
-        multi_key_mode: mode === 'multi_to_single' ? multiKeyMode : undefined,
-        split_by_model_vendor: splitByModelVendor,
-        selected_model_vendor_ids: splitByModelVendor
-          ? submitSelectedModelVendorIds
-          : undefined,
-        channel: localInputs,
-      });
-    }
-    const { success, message } = res.data;
-    if (success) {
+    setIsSubmitting(true);
+    try {
+      if (isEdit) {
+        res = await API.put(`/api/channel/`, {
+          ...localInputs,
+          id: parseInt(channelId),
+          key_mode: isMultiKeyChannel ? keyMode : undefined,
+        });
+      } else {
+        const payload = {
+          mode,
+          multi_key_mode: mode === 'multi_to_single' ? multiKeyMode : undefined,
+          split_by_model_vendor: splitByModelVendor,
+          selected_model_vendor_ids: splitByModelVendor
+            ? submitSelectedModelVendorIds
+            : undefined,
+          enable_routing_override:
+            enableRoutingOverride && mode !== 'batch' && !splitByModelVendor,
+          channel: localInputs,
+        };
+        res = await API.post('/api/channel/', payload);
+        if (
+          !res.data.success &&
+          payload.enable_routing_override &&
+          res.data.conflicts?.length
+        ) {
+          const confirmed = await new Promise((resolve) => {
+            Modal.confirm({
+              title: t('Enable temporary single-channel mode?'),
+              width: 'min(520px, calc(100vw - 32px))',
+              content: renderRoutingOverrideConflicts(res.data.conflicts, t),
+              okText: t('Replace and enable'),
+              okButtonProps: { type: 'danger' },
+              cancelText: t('取消'),
+              onOk: () => resolve(true),
+              onCancel: () => resolve(false),
+            });
+          });
+          if (!confirmed) return;
+          res = await API.post('/api/channel/', {
+            ...payload,
+            replace_conflicts: true,
+          });
+        }
+      }
+      const { success, message } = res.data;
+      if (!success) {
+        showError(message);
+        return;
+      }
       if (isEdit) {
         showSuccess(t('渠道更新成功！'));
       } else {
@@ -2671,8 +2708,10 @@ const EditChannelModal = (props) => {
       }
       props.refresh();
       props.handleClose();
-    } else {
-      showError(message);
+    } catch (error) {
+      showError(error?.message || t('操作失败'));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -2968,9 +3007,39 @@ const EditChannelModal = (props) => {
         visible={props.visible}
         width={isMobile ? '100%' : 600}
         footer={
-          <div className='flex justify-end items-center gap-2'>
+          <div className='flex flex-wrap justify-end items-center gap-2'>
+            {!isEdit && (
+              <div
+                className='mr-auto min-w-0 basis-full sm:basis-auto'
+                title={
+                  (batch && !multiToSingle) || splitByModelVendor
+                    ? t('Temporary mode requires one enabled channel')
+                    : undefined
+                }
+              >
+                <Checkbox
+                  checked={
+                    enableRoutingOverride &&
+                    (!batch || multiToSingle) &&
+                    !splitByModelVendor
+                  }
+                  disabled={
+                    isSubmitting ||
+                    (batch && !multiToSingle) ||
+                    splitByModelVendor
+                  }
+                  onChange={(event) =>
+                    setEnableRoutingOverride(event.target.checked)
+                  }
+                >
+                  {t('Temporary single-channel mode')}
+                </Checkbox>
+              </div>
+            )}
             <Button
               theme='solid'
+              loading={isSubmitting}
+              disabled={isSubmitting}
               onClick={() => formApiRef.current?.submitForm()}
               icon={<IconSave />}
             >
@@ -2979,6 +3048,7 @@ const EditChannelModal = (props) => {
             <Button
               theme='light'
               type='primary'
+              disabled={isSubmitting}
               onClick={handleCancel}
               icon={<IconClose />}
             >

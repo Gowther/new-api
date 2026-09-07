@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -636,6 +637,8 @@ type AddChannelRequest struct {
 	BatchAddSetKeyPrefix2Name bool                  `json:"batch_add_set_key_prefix_2_name"`
 	SplitByModelVendor        bool                  `json:"split_by_model_vendor"`
 	SelectedModelVendorIDs    []int                 `json:"selected_model_vendor_ids"`
+	EnableRoutingOverride     bool                  `json:"enable_routing_override"`
+	ReplaceConflicts          bool                  `json:"replace_conflicts"`
 	Channel                   *model.Channel        `json:"channel"`
 }
 
@@ -676,6 +679,12 @@ func AddChannel(c *gin.Context) {
 	err := c.ShouldBindJSON(&addChannelRequest)
 	if err != nil {
 		common.ApiError(c, err)
+		return
+	}
+
+	if addChannelRequest.EnableRoutingOverride &&
+		!authz.Can(c.GetInt("id"), c.GetInt("role"), authz.ChannelWrite) {
+		common.ApiErrorI18n(c, i18n.MsgAuthInsufficientPrivilege)
 		return
 	}
 
@@ -767,7 +776,24 @@ func AddChannel(c *gin.Context) {
 		}
 		channels = append(channels, localChannel)
 	}
-	err = model.BatchInsertChannels(channels)
+	var routingResult model.ModelRoutingOverrideResult
+	if addChannelRequest.EnableRoutingOverride {
+		if len(channels) != 1 || addChannelRequest.Mode == "batch" || addChannelRequest.SplitByModelVendor {
+			common.ApiError(c, errors.New("temporary routing requires creating a single channel"))
+			return
+		}
+		routingResult, err = model.CreateChannelWithRoutingOverride(&channels[0], addChannelRequest.ReplaceConflicts)
+		if err == nil && !routingResult.Applied {
+			c.JSON(http.StatusOK, gin.H{
+				"success":   false,
+				"message":   model.ModelRoutingOverrideConflictError(routingResult.Conflicts).Error(),
+				"conflicts": routingResult.Conflicts,
+			})
+			return
+		}
+	} else {
+		err = model.BatchInsertChannels(channels)
+	}
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -778,6 +804,15 @@ func AddChannel(c *gin.Context) {
 		"type":  addChannelRequest.Channel.Type,
 		"count": len(channels),
 	})
+	if routingResult.Applied {
+		recordChannelRoutingOverrideAudit(c, modelRoutingOverrideResponse{
+			ChannelId:   channels[0].Id,
+			ChannelName: channels[0].Name,
+			Models:      channels[0].GetModels(),
+			ModelCount:  len(channels[0].GetModels()),
+			Groups:      strings.Split(channels[0].Group, ","),
+		}, routingResult.Conflicts)
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",

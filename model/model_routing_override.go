@@ -190,8 +190,8 @@ func sortModelRoutingOverrides(overrides []ModelRoutingOverride) {
 	})
 }
 
-func buildChannelModelRoutingOverrides(channelID int, enabledOnly bool) ([]ModelRoutingOverride, error) {
-	query := DB.Where("channel_id = ?", channelID)
+func buildChannelModelRoutingOverrides(db *gorm.DB, channelID int, enabledOnly bool) ([]ModelRoutingOverride, error) {
+	query := db.Where("channel_id = ?", channelID)
 	if enabledOnly {
 		query = query.Where("enabled = ?", true)
 	}
@@ -394,7 +394,7 @@ func migrateLegacyModelRoutingOverrides() error {
 		return err
 	}
 
-	normalized, err := buildChannelModelRoutingOverrides(targetChannelID, true)
+	normalized, err := buildChannelModelRoutingOverrides(DB, targetChannelID, true)
 	if err != nil {
 		if err := legacyQuery.Update("scope", modelRoutingOverrideScopeChannel).Error; err != nil {
 			return err
@@ -437,7 +437,7 @@ func buildEligibleChannelModelRoutingOverrides(channelID int) ([]ModelRoutingOve
 	if channel.Status != common.ChannelStatusEnabled {
 		return nil, errors.New("the target channel is disabled")
 	}
-	return buildChannelModelRoutingOverrides(channelID, true)
+	return buildChannelModelRoutingOverrides(DB, channelID, true)
 }
 
 // PreviewChannelModelRoutingOverrideConflicts reports the channels that enabling
@@ -466,37 +466,88 @@ func SetChannelModelRoutingOverride(channelID int, replaceConflicts bool) (Model
 	modelRoutingOverrideMutationLock.Lock()
 	defer modelRoutingOverrideMutationLock.Unlock()
 
-	var conflicts []ModelRoutingOverrideConflict
+	var result ModelRoutingOverrideResult
 	if err := DB.Transaction(func(tx *gorm.DB) error {
-		found, err := findModelRoutingOverrideConflicts(tx, channelID, overrides)
-		if err != nil {
-			return err
-		}
-		conflicts = found
-		if len(conflicts) > 0 {
-			if !replaceConflicts {
-				// Leave the decision to the caller; nothing is persisted.
-				return nil
-			}
-			releasedChannelIDs := make([]int, 0, len(conflicts))
-			for _, conflict := range conflicts {
-				releasedChannelIDs = append(releasedChannelIDs, conflict.ChannelId)
-			}
-			if _, err := deleteModelRoutingOverridesByChannelIDs(tx, releasedChannelIDs); err != nil {
-				return err
-			}
-		}
-		if err := tx.Where("channel_id = ?", channelID).Delete(&ModelRoutingOverride{}).Error; err != nil {
-			return err
-		}
-		return tx.Create(&overrides).Error
+		result, err = applyChannelModelRoutingOverride(tx, channelID, overrides, replaceConflicts)
+		return err
 	}); err != nil {
 		return ModelRoutingOverrideResult{}, err
 	}
-	if len(conflicts) > 0 && !replaceConflicts {
-		return ModelRoutingOverrideResult{Conflicts: conflicts}, nil
+	if !result.Applied {
+		return result, nil
 	}
 	if err := refreshModelRoutingOverrideCache(); err != nil {
+		return ModelRoutingOverrideResult{}, err
+	}
+	return result, nil
+}
+
+// CreateChannelWithRoutingOverride rolls back the channel and its abilities
+// when temporary routing cannot be enabled, including unconfirmed conflicts.
+func CreateChannelWithRoutingOverride(channel *Channel, replaceConflicts bool) (ModelRoutingOverrideResult, error) {
+	modelRoutingOverrideMutationLock.Lock()
+	defer modelRoutingOverrideMutationLock.Unlock()
+
+	var result ModelRoutingOverrideResult
+	unconfirmedConflict := errors.New("temporary routing replacement requires confirmation")
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(channel).Error; err != nil {
+			return err
+		}
+		if channel.Status != common.ChannelStatusEnabled {
+			return errors.New("the target channel is disabled")
+		}
+		if err := channel.AddAbilities(tx); err != nil {
+			return err
+		}
+		overrides, err := buildChannelModelRoutingOverrides(tx, channel.Id, true)
+		if err != nil {
+			return err
+		}
+		result, err = applyChannelModelRoutingOverride(tx, channel.Id, overrides, replaceConflicts)
+		if err != nil {
+			return err
+		}
+		if !result.Applied {
+			return unconfirmedConflict
+		}
+		return nil
+	})
+	if errors.Is(err, unconfirmedConflict) {
+		return result, nil
+	}
+	if err != nil {
+		return ModelRoutingOverrideResult{}, err
+	}
+	InitChannelCache()
+	if err := refreshModelRoutingOverrideCache(); err != nil {
+		// Creation already committed; reporting failure would invite duplicates.
+		common.SysError("failed to refresh temporary routing after channel creation: " + err.Error())
+	}
+	return result, nil
+}
+
+func applyChannelModelRoutingOverride(tx *gorm.DB, channelID int, overrides []ModelRoutingOverride, replaceConflicts bool) (ModelRoutingOverrideResult, error) {
+	conflicts, err := findModelRoutingOverrideConflicts(tx, channelID, overrides)
+	if err != nil {
+		return ModelRoutingOverrideResult{}, err
+	}
+	if len(conflicts) > 0 {
+		if !replaceConflicts {
+			return ModelRoutingOverrideResult{Conflicts: conflicts}, nil
+		}
+		releasedChannelIDs := make([]int, 0, len(conflicts))
+		for _, conflict := range conflicts {
+			releasedChannelIDs = append(releasedChannelIDs, conflict.ChannelId)
+		}
+		if _, err := deleteModelRoutingOverridesByChannelIDs(tx, releasedChannelIDs); err != nil {
+			return ModelRoutingOverrideResult{}, err
+		}
+	}
+	if err := tx.Where("channel_id = ?", channelID).Delete(&ModelRoutingOverride{}).Error; err != nil {
+		return ModelRoutingOverrideResult{}, err
+	}
+	if err := tx.Create(&overrides).Error; err != nil {
 		return ModelRoutingOverrideResult{}, err
 	}
 	return ModelRoutingOverrideResult{

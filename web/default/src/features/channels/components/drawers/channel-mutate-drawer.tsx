@@ -55,6 +55,7 @@ import { type SubmitErrorHandler, useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   sideDrawerContentClassName,
   sideDrawerFooterClassName,
@@ -69,6 +70,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Combobox } from '@/components/ui/combobox'
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import {
   Form,
   FormControl,
@@ -134,6 +136,7 @@ import {
   previewChannelModelMappings,
   previewChannelQuickMappings,
   refreshCodexCredential,
+  type ModelRoutingOverrideConflict,
 } from '../../api'
 import {
   ADD_MODE_OPTIONS,
@@ -202,6 +205,7 @@ import {
 import { ParamOverrideEditorDialog } from '../dialogs/param-override-editor-dialog'
 import { StatusCodeRiskDialog } from '../dialogs/status-code-risk-dialog'
 import { ModelMappingEditor } from '../model-mapping-editor'
+import { RoutingOverrideConflictNotice } from '../routing-override-conflict-notice'
 import {
   ChannelAdvancedSection,
   ChannelApiAccessSection,
@@ -629,6 +633,11 @@ export function ChannelMutateDrawer({
     ADMIN_PERMISSION_ACTIONS.SENSITIVE_WRITE
   )
   const canRevealChannelKey = currentUser?.role === ROLE.SUPER_ADMIN
+  const canEditRouting = hasPermission(
+    currentUser,
+    ADMIN_PERMISSION_RESOURCES.CHANNEL,
+    ADMIN_PERMISSION_ACTIONS.WRITE
+  )
   const [fetchModelsDialogOpen, setFetchModelsDialogOpen] = useState(false)
   const [modelMappingPreviewOpen, setModelMappingPreviewOpen] = useState(false)
   const [modelMappingPreview, setModelMappingPreview] =
@@ -676,6 +685,12 @@ export function ChannelMutateDrawer({
   const modelOverlapResolveRef = useRef<((confirmed: boolean) => void) | null>(
     null
   )
+  const [routingConflicts, setRoutingConflicts] = useState<
+    ModelRoutingOverrideConflict[]
+  >([])
+  const routingConflictResolveRef = useRef<
+    ((confirmed: boolean) => void) | null
+  >(null)
   const channelFormRef = useRef<HTMLFormElement>(null)
   const advancedNavScrollPendingRef = useRef(false)
   const [activeEditorSectionId, setActiveEditorSectionId] = useState<string>(
@@ -1772,6 +1787,11 @@ export function ChannelMutateDrawer({
         )
       }
       queryClient.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
+      if (!isEditing && values.enable_routing_override) {
+        queryClient.invalidateQueries({
+          queryKey: channelsQueryKeys.routingOverride(),
+        })
+      }
       queryClient.invalidateQueries({ queryKey: ['playground-models'] })
       queryClient.invalidateQueries({ queryKey: ['playground-model-channels'] })
       if (channelId) {
@@ -1988,11 +2008,30 @@ export function ChannelMutateDrawer({
     }
   }, [])
 
+  const resolveRoutingConflicts = useCallback((confirmed: boolean) => {
+    routingConflictResolveRef.current?.(confirmed)
+    routingConflictResolveRef.current = null
+    setRoutingConflicts([])
+  }, [])
+
+  useEffect(() => {
+    if (!open) resolveRoutingConflicts(false)
+    return () => {
+      routingConflictResolveRef.current?.(false)
+      routingConflictResolveRef.current = null
+    }
+  }, [open, resolveRoutingConflicts])
+
   const channelMutation = useChannelMutateForm({
     currentRow,
     isEditing,
     isMultiKeyChannel,
     onSuccess: handleSuccess,
+    confirmRoutingConflicts: (conflicts) =>
+      new Promise((resolve) => {
+        routingConflictResolveRef.current = resolve
+        setRoutingConflicts(conflicts)
+      }),
   })
 
   const isSubmitting =
@@ -2231,6 +2270,7 @@ export function ChannelMutateDrawer({
   // Handle drawer close
   const handleOpenChange = useCallback(
     (v: boolean) => {
+      if (!v && isSubmitting) return
       onOpenChange(v)
       if (!v) {
         form.reset(CHANNEL_FORM_DEFAULT_VALUES)
@@ -2240,7 +2280,7 @@ export function ChannelMutateDrawer({
         setAdvancedSettingsOpen(false)
       }
     },
-    [onOpenChange, form]
+    [onOpenChange, form, isSubmitting]
   )
 
   return (
@@ -5161,6 +5201,46 @@ export function ChannelMutateDrawer({
           </Form>
 
           <SheetFooter className={sideDrawerFooterClassName()}>
+            {!isEditing && canEditRouting && (
+              <FieldGroup className='col-span-2 min-w-0 sm:mr-auto sm:w-auto sm:flex-1'>
+                <Field
+                  orientation='horizontal'
+                  data-disabled={
+                    multiKeyMode === 'batch' ||
+                    currentStatus !== 1 ||
+                    isSubmitting
+                  }
+                  title={
+                    multiKeyMode === 'batch' || currentStatus !== 1
+                      ? t('Temporary mode requires one enabled channel')
+                      : undefined
+                  }
+                >
+                  <Switch
+                    id='create-channel-routing-override'
+                    checked={
+                      multiKeyMode !== 'batch' &&
+                      currentStatus === 1 &&
+                      Boolean(form.watch('enable_routing_override'))
+                    }
+                    onCheckedChange={(checked) =>
+                      form.setValue('enable_routing_override', checked)
+                    }
+                    disabled={
+                      multiKeyMode === 'batch' ||
+                      currentStatus !== 1 ||
+                      isSubmitting
+                    }
+                  />
+                  <FieldLabel
+                    htmlFor='create-channel-routing-override'
+                    className='min-w-0'
+                  >
+                    {t('Temporary single-channel mode')}
+                  </FieldLabel>
+                </Field>
+              </FieldGroup>
+            )}
             <SheetClose
               render={<Button variant='outline' disabled={isSubmitting} />}
             >
@@ -5175,6 +5255,18 @@ export function ChannelMutateDrawer({
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      <ConfirmDialog
+        open={routingConflicts.length > 0}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) resolveRoutingConflicts(false)
+        }}
+        title={t('Enable temporary single-channel mode?')}
+        desc={<RoutingOverrideConflictNotice conflicts={routingConflicts} />}
+        confirmText={t('Replace and enable')}
+        destructive
+        handleConfirm={() => resolveRoutingConflicts(true)}
+      />
 
       {paramOverrideEditorOpen && !sensitiveLocked && (
         <ParamOverrideEditorDialog

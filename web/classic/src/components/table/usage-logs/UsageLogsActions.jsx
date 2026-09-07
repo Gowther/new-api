@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 import React from 'react';
 import { Tag, Space, Skeleton, Select, Typography } from '@douyinfe/semi-ui';
+import { IconRefresh } from '@douyinfe/semi-icons';
 import { renderQuota } from '../../../helpers';
 import CompactModeToggle from '../../common/ui/CompactModeToggle';
 import { useMinimumLoadingTime } from '../../../hooks/common/useMinimumLoadingTime';
@@ -36,6 +37,7 @@ const LogsActions = ({
   setCompactMode,
   autoRefreshSeconds,
   setAutoRefreshSeconds,
+  isRefreshing,
   t,
 }) => {
   const showSkeleton = useMinimumLoadingTime(loadingStat);
@@ -124,6 +126,10 @@ const LogsActions = ({
 
       <Space>
         <Space spacing={4}>
+          <IconRefresh
+            aria-label={t('刷新中')}
+            className={isRefreshing ? 'animate-spin text-blue-500' : ''}
+          />
           <Typography.Text size='small' type='secondary'>
             {t('自动刷新')}
           </Typography.Text>

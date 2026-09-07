@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useIsFetching } from '@tanstack/react-query'
 import { RefreshCw } from 'lucide-react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -45,6 +46,16 @@ function formatAutoRefreshLabel(seconds: number, disabledLabel: string) {
 export function UsageLogsAutoRefreshControl() {
   const { t } = useTranslation()
   const { autoRefreshSeconds, setAutoRefreshSeconds } = useUsageLogsContext()
+  const fetchingLogs = useIsFetching({ queryKey: ['logs'] })
+  const fetchingStats = useIsFetching({ queryKey: ['usage-logs-stats'] })
+  const isRefreshing = fetchingLogs > 0 || fetchingStats > 0
+  let refreshIconTone = 'text-muted-foreground'
+  if (autoRefreshSeconds > 0) {
+    refreshIconTone = 'text-primary'
+  }
+  if (isRefreshing) {
+    refreshIconTone = 'text-primary animate-spin'
+  }
   const disabledLabel = t('Disabled')
   const options = useMemo(
     () =>
@@ -63,12 +74,8 @@ export function UsageLogsAutoRefreshControl() {
     <Tooltip>
       <TooltipTrigger render={<div className='flex items-center gap-1' />}>
         <RefreshCw
-          className={
-            autoRefreshSeconds > 0
-              ? 'text-primary size-3.5'
-              : 'text-muted-foreground size-3.5'
-          }
-          aria-hidden='true'
+          className={`size-3.5 ${refreshIconTone}`}
+          aria-label={t('Auto refresh')}
         />
         <Select
           items={options}

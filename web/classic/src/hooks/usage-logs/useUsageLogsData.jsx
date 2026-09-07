@@ -209,8 +209,25 @@ export const useLogsData = () => {
   const autoRefreshInFlightRef = useRef(false);
   const logsRequestRef = useRef(null);
   const statsRequestRef = useRef(null);
+  const refreshingRequestsRef = useRef(0);
   const appliedFiltersRef = useRef(null);
   const dateChangeTimerRef = useRef(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const beginRefreshing = () => {
+    refreshingRequestsRef.current += 1;
+    setIsRefreshing(true);
+  };
+
+  const endRefreshing = () => {
+    refreshingRequestsRef.current = Math.max(
+      0,
+      refreshingRequestsRef.current - 1,
+    );
+    if (refreshingRequestsRef.current === 0) {
+      setIsRefreshing(false);
+    }
+  };
 
   const setAutoRefreshSeconds = (seconds) => {
     const next = AUTO_REFRESH_INTERVALS.includes(Number(seconds))
@@ -422,6 +439,7 @@ export const useLogsData = () => {
     statsRequestRef.current?.abort();
     const request = new AbortController();
     statsRequestRef.current = request;
+    beginRefreshing();
     if (!silent) setLoadingStat(true);
     try {
       const {
@@ -469,6 +487,7 @@ export const useLogsData = () => {
         setShowStat(true);
         setLoadingStat(false);
       }
+      endRefreshing();
     }
   };
 
@@ -946,6 +965,7 @@ export const useLogsData = () => {
     logsRequestRef.current?.abort();
     const request = new AbortController();
     logsRequestRef.current = request;
+    beginRefreshing();
     if (!silent) setLoading(true);
     try {
       const {
@@ -1012,6 +1032,7 @@ export const useLogsData = () => {
         logsRequestRef.current = null;
         setLoading(false);
       }
+      endRefreshing();
     }
   };
 
@@ -1201,6 +1222,7 @@ export const useLogsData = () => {
     logType,
     autoRefreshSeconds,
     setAutoRefreshSeconds,
+    isRefreshing,
     stat,
     isAdminUser,
 

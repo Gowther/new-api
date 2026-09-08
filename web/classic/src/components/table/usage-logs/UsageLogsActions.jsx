@@ -41,6 +41,7 @@ const LogsActions = ({
   t,
 }) => {
   const showSkeleton = useMinimumLoadingTime(loadingStat);
+  const showRefreshAnimation = useMinimumLoadingTime(isRefreshing, 1000);
   const needSkeleton = !showStat || showSkeleton;
   const successCount = Math.max(0, Number(stat.success_count ?? 0));
   const totalCount = Math.max(0, Number(stat.total_count ?? 0));
@@ -128,7 +129,7 @@ const LogsActions = ({
         <Space spacing={4}>
           <IconRefresh
             aria-label={t('刷新中')}
-            className={isRefreshing ? 'animate-spin text-blue-500' : ''}
+            className={showRefreshAnimation ? 'animate-spin text-blue-500' : ''}
           />
           <Typography.Text size='small' type='secondary'>
             {t('自动刷新')}

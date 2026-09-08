@@ -34,6 +34,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { useMinimumLoadingTime } from '@/hooks/use-minimum-loading-time'
 
 import { useUsageLogsContext } from './usage-logs-provider'
 
@@ -49,11 +50,12 @@ export function UsageLogsAutoRefreshControl() {
   const fetchingLogs = useIsFetching({ queryKey: ['logs'] })
   const fetchingStats = useIsFetching({ queryKey: ['usage-logs-stats'] })
   const isRefreshing = fetchingLogs > 0 || fetchingStats > 0
+  const showRefreshAnimation = useMinimumLoadingTime(isRefreshing, 1000)
   let refreshIconTone = 'text-muted-foreground'
   if (autoRefreshSeconds > 0) {
     refreshIconTone = 'text-primary'
   }
-  if (isRefreshing) {
+  if (showRefreshAnimation) {
     refreshIconTone = 'text-primary animate-spin'
   }
   const disabledLabel = t('Disabled')

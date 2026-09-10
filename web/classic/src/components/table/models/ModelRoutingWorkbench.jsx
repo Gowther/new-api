@@ -41,6 +41,7 @@ import {
   Typography,
 } from '@douyinfe/semi-ui';
 import {
+  IconAlertTriangle,
   IconBookmark,
   IconCopy,
   IconDelete,
@@ -1980,6 +1981,99 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
         ) : null}
       </div>
 
+      {/* 覆盖规则钉住的是整个渠道、对它承载的所有模型生效，所以提示条是
+          页面级的，放在三列之上；挂在渠道面板里会显得它属于当前选中的模型。 */}
+      {routingOverride.length > 0 ? (
+        <div
+          className='shrink-0 rounded px-3 py-2'
+          style={{
+            border: '1px solid var(--semi-color-warning-light-active)',
+            background: 'var(--semi-color-warning-light-default)',
+          }}
+        >
+          <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
+            <IconAlertTriangle className='shrink-0 text-[var(--semi-color-warning)]' />
+            <Text strong>{t('临时单渠道模式')}</Text>
+            <Text type='tertiary' size='small'>
+              {t('{{count}} 个渠道', { count: routingOverride.length })}
+            </Text>
+            <Button
+              theme='light'
+              type='warning'
+              size='small'
+              className='ml-auto'
+              icon={<IconUndo />}
+              loading={routingOverrideUpdating}
+              onClick={() => handleRestoreRoutingOverride()}
+            >
+              {t('恢复正常路由')}
+            </Button>
+          </div>
+          <div className='mt-2 space-y-2 border-t border-[var(--semi-color-warning-light-active)] pt-2'>
+            {routingOverride.map((override) => {
+              const overrideLabel =
+                override.channel_name || `#${override.channel_id}`;
+              return (
+                <div
+                  key={override.channel_id}
+                  className='flex items-start gap-2'
+                >
+                  <div className='min-w-0 flex-1'>
+                    <div className='flex flex-wrap items-center gap-2'>
+                      {/* The pinned channel need not serve the selected model,
+                          so without this the table below may not even list it.
+                          Selecting one of its covered models brings its row
+                          into view. */}
+                      <button
+                        type='button'
+                        className='flex min-w-0 cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-left underline-offset-2 hover:underline'
+                        title={t('在路由表中定位该渠道')}
+                        aria-label={`${t('在路由表中定位该渠道')}: ${overrideLabel}`}
+                        onClick={() => focusRoutingOverrideChannel(override)}
+                      >
+                        <Text strong ellipsis>
+                          {overrideLabel}
+                        </Text>
+                        <Text type='tertiary' size='small'>
+                          ID:{override.channel_id}
+                        </Text>
+                      </button>
+                      <Text type='tertiary' size='small'>
+                        {t('{{count}} 个覆盖模型', {
+                          count: override.model_count,
+                        })}
+                      </Text>
+                      <Text type='tertiary' size='small'>
+                        {t('覆盖分组')}: {override.groups.join(', ')}
+                      </Text>
+                    </div>
+                    <div className='mt-1'>
+                      <Text type='tertiary' size='small'>
+                        {t(
+                          '所有覆盖模型的自动请求仅使用此渠道；显式指定渠道的请求不受影响。',
+                        )}
+                      </Text>
+                    </div>
+                  </div>
+                  <Tooltip content={t('恢复正常路由')}>
+                    <Button
+                      theme='borderless'
+                      type='tertiary'
+                      size='small'
+                      className='shrink-0'
+                      icon={<IconUndo />}
+                      aria-label={`${t('恢复正常路由')}: ${overrideLabel}`}
+                      disabled={routingOverrideUpdating}
+                      onClick={() => handleRestoreRoutingOverride(override)}
+                    />
+                  </Tooltip>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
       <div className='grid flex-1 grid-cols-1 gap-3 xl:grid-cols-[280px_320px_minmax(0,1fr)]'>
         <section className='flex min-h-[360px] flex-col rounded border border-[var(--semi-color-border)] bg-[var(--semi-color-bg-0)]'>
           <div className='border-b border-[var(--semi-color-border)] p-3'>
@@ -2177,18 +2271,6 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                 ) : null}
               </div>
               <div className='flex shrink-0 items-center gap-2'>
-                {routingOverride.length > 0 ? (
-                  <Button
-                    theme='light'
-                    type='warning'
-                    size='small'
-                    icon={<IconUndo />}
-                    loading={routingOverrideUpdating}
-                    onClick={() => handleRestoreRoutingOverride()}
-                  >
-                    {t('恢复正常路由')}
-                  </Button>
-                ) : null}
                 <Button
                   theme='light'
                   type='primary'
@@ -2202,73 +2284,6 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
               </div>
             </div>
           </div>
-          {routingOverride.length > 0 ? (
-            <div className='space-y-2 border-b border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)] px-3 py-2'>
-              {routingOverride.map((override) => {
-                const overrideLabel =
-                  override.channel_name || `#${override.channel_id}`;
-                return (
-                  <div
-                    key={override.channel_id}
-                    className='flex items-start gap-2'
-                  >
-                    <div className='min-w-0 flex-1'>
-                      <div className='flex flex-wrap items-center gap-2'>
-                        <Tag color='orange' shape='circle' size='small'>
-                          {t('临时单渠道模式')}
-                        </Tag>
-                        {/* The pinned channel need not serve the selected model,
-                            so without this the table below may not even list it.
-                            Selecting one of its covered models brings its row
-                            into view. */}
-                        <button
-                          type='button'
-                          className='flex min-w-0 cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-left underline-offset-2 hover:underline'
-                          title={t('在路由表中定位该渠道')}
-                          aria-label={`${t('在路由表中定位该渠道')}: ${overrideLabel}`}
-                          onClick={() => focusRoutingOverrideChannel(override)}
-                        >
-                          <Text strong ellipsis>
-                            {overrideLabel}
-                          </Text>
-                          <Text type='tertiary' size='small'>
-                            ID:{override.channel_id}
-                          </Text>
-                        </button>
-                        <Text type='tertiary' size='small'>
-                          {t('{{count}} 个覆盖模型', {
-                            count: override.model_count,
-                          })}
-                        </Text>
-                        <Text type='tertiary' size='small'>
-                          {t('覆盖分组')}: {override.groups.join(', ')}
-                        </Text>
-                      </div>
-                      <div className='mt-1'>
-                        <Text type='tertiary' size='small'>
-                          {t(
-                            '所有覆盖模型的自动请求仅使用此渠道；显式指定渠道的请求不受影响。',
-                          )}
-                        </Text>
-                      </div>
-                    </div>
-                    <Tooltip content={t('恢复正常路由')}>
-                      <Button
-                        theme='borderless'
-                        type='tertiary'
-                        size='small'
-                        className='shrink-0'
-                        icon={<IconUndo />}
-                        aria-label={`${t('恢复正常路由')}: ${overrideLabel}`}
-                        disabled={routingOverrideUpdating}
-                        onClick={() => handleRestoreRoutingOverride(override)}
-                      />
-                    </Tooltip>
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
           <div className='min-h-0 flex-1 overflow-auto p-2'>
             {loading || routingOverrideLoading ? (
               <div className='flex h-64 items-center justify-center'>

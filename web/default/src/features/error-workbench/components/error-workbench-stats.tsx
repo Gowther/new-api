@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useTranslation } from 'react-i18next'
 
 import { formatTimestampToDate } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 import { getUrgentClusterCount, getVisibleAffectedRequests } from '../lib'
 import type { ErrorSummaryResponse } from '../types'
@@ -38,6 +39,7 @@ type ErrorWorkbenchStatsProps = {
 export function ErrorWorkbenchStats(props: ErrorWorkbenchStatsProps) {
   const { t } = useTranslation()
   const summary = props.summary
+  const urgentClusters = getUrgentClusterCount(summary.items)
 
   return (
     <div className='text-muted-foreground flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1.5 text-xs'>
@@ -88,8 +90,13 @@ export function ErrorWorkbenchStats(props: ErrorWorkbenchStatsProps) {
         >
           {t('Urgent clusters')}
         </ErrorMetricHelp>
-        <span className='text-foreground font-semibold tabular-nums'>
-          {getUrgentClusterCount(summary.items).toLocaleString()}
+        <span
+          className={cn(
+            'font-semibold tabular-nums',
+            urgentClusters > 0 ? 'text-destructive' : 'text-foreground'
+          )}
+        >
+          {urgentClusters.toLocaleString()}
         </span>
       </span>
 

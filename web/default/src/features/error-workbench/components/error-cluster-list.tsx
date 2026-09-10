@@ -43,6 +43,15 @@ const severityClassNames: Record<string, string> = {
   low: 'border-border bg-muted/40 text-muted-foreground',
 }
 
+// Left edge stripe gives each row its severity weight before the badges are
+// even read; low-severity rows stay unmarked.
+const severityBarClassNames: Record<string, string> = {
+  critical: 'border-l-red-500',
+  high: 'border-l-orange-500',
+  medium: 'border-l-amber-500',
+  low: 'border-l-transparent',
+}
+
 function TrendIndicator(props: { trend: string }) {
   const { t } = useTranslation()
   let icon = <CircleDot className='size-3.5' />
@@ -105,8 +114,10 @@ export function ErrorClusterList(props: ErrorClusterListProps) {
                 aria-pressed={selected}
                 onClick={() => props.onSelect(item.key)}
                 className={cn(
-                  'hover:bg-muted/50 focus-visible:ring-ring w-full px-3 py-3 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none',
-                  selected && 'bg-muted'
+                  'hover:bg-muted/50 focus-visible:ring-ring w-full border-l-[3px] px-3 py-3 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none',
+                  severityBarClassNames[item.severity] ??
+                    severityBarClassNames.low,
+                  selected && 'bg-accent border-l-primary'
                 )}
               >
                 <div className='flex min-w-0 items-start justify-between gap-3'>

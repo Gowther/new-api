@@ -52,6 +52,7 @@ import {
   IconRefresh,
 } from '@douyinfe/semi-icons';
 import { API, showError, showSuccess, timestamp2string } from '../../helpers';
+import MarkdownRenderer from '../../components/common/markdown/MarkdownRenderer';
 
 const DEFAULT_SUMMARY = {
   items: [],
@@ -243,6 +244,14 @@ function renderSeverity(severity, t) {
   );
 }
 
+// 列表项左边条的严重度配色，让人在扫列表时先看到分量；低严重度不标。
+const SEVERITY_BAR_COLORS = {
+  critical: 'var(--semi-color-danger)',
+  high: 'var(--semi-color-warning)',
+  medium: 'var(--semi-color-warning-light-active)',
+  low: 'transparent',
+};
+
 function renderTrend(trend, t) {
   const labels = {
     new: t('新增'),
@@ -334,17 +343,27 @@ function ErrorBriefingBand({
     return null;
   }
 
+  // 简报是 markdown（实体加粗、一个问题一个列表项），所以走 MarkdownRenderer
+  // 而不是一段 pre-wrap 纯文本，重点才读得出来。
   return (
-    <section className='shrink-0 rounded border border-solid border-gray-200 bg-gray-50 px-3 py-2'>
+    <section
+      className='shrink-0 rounded px-3 py-2'
+      style={{
+        border: '1px solid var(--semi-color-primary-light-active)',
+        borderLeft: '3px solid var(--semi-color-primary)',
+        background: 'var(--semi-color-primary-light-default)',
+      }}
+    >
       <div className='flex items-start gap-2'>
         <div className='min-w-0 flex-1'>
-          <Typography.Paragraph style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
-            {briefing}
-          </Typography.Paragraph>
-          <Typography.Text type='tertiary' size='small'>
-            {t('由 {{model}} 生成', { model: briefingModel })}
-            {briefingCached ? ` · ${t('缓存结果')}` : ''}
-          </Typography.Text>
+          <div className='mb-1 flex flex-wrap items-baseline gap-x-2'>
+            <Typography.Text strong>{t('AI 简报')}</Typography.Text>
+            <Typography.Text type='tertiary' size='small'>
+              {t('由 {{model}} 生成', { model: briefingModel })}
+              {briefingCached ? ` · ${t('缓存结果')}` : ''}
+            </Typography.Text>
+          </div>
+          <MarkdownRenderer content={briefing} fontSize={13} />
         </div>
         <Button
           size='small'
@@ -445,7 +464,7 @@ function ErrorClusterList({ items, selectedKey, loading, onSelect, t }) {
                     : 'transparent',
                   borderLeft: selected
                     ? '3px solid var(--semi-color-primary)'
-                    : '3px solid transparent',
+                    : `3px solid ${SEVERITY_BAR_COLORS[record.severity] || 'transparent'}`,
                 }}
               >
                 <div className='w-full min-w-0'>
@@ -881,6 +900,8 @@ export default function ErrorWorkbench() {
         t(
           'Urgent clusters are visible clusters classified as high or critical by channel status, HTTP status, route error rate, route attempts, and cluster error-log count.',
         ),
+        // 有紧急故障簇时标红，让风险信号从一排灰色数字里跳出来。
+        getUrgentClusterCount(summary.items) > 0,
       ],
     ],
     [summary, t],
@@ -1255,10 +1276,12 @@ export default function ErrorWorkbench() {
       </div>
 
       <div className='flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-gray-500'>
-        {statMetrics.map(([label, value, description]) => (
+        {statMetrics.map(([label, value, description, alert]) => (
           <span key={label} className='flex items-center gap-1.5'>
             <ErrorMetricHelp description={description}>{label}</ErrorMetricHelp>
-            <span className='font-semibold tabular-nums text-gray-900'>
+            <span
+              className={`font-semibold tabular-nums ${alert ? 'text-red-500' : 'text-gray-900'}`}
+            >
               {value.toLocaleString()}
             </span>
           </span>

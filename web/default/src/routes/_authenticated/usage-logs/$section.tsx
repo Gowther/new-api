@@ -45,6 +45,7 @@ const usageLogsSearchSchema = z.object({
   username: z.string().optional().catch(''),
   requestId: z.string().optional().catch(''),
   upstreamRequestId: z.string().optional().catch(''),
+  result: z.enum(['success', 'failed']).optional().catch(undefined),
   startTime: z.number().optional(),
   endTime: z.number().optional(),
   timeMode: z.enum(['today', 'recent', 'fixed']).optional().catch(undefined),
@@ -59,15 +60,15 @@ export const Route = createFileRoute('/_authenticated/usage-logs/$section')({
         params: { section: USAGE_LOGS_DEFAULT_SECTION },
       })
     }
-    // type 仅 common 使用，非 common 时清掉 URL 里的 type
+    // type/result 仅 common 使用，非 common 时清掉 URL 里的它们
     const hasTypeSearch = Array.isArray(search?.type)
       ? search.type.length > 0
       : search?.type != null && search.type !== ''
-    if (params.section !== 'common' && hasTypeSearch) {
+    if (params.section !== 'common' && (hasTypeSearch || search?.result)) {
       throw redirect({
         to: '/usage-logs/$section',
         params: { section: params.section },
-        search: { ...search, type: undefined },
+        search: { ...search, type: undefined, result: undefined },
         replace: true,
       })
     }

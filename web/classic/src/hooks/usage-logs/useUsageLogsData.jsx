@@ -86,6 +86,7 @@ function getInitialUrlFilters() {
       searchParams.get('upstreamRequestId') ||
       '',
     logType: searchParams.get('type') || '0',
+    result: searchParams.get('result') || '',
     startTimestamp: Number.isFinite(startTimestamp) ? startTimestamp : 0,
     endTimestamp: Number.isFinite(endTimestamp) ? endTimestamp : 0,
   };
@@ -122,6 +123,7 @@ function getDefaultLogFormValues(initialFilters = {}) {
       timestamp2string(initialFilters.endTimestamp || now.getTime() / 1000),
     ],
     logType: initialFilters.logType || '0',
+    result: initialFilters.result || '',
   };
 }
 
@@ -144,6 +146,7 @@ function clearInitialSearchParams() {
     'upstream_request_id',
     'upstreamRequestId',
     'type',
+    'result',
     'start_timestamp',
     'startTime',
     'end_timestamp',
@@ -431,6 +434,7 @@ export const useLogsData = () => {
       request_id: formValues.request_id || '',
       upstream_request_id: formValues.upstream_request_id || '',
       logType: formValues.logType ? parseInt(formValues.logType) : 0,
+      result: formValues.result || '',
     };
   };
 
@@ -453,6 +457,7 @@ export const useLogsData = () => {
         request_id,
         upstream_request_id,
         logType: type,
+        result,
       } = filtersOverride || getFormValues();
       const queryString = buildLogQueryString({
         type,
@@ -463,6 +468,7 @@ export const useLogsData = () => {
         group,
         request_id,
         upstream_request_id,
+        result,
         ...(isAdminUser ? { username, channel } : {}),
       });
       const path = isAdminUser ? '/api/log/stat' : '/api/log/self/stat';
@@ -979,6 +985,7 @@ export const useLogsData = () => {
         request_id,
         upstream_request_id,
         logType: formLogType,
+        result,
       } = filtersOverride || getFormValues(appliedFiltersRef.current);
 
       const currentLogType =
@@ -999,6 +1006,7 @@ export const useLogsData = () => {
         group,
         request_id,
         upstream_request_id,
+        result,
       };
       let path = '/api/log/self/';
       if (isAdminUser) {

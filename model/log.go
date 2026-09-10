@@ -114,6 +114,37 @@ const (
 	LogTypeLogin   = 7
 )
 
+// Log result filter values shared by the list and stat endpoints. "failed" is
+// the exact complement of the success-rate numerator in SumUsedQuota: every
+// error log plus any consume log without positive prompt and completion tokens
+// (NULL tokens count as failed there, so they must here too).
+const (
+	LogResultSuccess = "success"
+	LogResultFailed  = "failed"
+)
+
+// applyLogResultFilter scopes a logs query to one side of the success-rate
+// accounting. Unknown values leave the query untouched. Column prefixes differ
+// between callers (list queries qualify with "logs.", SumUsedQuota does not),
+// so the prefix is a parameter; it is always an internal constant, never user
+// input.
+func applyLogResultFilter(tx *gorm.DB, prefix string, result string) *gorm.DB {
+	switch result {
+	case LogResultFailed:
+		return tx.Where(
+			prefix+"type = ? OR ("+prefix+"type = ? AND (COALESCE("+prefix+"prompt_tokens, 0) <= 0 OR COALESCE("+prefix+"completion_tokens, 0) <= 0))",
+			LogTypeError, LogTypeConsume,
+		)
+	case LogResultSuccess:
+		return tx.Where(
+			prefix+"type = ? AND COALESCE("+prefix+"prompt_tokens, 0) > 0 AND COALESCE("+prefix+"completion_tokens, 0) > 0",
+			LogTypeConsume,
+		)
+	default:
+		return tx
+	}
+}
+
 func ensureLogRequestId(log *Log) {
 	if log != nil && log.RequestId == "" {
 		log.RequestId = common.NewRequestId()
@@ -523,7 +554,7 @@ func recordTokenUsageDataAsync(userId int, username string, params RecordConsume
 	})
 }
 
-func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string, upstreamRequestId string) (logs []*Log, total int64, err error) {
+func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string, upstreamRequestId string, result string) (logs []*Log, total int64, err error) {
 	var tx *gorm.DB
 	if logType == LogTypeUnknown {
 		tx = LOG_DB
@@ -558,6 +589,7 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 	if group != "" {
 		tx = tx.Where("logs."+logGroupCol+" = ?", group)
 	}
+	tx = applyLogResultFilter(tx, "logs.", result)
 	err = tx.Model(&Log{}).Count(&total).Error
 	if err != nil {
 		return nil, 0, err
@@ -1382,7 +1414,7 @@ func buildErrorFingerprint(errorType, errorCode string, statusCode int, content 
 
 const logSearchCountLimit = 10000
 
-func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, upstreamRequestId string) (logs []*Log, total int64, err error) {
+func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, upstreamRequestId string, result string) (logs []*Log, total int64, err error) {
 	var tx *gorm.DB
 	if logType == LogTypeUnknown {
 		tx = LOG_DB.Where("logs.user_id = ?", userId)
@@ -1411,6 +1443,7 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 	if group != "" {
 		tx = tx.Where("logs."+logGroupCol+" = ?", group)
 	}
+	tx = applyLogResultFilter(tx, "logs.", result)
 	err = tx.Model(&Log{}).Limit(logSearchCountLimit).Count(&total).Error
 	if err != nil {
 		common.SysError("failed to count user logs: " + err.Error())
@@ -1452,6 +1485,7 @@ type LogStatQuery struct {
 	Group             string
 	RequestId         string
 	UpstreamRequestId string
+	Result            string
 }
 
 func SumUsedQuota(ctx context.Context, query LogStatQuery) (stat Stat, err error) {
@@ -1480,6 +1514,7 @@ func SumUsedQuota(ctx context.Context, query LogStatQuery) (stat Stat, err error
 	if query.UpstreamRequestId != "" {
 		base = base.Where("upstream_request_id = ?", query.UpstreamRequestId)
 	}
+	base = applyLogResultFilter(base, "", query.Result)
 
 	requestTypes := []int{LogTypeConsume, LogTypeError}
 	if query.LogType != LogTypeUnknown {

@@ -119,6 +119,20 @@ export const LOG_TYPE_FILTERS = [
   ),
 ] as const
 
+/**
+ * Request result filter matching the backend success-rate accounting:
+ * "failed" covers error logs plus consume logs without positive prompt and
+ * completion tokens; "success" is its exact complement. The backend owns the
+ * precise definition (model.applyLogResultFilter); the stat endpoint accepts
+ * the same parameter so the stats card stays consistent with the list.
+ */
+export const LOG_RESULT_ALL_VALUE = 'all' as const
+export const LOG_RESULT_FILTERS = [
+  { label: 'All results', value: LOG_RESULT_ALL_VALUE },
+  { label: 'Success', value: 'success' },
+  { label: 'Failed', value: 'failed' },
+] as const
+
 // ============================================================================
 // Drawing Logs (MjProxy) Constants
 // ============================================================================

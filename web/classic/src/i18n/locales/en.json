@@ -4221,7 +4221,11 @@
     "Temporary single-channel mode": "Temporary single-channel mode",
     "Temporary mode requires one enabled channel": "Temporary mode requires one enabled channel",
     "Enable temporary single-channel mode?": "Enable temporary single-channel mode?",
-    "Replace and enable": "Replace and enable"
+    "Replace and enable": "Replace and enable",
+    "前往模型路由": "Open in model routing",
+    "选择路由表要定位的模型": "Pick the model the routing table should land on.",
+    "前往": "Go",
+    "留在此页": "Stay here"
   },
   "已保存官方价格预览失败": "Failed to preview saved official prices",
   "查看官方价格变更": "Review official price changes",

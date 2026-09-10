@@ -4203,7 +4203,11 @@
     "Temporary single-channel mode": "临时单渠道模式",
     "Temporary mode requires one enabled channel": "仅支持单个已启用的渠道",
     "Enable temporary single-channel mode?": "开启临时单渠道模式？",
-    "Replace and enable": "替换并开启"
+    "Replace and enable": "替换并开启",
+    "前往模型路由": "前往模型路由",
+    "选择路由表要定位的模型": "选择路由表要定位的模型",
+    "前往": "前往",
+    "留在此页": "留在此页"
   },
   "已保存官方价格预览失败": "已保存官方价格预览失败",
   "查看官方价格变更": "查看官方价格变更",

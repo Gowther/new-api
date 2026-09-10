@@ -29,6 +29,15 @@ import {
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/confirm-dialog'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   ADMIN_PERMISSION_ACTIONS,
   ADMIN_PERMISSION_RESOURCES,
@@ -142,20 +151,39 @@ export function ChannelPasteListener() {
   // as the temporary single channel, both of which live in the routing table. The
   // create response carries no channel id, but the routing table is organised by
   // model, so naming a model the new channel serves is enough to land on it —
-  // the workbench derives the vendor from that model.
-  const followToRouting = useCallback(
-    (createdModels: string[]) => {
-      const [firstByName] = [...createdModels].sort((a, b) =>
-        a.localeCompare(b)
-      )
-      if (!firstByName) return
+  // the workbench derives the vendor from that model. A multi-model channel lets
+  // the operator pick the landing model instead of always the alphabetical
+  // first; a single-model (or empty) channel jumps straight there.
+  const [routingChoice, setRoutingChoice] = useState<{
+    models: string[]
+    selected: string
+  } | null>(null)
+
+  const navigateToRouting = useCallback(
+    (model: string) => {
       void navigate({
         to: '/models/$section',
         params: { section: 'routing' },
-        search: () => ({ routingModel: firstByName }),
+        search: () => ({ routingModel: model }),
       })
     },
     [navigate]
+  )
+
+  const followToRouting = useCallback(
+    (createdModels: string[]) => {
+      const models = [...new Set(createdModels)].sort((a, b) =>
+        a.localeCompare(b)
+      )
+      const [firstByName] = models
+      if (!firstByName) return
+      if (models.length === 1) {
+        navigateToRouting(firstByName)
+        return
+      }
+      setRoutingChoice({ models, selected: firstByName })
+    },
+    [navigateToRouting]
   )
 
   const initialValues = useMemo(() => {
@@ -168,16 +196,64 @@ export function ChannelPasteListener() {
     }
   }, [pasted])
 
-  if (!pasted) return null
-
   return (
-    <Suspense fallback={null}>
-      <LazyChannelPasteDrawer
-        open={open}
-        onOpenChange={setOpen}
-        initialValues={initialValues}
-        onCreated={followToRouting}
-      />
-    </Suspense>
+    <>
+      {/* The drawer unmounts with `pasted`, but the landing-model dialog must
+          outlive it: onCreated fires while the drawer is still closing. */}
+      {pasted && (
+        <Suspense fallback={null}>
+          <LazyChannelPasteDrawer
+            open={open}
+            onOpenChange={setOpen}
+            initialValues={initialValues}
+            onCreated={followToRouting}
+          />
+        </Suspense>
+      )}
+      <ConfirmDialog
+        open={routingChoice !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setRoutingChoice(null)
+        }}
+        title={t('Open in model routing')}
+        desc={t('Pick the model the routing table should land on.')}
+        cancelBtnText={t('Stay here')}
+        confirmText={t('Go')}
+        handleConfirm={() => {
+          if (routingChoice?.selected) {
+            navigateToRouting(routingChoice.selected)
+          }
+          setRoutingChoice(null)
+        }}
+      >
+        {routingChoice && (
+          <Select
+            items={routingChoice.models.map((model) => ({
+              value: model,
+              label: model,
+            }))}
+            value={routingChoice.selected}
+            onValueChange={(value) =>
+              setRoutingChoice((current) =>
+                current && value ? { ...current, selected: value } : current
+              )
+            }
+          >
+            <SelectTrigger className='w-full' aria-label={t('Landing model')}>
+              <SelectValue>{routingChoice.selected}</SelectValue>
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              <SelectGroup>
+                {routingChoice.models.map((model) => (
+                  <SelectItem key={model} value={model}>
+                    {model}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        )}
+      </ConfirmDialog>
+    </>
   )
 }

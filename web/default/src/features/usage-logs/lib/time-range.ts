@@ -1,8 +1,10 @@
 export type LogTimeMode = 'today' | 'recent' | 'fixed'
+export type LogRecentUnit = 'minute' | 'hour' | 'day'
 
 export interface LogTimeRange {
   timeMode: LogTimeMode
   recentMinutes?: number
+  recentUnit?: LogRecentUnit
   start?: Date
   end?: Date
 }
@@ -39,6 +41,38 @@ export function normalizeRecentMinutes(search: {
   return RECENT_MINUTES_DEFAULT
 }
 
+export const RECENT_UNIT_MINUTES: Record<LogRecentUnit, number> = {
+  minute: 1,
+  hour: 60,
+  day: 1440,
+}
+
+export function normalizeRecentUnit(value: unknown): LogRecentUnit | undefined {
+  return value === 'minute' || value === 'hour' || value === 'day'
+    ? value
+    : undefined
+}
+
+// The unit is part of the operator's choice, not a function of the minutes:
+// 24 hours and 1 day are the same window but read differently, so a stored
+// unit wins. Deriving from the minutes alone is only the fallback for old
+// links, and it takes the largest whole unit.
+export function splitRecentMinutes(
+  minutes: number,
+  preferredUnit?: LogRecentUnit
+): { amount: number; unit: LogRecentUnit } {
+  if (preferredUnit) {
+    const factor = RECENT_UNIT_MINUTES[preferredUnit]
+    const amount = minutes / factor
+    if (Number.isInteger(amount) && amount >= 1) {
+      return { amount, unit: preferredUnit }
+    }
+  }
+  if (minutes % 1440 === 0) return { amount: minutes / 1440, unit: 'day' }
+  if (minutes % 60 === 0) return { amount: minutes / 60, unit: 'hour' }
+  return { amount: minutes, unit: 'minute' }
+}
+
 export function resolveLogTimeRange(
   search: Record<string, unknown>,
   now = new Date()
@@ -70,6 +104,7 @@ export function resolveLogTimeRange(
     return {
       timeMode,
       recentMinutes,
+      recentUnit: normalizeRecentUnit(search.recentUnit),
       start: new Date(now.getTime() - recentMinutes * 60000),
       end: now,
     }

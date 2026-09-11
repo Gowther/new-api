@@ -78,6 +78,12 @@ function normalizeRecentMinutesValue(initialFilters = {}) {
   return RECENT_MINUTES_DEFAULT;
 }
 
+// 单位是操作者选过的显示偏好，不是分钟数的函数：24 小时和 1 天是同一个窗口
+// 但读起来不一样。只有老链接没有单位时才从分钟数反推。
+function normalizeRecentUnitValue(value) {
+  return ['minute', 'hour', 'day'].includes(value) ? value : undefined;
+}
+
 function getInitialUrlFilters() {
   if (typeof window === 'undefined') {
     return {};
@@ -93,6 +99,7 @@ function getInitialUrlFilters() {
   return {
     timeMode: searchParams.get('timeMode'),
     recentMinutes: Number(searchParams.get('recentMinutes')),
+    recentUnit: searchParams.get('recentUnit') || undefined,
     recentHours: Number(searchParams.get('recentHours')),
     channel:
       searchParams.get('channel') || searchParams.get('channel_id') || '',
@@ -127,6 +134,7 @@ function getDefaultLogFormValues(initialFilters = {}) {
   return {
     timeMode,
     recentMinutes,
+    recentUnit: normalizeRecentUnitValue(initialFilters.recentUnit),
     username: '',
     token_name: initialFilters.tokenName || '',
     model_name: initialFilters.modelName || '',
@@ -174,6 +182,7 @@ function clearInitialSearchParams() {
     'timeMode',
     'recentHours',
     'recentMinutes',
+    'recentUnit',
   ].forEach((key) => url.searchParams.delete(key));
   window.history.replaceState(
     {},
@@ -291,6 +300,7 @@ export const useLogsData = () => {
   const [timeRange, setTimeRange] = useState(() => ({
     timeMode: formInitValues.timeMode,
     recentMinutes: formInitValues.recentMinutes,
+    recentUnit: formInitValues.recentUnit,
   }));
   const timeRangeRef = useRef(timeRange);
 
@@ -1094,6 +1104,7 @@ export const useLogsData = () => {
     const next = {
       timeMode: ['today', 'recent', 'fixed'].includes(value) ? value : 'today',
       recentMinutes: timeRangeRef.current.recentMinutes,
+      recentUnit: timeRangeRef.current.recentUnit,
     };
     timeRangeRef.current = next;
     setTimeRange(next);
@@ -1119,7 +1130,11 @@ export const useLogsData = () => {
     ) {
       return;
     }
-    const next = { timeMode: 'recent', recentMinutes: minutes };
+    const next = {
+      timeMode: 'recent',
+      recentMinutes: minutes,
+      recentUnit: unit,
+    };
     timeRangeRef.current = next;
     setTimeRange(next);
     clearTimeout(dateChangeTimerRef.current);
@@ -1156,7 +1171,11 @@ export const useLogsData = () => {
     initialUrlFiltersRef.current = {};
     clearInitialSearchParams();
     formApi.setValues(resetValues);
-    const next = { timeMode: 'today', recentMinutes: RECENT_MINUTES_DEFAULT };
+    const next = {
+      timeMode: 'today',
+      recentMinutes: RECENT_MINUTES_DEFAULT,
+      recentUnit: undefined,
+    };
     timeRangeRef.current = next;
     setTimeRange(next);
     setLogType(0);

@@ -41,7 +41,10 @@ import { cn } from '@/lib/utils'
 import {
   RECENT_MINUTES_MAX,
   RECENT_MINUTES_MIN,
+  RECENT_UNIT_MINUTES,
+  splitRecentMinutes,
   resolveLogTimeRange,
+  type LogRecentUnit,
   type LogTimeMode,
   type LogTimeRange,
 } from '../lib/time-range'
@@ -51,6 +54,7 @@ interface CompactDateTimeRangePickerProps {
   end?: Date
   timeMode?: LogTimeMode
   recentMinutes?: number
+  recentUnit?: LogRecentUnit
   onChange: (range: LogTimeRange) => void
   className?: string
 }
@@ -65,25 +69,10 @@ function fromInputValue(value: string): Date | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date
 }
 
-type RecentUnit = 'minute' | 'hour' | 'day'
-
-const RECENT_UNIT_MINUTES: Record<RecentUnit, number> = {
-  minute: 1,
-  hour: 60,
-  day: 1440,
-}
-
-const RECENT_UNIT_LABEL_KEYS: Record<RecentUnit, string> = {
+const RECENT_UNIT_LABEL_KEYS: Record<LogRecentUnit, string> = {
   minute: 'Minutes',
   hour: 'Hours',
   day: 'Days',
-}
-
-/** Split a minute count into the largest whole unit for display. */
-function splitRecentMinutes(minutes: number): { amount: number; unit: RecentUnit } {
-  if (minutes % 1440 === 0) return { amount: minutes / 1440, unit: 'day' }
-  if (minutes % 60 === 0) return { amount: minutes / 60, unit: 'hour' }
-  return { amount: minutes, unit: 'minute' }
 }
 
 export function CompactDateTimeRangePicker({
@@ -91,6 +80,7 @@ export function CompactDateTimeRangePicker({
   end,
   timeMode = 'fixed',
   recentMinutes = 60,
+  recentUnit,
   onChange,
   className,
 }: CompactDateTimeRangePickerProps) {
@@ -101,7 +91,7 @@ export function CompactDateTimeRangePicker({
   // The recent row is a draft like the datetime inputs: it only applies on
   // confirm, and only when the operator actually touched it this session.
   const [recentAmountDraft, setRecentAmountDraft] = useState('1')
-  const [recentUnitDraft, setRecentUnitDraft] = useState<RecentUnit>('hour')
+  const [recentUnitDraft, setRecentUnitDraft] = useState<LogRecentUnit>('hour')
   const [recentTouched, setRecentTouched] = useState(false)
 
   const recentDraftMinutes = useMemo(() => {
@@ -119,7 +109,7 @@ export function CompactDateTimeRangePicker({
   const label = useMemo(() => {
     if (timeMode === 'today') return t('Today')
     if (timeMode === 'recent') {
-      const { amount, unit } = splitRecentMinutes(recentMinutes)
+      const { amount, unit } = splitRecentMinutes(recentMinutes, recentUnit)
       if (unit === 'day') {
         return amount === 1 ? t('Last day') : t('Last {{days}} days', { days: amount })
       }
@@ -140,19 +130,20 @@ export function CompactDateTimeRangePicker({
     const startText = start ? dayjs(start).format('YYYY-MM-DD HH:mm') : '-'
     const endText = end ? dayjs(end).format('YYYY-MM-DD HH:mm') : '-'
     return `${startText} ~ ${endText}`
-  }, [end, start, t, timeMode, recentMinutes])
+  }, [end, start, t, timeMode, recentMinutes, recentUnit])
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (nextOpen) {
       const range = resolveLogTimeRange({
         timeMode,
         recentMinutes,
+        recentUnit,
         startTime: start?.getTime(),
         endTime: end?.getTime(),
       })
       setDraftStart(toInputValue(range.start))
       setDraftEnd(toInputValue(range.end))
-      const recent = splitRecentMinutes(recentMinutes)
+      const recent = splitRecentMinutes(recentMinutes, recentUnit)
       setRecentAmountDraft(String(recent.amount))
       setRecentUnitDraft(recent.unit)
       setRecentTouched(false)
@@ -168,6 +159,7 @@ export function CompactDateTimeRangePicker({
         resolveLogTimeRange({
           timeMode: 'recent',
           recentMinutes: recentDraftMinutes,
+          recentUnit: recentUnitDraft,
         })
       )
       setOpen(false)

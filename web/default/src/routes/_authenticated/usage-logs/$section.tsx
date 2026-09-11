@@ -50,6 +50,7 @@ const usageLogsSearchSchema = z.object({
   endTime: z.number().optional(),
   timeMode: z.enum(['today', 'recent', 'fixed']).optional().catch(undefined),
   recentMinutes: z.number().int().min(1).max(43200).optional().catch(undefined),
+  recentUnit: z.enum(['minute', 'hour', 'day']).optional().catch(undefined),
   recentHours: z.number().int().min(1).max(24).optional().catch(1),
 })
 

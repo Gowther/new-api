@@ -55,7 +55,16 @@ const LogsFilters = ({
   isAdminUser,
   t,
 }) => {
-  const recent = splitRecentMinutes(timeRange.recentMinutes || 60);
+  // 显示单位优先用操作者选过的；只有老链接没有单位时才从分钟数反推。
+  // 单位与分钟数对不上（手拼的 URL）时同样回退到反推。
+  const recentMinutes = timeRange.recentMinutes || 60;
+  const storedUnit = RECENT_UNITS.find(
+    (unit) => unit.value === timeRange.recentUnit,
+  );
+  const recent =
+    storedUnit && recentMinutes % storedUnit.minutes === 0
+      ? { amount: recentMinutes / storedUnit.minutes, unit: storedUnit.value }
+      : splitRecentMinutes(recentMinutes);
 
   const handleRecentUnitChange = (nextUnit) => {
     const unit = RECENT_UNITS.find((item) => item.value === nextUnit);

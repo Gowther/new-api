@@ -81,16 +81,19 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
   })
 
   useEffect(() => {
-    const { start, end, timeMode, recentMinutes } = resolveLogTimeRange({
-      timeMode: searchParams.timeMode,
-      recentMinutes: searchParams.recentMinutes,
-      recentHours: searchParams.recentHours,
-      startTime: searchParams.startTime,
-      endTime: searchParams.endTime,
-    })
+    const { start, end, timeMode, recentMinutes, recentUnit } =
+      resolveLogTimeRange({
+        timeMode: searchParams.timeMode,
+        recentMinutes: searchParams.recentMinutes,
+        recentUnit: searchParams.recentUnit,
+        recentHours: searchParams.recentHours,
+        startTime: searchParams.startTime,
+        endTime: searchParams.endTime,
+      })
     const baseFilters = {
       timeMode,
       recentMinutes,
+      recentUnit,
       startTime: start,
       endTime: end,
       ...(searchParams.channel
@@ -113,6 +116,7 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
     props.logCategory,
     searchParams.timeMode,
     searchParams.recentMinutes,
+    searchParams.recentUnit,
     searchParams.recentHours,
     searchParams.startTime,
     searchParams.endTime,
@@ -153,6 +157,7 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
         ...filters,
         timeMode: range.timeMode,
         recentMinutes: range.recentMinutes,
+        recentUnit: range.recentUnit,
         startTime: range.start,
         endTime: range.end,
       }
@@ -209,6 +214,7 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
         end={filters.endTime}
         timeMode={filters.timeMode}
         recentMinutes={filters.recentMinutes}
+        recentUnit={filters.recentUnit}
         onChange={handleDateRangeChange}
       />
     </LogsFilterField>

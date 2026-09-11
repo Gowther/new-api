@@ -246,7 +246,7 @@ export async function getOAuthState() {
   let path = '/api/oauth/state';
   let affCode = localStorage.getItem('aff');
   if (affCode && affCode.length > 0) {
-    path += `?aff=${affCode}`;
+    path += `?${new URLSearchParams({ aff: affCode }).toString()}`;
   }
   const res = await API.get(path);
   const { success, message, data } = res.data;
@@ -391,7 +391,18 @@ export function getChannelModels(type) {
   if (!models) {
     return [];
   }
-  channelModels = JSON.parse(models);
+  try {
+    channelModels = JSON.parse(models);
+  } catch (error) {
+    // localStorage 里的缓存损坏时不要让调用方（渲染/effect）崩掉
+    console.error('Failed to parse channel_models from localStorage:', error);
+    channelModels = undefined;
+    return [];
+  }
+  if (channelModels === null || typeof channelModels !== 'object') {
+    channelModels = undefined;
+    return [];
+  }
   if (type in channelModels) {
     return channelModels[type];
   }

@@ -83,41 +83,47 @@ export const useRedemptionsData = () => {
         setActivePage(data.page <= 0 ? 1 : data.page);
         setTokenCount(data.total);
         setRedemptionFormat(newPageData);
+        return data;
       } else {
         showError(message);
       }
     } catch (error) {
       showError(error.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   // Search redemption codes
-  const searchRedemptions = async () => {
+  const searchRedemptions = async (page = 1, size = pageSize) => {
     const { searchKeyword } = getFormValues();
     if (searchKeyword === '') {
-      await loadRedemptions(1, pageSize);
-      return;
+      return await loadRedemptions(1, pageSize);
     }
 
     setSearching(true);
     try {
-      const res = await API.get(
-        `/api/redemption/search?keyword=${searchKeyword}&p=1&page_size=${pageSize}`,
-      );
+      const params = new URLSearchParams({
+        keyword: searchKeyword,
+        p: String(page),
+        page_size: String(size),
+      });
+      const res = await API.get(`/api/redemption/search?${params.toString()}`);
       const { success, message, data } = res.data;
       if (success) {
         const newPageData = data.items;
         setActivePage(data.page || 1);
         setTokenCount(data.total);
         setRedemptionFormat(newPageData);
+        return data;
       } else {
         showError(message);
       }
     } catch (error) {
       showError(error.message);
+    } finally {
+      setSearching(false);
     }
-    setSearching(false);
   };
 
   // Manage redemption codes (CRUD operations)
@@ -165,9 +171,9 @@ export const useRedemptionsData = () => {
   const refresh = async (page = activePage) => {
     const { searchKeyword } = getFormValues();
     if (searchKeyword === '') {
-      await loadRedemptions(page, pageSize);
+      return await loadRedemptions(page, pageSize);
     } else {
-      await searchRedemptions();
+      return await searchRedemptions(page, pageSize);
     }
   };
 
@@ -178,7 +184,7 @@ export const useRedemptionsData = () => {
     if (searchKeyword === '') {
       loadRedemptions(page, pageSize);
     } else {
-      searchRedemptions();
+      searchRedemptions(page, pageSize);
     }
   };
 
@@ -190,7 +196,7 @@ export const useRedemptionsData = () => {
     if (searchKeyword === '') {
       loadRedemptions(1, size);
     } else {
-      searchRedemptions();
+      searchRedemptions(1, size);
     }
   };
 

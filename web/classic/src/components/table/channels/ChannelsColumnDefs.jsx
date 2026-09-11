@@ -719,12 +719,14 @@ export const getChannelsColumns = ({
                   onOk: () => {
                     (async () => {
                       await manageChannel(record.id, 'delete', record);
-                      await refresh();
-                      setTimeout(() => {
-                        if (channels.length === 0 && activePage > 1) {
-                          refresh(activePage - 1);
-                        }
-                      }, 100);
+                      // 依据刷新后的响应判断当前页是否已空，而不是闭包里的旧 channels
+                      const refreshedData = await refresh();
+                      if (
+                        refreshedData?.items?.length === 0 &&
+                        activePage > 1
+                      ) {
+                        await refresh(activePage - 1);
+                      }
                     })();
                   },
                 });

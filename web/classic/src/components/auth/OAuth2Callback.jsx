@@ -35,7 +35,7 @@ const OAuth2Callback = (props) => {
   const [searchParams] = useSearchParams();
   const [, userDispatch] = useContext(UserContext);
   const navigate = useNavigate();
-  
+
   // 防止 React 18 Strict Mode 下重复执行
   const hasExecuted = useRef(false);
 
@@ -44,8 +44,9 @@ const OAuth2Callback = (props) => {
 
   const sendCode = async (code, state, retry = 0) => {
     try {
+      const params = new URLSearchParams({ code, state: state ?? '' });
       const { data: resData } = await API.get(
-        `/api/oauth/${props.type}?code=${code}&state=${state}`,
+        `/api/oauth/${props.type}?${params.toString()}`,
       );
 
       const { success, message, data } = resData;

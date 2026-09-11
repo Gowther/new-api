@@ -27,18 +27,16 @@ const DeleteRedemptionModal = ({
   record,
   manageRedemption,
   refresh,
-  redemptions,
   activePage,
   t,
 }) => {
   const handleConfirm = async () => {
     await manageRedemption(record.id, REDEMPTION_ACTIONS.DELETE, record);
-    await refresh();
-    setTimeout(() => {
-      if (redemptions.length === 0 && activePage > 1) {
-        refresh(activePage - 1);
-      }
-    }, 100);
+    // 依据刷新后的响应判断当前页是否已空，而不是闭包里的旧 redemptions
+    const data = await refresh();
+    if (data?.items?.length === 0 && activePage > 1) {
+      await refresh(activePage - 1);
+    }
     onCancel(); // Close modal after success
   };
 

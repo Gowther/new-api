@@ -110,12 +110,14 @@ export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
       showError(message);
     }
     setLoading(false);
+    return success ? data : undefined;
   };
 
   // Refresh function
   const refresh = async (page = activePage) => {
-    await loadTokens(page);
+    const data = await loadTokens(page);
     setSelectedKeys([]);
+    return data;
   };
 
   // Copy text function
@@ -387,12 +389,11 @@ export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
       if (res?.data?.success) {
         const count = res.data.data || 0;
         showSuccess(t('已删除 {{count}} 个令牌！', { count }));
-        await refresh();
-        setTimeout(() => {
-          if (tokens.length === 0 && activePage > 1) {
-            refresh(activePage - 1);
-          }
-        }, 100);
+        // 依据刷新后的响应判断当前页是否已空，而不是闭包里的旧 tokens
+        const data = await refresh();
+        if (data?.items?.length === 0 && activePage > 1) {
+          await refresh(activePage - 1);
+        }
       } else {
         showError(res?.data?.message || t('删除失败'));
       }

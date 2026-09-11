@@ -400,7 +400,7 @@ export const useChannelsData = () => {
       getFormValues();
     if (searchKeyword !== '' || searchGroup !== '' || searchModel !== '') {
       setLoading(true);
-      await searchChannels(
+      const searchData = await searchChannels(
         enableTagMode,
         typeKey,
         statusF,
@@ -409,7 +409,7 @@ export const useChannelsData = () => {
         idSort,
       );
       setLoading(false);
-      return;
+      return searchData;
     }
 
     const reqId = ++requestCounter.current;
@@ -446,6 +446,7 @@ export const useChannelsData = () => {
       showError(message);
     }
     setLoading(false);
+    return success ? data : undefined;
   };
 
   // Search channels
@@ -468,7 +469,7 @@ export const useChannelsData = () => {
     const hasTextSearch = keyword !== '' || model !== '';
 
     if (!hasTextSearch && searchGroup === '') {
-      await loadChannels(
+      return await loadChannels(
         page,
         pageSz,
         sortFlag,
@@ -476,7 +477,6 @@ export const useChannelsData = () => {
         typeKey,
         statusF,
       );
-      return;
     }
 
     const reqId = ++requestCounter.current;
@@ -529,6 +529,7 @@ export const useChannelsData = () => {
         setChannelFormat(items, shouldUseTagMode);
         setChannelCount(total);
         setActivePage(page);
+        return data;
       } else {
         showError(message);
       }
@@ -554,7 +555,11 @@ export const useChannelsData = () => {
             idSort,
           );
 
-    await Promise.all([channelRefresh, refreshModelRoutingOverrideState()]);
+    const [data] = await Promise.all([
+      channelRefresh,
+      refreshModelRoutingOverrideState(),
+    ]);
+    return data;
   };
 
   const upstreamUpdates = useChannelUpstreamUpdates({ t, refresh });
@@ -1012,12 +1017,11 @@ export const useChannelsData = () => {
     const { success, message, data } = res.data;
     if (success) {
       showSuccess(t('已删除 ${data} 个通道！').replace('${data}', data));
-      await refresh();
-      setTimeout(() => {
-        if (channels.length === 0 && activePage > 1) {
-          refresh(activePage - 1);
-        }
-      }, 100);
+      // 依据刷新后的响应判断当前页是否已空，而不是闭包里的旧 channels
+      const refreshedData = await refresh();
+      if (refreshedData?.items?.length === 0 && activePage > 1) {
+        await refresh(activePage - 1);
+      }
     } else {
       showError(message);
     }
@@ -1181,14 +1185,16 @@ export const useChannelsData = () => {
     setTestingModels((prev) => new Set([...prev, model]));
 
     try {
-      let url = `/api/channel/test/${record.id}?model=${model}`;
+      const params = new URLSearchParams({ model: String(model) });
       if (endpointType) {
-        url += `&endpoint_type=${endpointType}`;
+        params.set('endpoint_type', endpointType);
       }
       if (stream) {
-        url += `&stream=true`;
+        params.set('stream', 'true');
       }
-      const res = await API.get(url);
+      const res = await API.get(
+        `/api/channel/test/${record.id}?${params.toString()}`,
+      );
 
       // 检查是否在请求期间被停止
       if (shouldStopBatchTestingRef.current && isBatchTesting) {

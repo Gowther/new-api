@@ -556,7 +556,9 @@ export const useLogsData = () => {
   };
 
   const openParamOverrideModal = (log, other) => {
-    const lines = Array.isArray(other?.po) ? other.po.filter(Boolean) : [];
+    const lines = Array.isArray(other?.admin_info?.po)
+      ? other.admin_info.po.filter(Boolean)
+      : [];
     if (lines.length === 0) {
       return;
     }
@@ -826,12 +828,16 @@ export const useLogsData = () => {
           });
         }
       }
-      if (Array.isArray(other?.po) && other.po.length > 0) {
+      if (
+        isAdminUser &&
+        Array.isArray(other?.admin_info?.po) &&
+        other.admin_info.po.length > 0
+      ) {
         expandDataLocal.push({
           key: t('参数覆盖'),
           value: (
             <ParamOverrideEntry
-              count={other.po.length}
+              count={other.admin_info.po.length}
               t={t}
               onOpen={(event) => {
                 event.stopPropagation();

@@ -83,6 +83,7 @@ export const useUsersData = () => {
       showError(message);
     }
     setLoading(false);
+    return success ? data : undefined;
   };
 
   // Search users with keyword and group
@@ -101,13 +102,16 @@ export const useUsersData = () => {
 
     if (searchKeyword === '' && searchGroup === '') {
       // If keyword is blank, load files instead
-      await loadUsers(startIdx, pageSize);
-      return;
+      return await loadUsers(startIdx, pageSize);
     }
     setSearching(true);
-    const res = await API.get(
-      `/api/user/search?keyword=${searchKeyword}&group=${searchGroup}&p=${startIdx}&page_size=${pageSize}`,
-    );
+    const params = new URLSearchParams({
+      keyword: searchKeyword,
+      group: searchGroup,
+      p: String(startIdx),
+      page_size: String(pageSize),
+    });
+    const res = await API.get(`/api/user/search?${params.toString()}`);
     const { success, message, data } = res.data;
     if (success) {
       const newPageData = data.items;
@@ -118,6 +122,7 @@ export const useUsersData = () => {
       showError(message);
     }
     setSearching(false);
+    return success ? data : undefined;
   };
 
   // Manage user operations (promote, demote, enable, disable, delete)
@@ -204,11 +209,16 @@ export const useUsersData = () => {
     localStorage.setItem('page-size', size + '');
     setPageSize(size);
     setActivePage(1);
-    loadUsers(activePage, size)
-      .then()
-      .catch((reason) => {
-        showError(reason);
-      });
+    const { searchKeyword, searchGroup } = getFormValues();
+    try {
+      if (searchKeyword === '' && searchGroup === '') {
+        await loadUsers(1, size);
+      } else {
+        await searchUsers(1, size, searchKeyword, searchGroup);
+      }
+    } catch (reason) {
+      showError(reason);
+    }
   };
 
   // Handle table row styling for disabled/deleted users
@@ -228,9 +238,9 @@ export const useUsersData = () => {
   const refresh = async (page = activePage) => {
     const { searchKeyword, searchGroup } = getFormValues();
     if (searchKeyword === '' && searchGroup === '') {
-      await loadUsers(page, pageSize);
+      return await loadUsers(page, pageSize);
     } else {
-      await searchUsers(page, pageSize, searchKeyword, searchGroup);
+      return await searchUsers(page, pageSize, searchKeyword, searchGroup);
     }
   };
 

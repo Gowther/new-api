@@ -150,6 +150,7 @@ const Playground = () => {
     handleEditSave,
     handleEditCancel,
   } = useMessageEdit(
+    message,
     setMessage,
     inputs,
     parameterEnabled,
@@ -257,17 +258,16 @@ const Playground = () => {
       try {
         const customPayload = JSON.parse(customRequestBody);
 
-        setMessage((prevMessage) => {
-          const newMessages = [...prevMessage, userMessage, loadingMessage];
+        // 先算好新消息列表再 setMessage，发送请求等副作用不能放在 updater 里
+        // （StrictMode 会重复执行 updater，导致重复扣费请求）
+        const newMessages = [...message, userMessage, loadingMessage];
+        setMessage(newMessages);
 
-          // 发送自定义请求体
-          sendRequest(customPayload, customPayload.stream !== false);
+        // 发送自定义请求体
+        sendRequest(customPayload, customPayload.stream !== false);
 
-          // 发送消息后保存，传入新消息列表
-          setTimeout(() => saveMessagesImmediately(newMessages), 0);
-
-          return newMessages;
-        });
+        // 发送消息后保存，传入新消息列表
+        setTimeout(() => saveMessagesImmediately(newMessages), 0);
         return;
       } catch (error) {
         console.error('自定义请求体JSON解析失败:', error);
@@ -288,30 +288,29 @@ const Playground = () => {
       messageContent,
     );
 
-    setMessage((prevMessage) => {
-      const newMessages = [...prevMessage, userMessageWithImages];
+    // 先算好新消息列表再 setMessage，sendRequest 等副作用放在 updater 外面，
+    // 避免 StrictMode 重复执行 updater 造成重复请求
+    const newMessages = [...message, userMessageWithImages];
+    const messagesWithLoading = [...newMessages, loadingMessage];
+    setMessage(messagesWithLoading);
 
-      const payload = buildApiPayload(
-        newMessages,
-        null,
-        inputs,
-        parameterEnabled,
-      );
-      sendRequest(payload, inputs.stream);
+    const payload = buildApiPayload(
+      newMessages,
+      null,
+      inputs,
+      parameterEnabled,
+    );
+    sendRequest(payload, inputs.stream);
 
-      // 禁用图片模式
-      if (inputs.imageEnabled) {
-        setTimeout(() => {
-          handleInputChange('imageEnabled', false);
-        }, 100);
-      }
+    // 禁用图片模式
+    if (inputs.imageEnabled) {
+      setTimeout(() => {
+        handleInputChange('imageEnabled', false);
+      }, 100);
+    }
 
-      // 发送消息后保存，传入新消息列表（包含用户消息和加载消息）
-      const messagesWithLoading = [...newMessages, loadingMessage];
-      setTimeout(() => saveMessagesImmediately(messagesWithLoading), 0);
-
-      return messagesWithLoading;
-    });
+    // 发送消息后保存，传入新消息列表（包含用户消息和加载消息）
+    setTimeout(() => saveMessagesImmediately(messagesWithLoading), 0);
   }
 
   // 切换推理展开状态

@@ -53,7 +53,9 @@ export async function fetchTokenKeysBatch(tokenIds) {
  */
 export async function fetchTokenKeys() {
   try {
-    const response = await API.get('/api/token/?p=1&size=10');
+    // 拉满后端单页上限（100，见 common/page_info.go），避免第一页恰好没有
+    // 启用令牌时误判为“没有可用令牌”而跳转走
+    const response = await API.get('/api/token/?p=1&size=100');
     const { success, data } = response.data;
     if (!success) throw new Error('Failed to fetch token keys');
 

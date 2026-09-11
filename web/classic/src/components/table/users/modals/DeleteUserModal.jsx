@@ -25,7 +25,6 @@ const DeleteUserModal = ({
   onCancel,
   onConfirm,
   user,
-  users,
   activePage,
   refresh,
   manageUser,
@@ -33,12 +32,11 @@ const DeleteUserModal = ({
 }) => {
   const handleConfirm = async () => {
     await manageUser(user.id, 'delete', user);
-    await refresh();
-    setTimeout(() => {
-      if (users.length === 0 && activePage > 1) {
-        refresh(activePage - 1);
-      }
-    }, 100);
+    // 依据刷新后的响应判断当前页是否已空，而不是闭包里的旧 users
+    const data = await refresh();
+    if (data?.items?.length === 0 && activePage > 1) {
+      await refresh(activePage - 1);
+    }
     onCancel(); // Close modal after success
   };
 

@@ -232,9 +232,19 @@ export const useTaskLogsData = () => {
       getFormValues();
     let localStartTimestamp = parseInt(Date.parse(start_timestamp) / 1000);
     let localEndTimestamp = parseInt(Date.parse(end_timestamp) / 1000);
-    let url = isAdminUser
-      ? `/api/task/?p=${page}&page_size=${size}&channel_id=${channel_id}&task_id=${task_id}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`
-      : `/api/task/self?p=${page}&page_size=${size}&task_id=${task_id}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`;
+    const params = new URLSearchParams({
+      p: String(page),
+      page_size: String(size),
+      task_id: String(task_id ?? ''),
+      start_timestamp: String(localStartTimestamp),
+      end_timestamp: String(localEndTimestamp),
+    });
+    if (isAdminUser) {
+      params.set('channel_id', String(channel_id ?? ''));
+    }
+    const url = isAdminUser
+      ? `/api/task/?${params.toString()}`
+      : `/api/task/self?${params.toString()}`;
     const res = await API.get(url);
     const { success, message, data } = res.data;
     if (success) {

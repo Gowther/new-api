@@ -164,10 +164,16 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
       let localStartTimestamp = Date.parse(start_timestamp) / 1000;
       let localEndTimestamp = Date.parse(end_timestamp) / 1000;
 
+      const params = new URLSearchParams({
+        start_timestamp: String(localStartTimestamp),
+        end_timestamp: String(localEndTimestamp),
+        default_time: String(dataExportDefaultTime),
+      });
       if (isAdminUser) {
-        url = `/api/data/?username=${username}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&default_time=${dataExportDefaultTime}`;
+        params.set('username', username);
+        url = `/api/data/?${params.toString()}`;
       } else {
-        url = `/api/data/self/?start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&default_time=${dataExportDefaultTime}`;
+        url = `/api/data/self/?${params.toString()}`;
       }
 
       const res = await API.get(url);

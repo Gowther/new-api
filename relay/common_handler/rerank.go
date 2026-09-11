@@ -41,7 +41,13 @@ func RerankHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 				if result.Document != nil {
 					if doc, ok := result.Document.(string); ok {
 						if doc == "" {
-							document = info.Documents[result.Index]
+							// result.Index is upstream-controlled; fall back to the
+							// upstream-provided document when it is out of range.
+							if result.Index >= 0 && result.Index < len(info.Documents) {
+								document = info.Documents[result.Index]
+							} else {
+								document = result.Document
+							}
 						} else {
 							document = doc
 						}

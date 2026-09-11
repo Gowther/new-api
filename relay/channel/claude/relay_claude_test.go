@@ -1,11 +1,13 @@
 package claude
 
 import (
+	"net/http"
 	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -372,4 +374,73 @@ func TestRequestOpenAI2ClaudeMessage_ClaudeOpus48ThinkingUsesAdaptiveHighEffort(
 	require.Nil(t, claudeRequest.Temperature)
 	require.Nil(t, claudeRequest.TopP)
 	require.Nil(t, claudeRequest.TopK)
+}
+
+func TestRequestOpenAI2ClaudeMessage_NonStringToolParametersTypeReturnsError(t *testing.T) {
+	request := dto.GeneralOpenAIRequest{
+		Model: "claude-3-5-sonnet-20240620",
+		Messages: []dto.Message{
+			{Role: "user", Content: "hello"},
+		},
+		Tools: []dto.ToolCallRequest{
+			{
+				Type: "function",
+				Function: dto.FunctionRequest{
+					Name: "get_weather",
+					// User-controlled: parameters.type is not a string. A bare
+					// type assertion here used to panic the relay worker.
+					Parameters: map[string]any{"type": 123},
+				},
+			},
+		},
+	}
+
+	claudeRequest, err := RequestOpenAI2ClaudeMessage(nil, request)
+	require.Nil(t, claudeRequest)
+	require.Error(t, err)
+	var apiErr *types.NewAPIError
+	require.ErrorAs(t, err, &apiErr)
+	assert.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
+}
+
+func TestRequestOpenAI2ClaudeMessage_NonStringStopSequenceReturnsError(t *testing.T) {
+	request := dto.GeneralOpenAIRequest{
+		Model: "claude-3-5-sonnet-20240620",
+		Messages: []dto.Message{
+			{Role: "user", Content: "hello"},
+		},
+		// User-controlled: mixed-type stop array used to panic on stop.(string).
+		Stop: []any{"ok", 5},
+	}
+
+	claudeRequest, err := RequestOpenAI2ClaudeMessage(nil, request)
+	require.Nil(t, claudeRequest)
+	require.Error(t, err)
+	var apiErr *types.NewAPIError
+	require.ErrorAs(t, err, &apiErr)
+	assert.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
+}
+
+func TestRequestOpenAI2ClaudeMessage_ValidToolAndStopStillConvert(t *testing.T) {
+	request := dto.GeneralOpenAIRequest{
+		Model: "claude-3-5-sonnet-20240620",
+		Messages: []dto.Message{
+			{Role: "user", Content: "hello"},
+		},
+		Tools: []dto.ToolCallRequest{
+			{
+				Type: "function",
+				Function: dto.FunctionRequest{
+					Name:       "get_weather",
+					Parameters: map[string]any{"type": "object"},
+				},
+			},
+		},
+		Stop: []any{"done", "end"},
+	}
+
+	claudeRequest, err := RequestOpenAI2ClaudeMessage(nil, request)
+	require.NoError(t, err)
+	require.NotNil(t, claudeRequest)
+	assert.Equal(t, []string{"done", "end"}, claudeRequest.StopSequences)
 }

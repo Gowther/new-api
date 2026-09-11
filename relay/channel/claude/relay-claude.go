@@ -55,7 +55,11 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 			}
 			claudeTool.InputSchema = make(map[string]interface{})
 			if params["type"] != nil {
-				claudeTool.InputSchema["type"] = params["type"].(string)
+				paramType, ok := params["type"].(string)
+				if !ok {
+					return nil, types.NewErrorWithStatusCode(fmt.Errorf("tool %q parameters.type must be a string, got %T", tool.Function.Name, params["type"]), types.ErrorCodeConvertRequestFailed, http.StatusBadRequest)
+				}
+				claudeTool.InputSchema["type"] = paramType
 			}
 			claudeTool.InputSchema["properties"] = params["properties"]
 			claudeTool.InputSchema["required"] = params["required"]
@@ -245,13 +249,17 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 
 	if textRequest.Stop != nil {
 		// stop maybe string/array string, convert to array string
-		switch textRequest.Stop.(type) {
+		switch stopValue := textRequest.Stop.(type) {
 		case string:
-			claudeRequest.StopSequences = []string{textRequest.Stop.(string)}
+			claudeRequest.StopSequences = []string{stopValue}
 		case []interface{}:
-			stopSequences := make([]string, 0)
-			for _, stop := range textRequest.Stop.([]interface{}) {
-				stopSequences = append(stopSequences, stop.(string))
+			stopSequences := make([]string, 0, len(stopValue))
+			for _, stop := range stopValue {
+				stopStr, ok := stop.(string)
+				if !ok {
+					return nil, types.NewErrorWithStatusCode(fmt.Errorf("stop sequences must be strings, got %T", stop), types.ErrorCodeConvertRequestFailed, http.StatusBadRequest)
+				}
+				stopSequences = append(stopSequences, stopStr)
 			}
 			claudeRequest.StopSequences = stopSequences
 		}

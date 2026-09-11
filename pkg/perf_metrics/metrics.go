@@ -107,8 +107,17 @@ func Query(params QueryParams) (QueryResult, error) {
 		})
 	}
 
+	// Multi-node: the active bucket in Redis aggregates samples from every
+	// node (Record writes both the local hot bucket and Redis), so when it is
+	// available it replaces this node's local hot bucket for the same key.
+	// Any Redis failure falls back to DB rows + local hot buckets below.
+	redisKey, redisMerged := mergeRedisActiveBuckets(merged, params, startTs, endTs)
+
 	hotBuckets.Range(func(key, value any) bool {
 		k := key.(bucketKey)
+		if redisMerged && k == redisKey {
+			return true
+		}
 		if k.model != params.Model || k.bucketTs < startTs || k.bucketTs > endTs {
 			return true
 		}
@@ -405,22 +414,28 @@ func recordRedis(key bucketKey, sample Sample) {
 	_, _ = pipe.Exec(ctx)
 }
 
-func mergeRedisActiveBuckets(merged map[bucketKey]counters, params QueryParams, startTs int64, endTs int64) {
+// mergeRedisActiveBuckets merges the cross-node active bucket stored in Redis
+// into merged. It reports the merged key so the caller can skip the local hot
+// bucket for the same key: every sample is written to both, and counting both
+// would double-report this node. Any failure (Redis down, key missing, active
+// bucket outside the query window) is a no-op so Query falls back to DB+local.
+func mergeRedisActiveBuckets(merged map[bucketKey]counters, params QueryParams, startTs int64, endTs int64) (bucketKey, bool) {
 	if !common.RedisEnabled || common.RDB == nil || params.Model == "" || params.Group == "" {
-		return
+		return bucketKey{}, false
 	}
 	active := bucketStart(time.Now().Unix())
 	if active < startTs || active > endTs {
-		return
+		return bucketKey{}, false
 	}
 	key := bucketKey{model: params.Model, group: params.Group, bucketTs: active}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	values, err := common.RDB.HGetAll(ctx, redisBucketKey(key)).Result()
 	if err != nil || len(values) == 0 {
-		return
+		return bucketKey{}, false
 	}
 	mergeCounters(merged, key, redisCounters(values))
+	return key, true
 }
 
 func redisBucketKey(key bucketKey) string {

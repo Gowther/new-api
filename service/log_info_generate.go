@@ -117,11 +117,20 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	return other
 }
 
+// appendParamOverrideInfo nests the param-override audit lines under
+// other.admin_info.po. Audit lines can contain admin-configured values
+// (injected system prompts, header values), and model.formatUserLogs strips
+// the whole admin_info object for non-admin viewers, keeping them admin-only.
 func appendParamOverrideInfo(relayInfo *relaycommon.RelayInfo, other map[string]interface{}) {
 	if relayInfo == nil || other == nil || len(relayInfo.ParamOverrideAudit) == 0 {
 		return
 	}
-	other["po"] = relayInfo.ParamOverrideAudit
+	adminInfo, ok := other["admin_info"].(map[string]interface{})
+	if !ok || adminInfo == nil {
+		adminInfo = map[string]interface{}{}
+		other["admin_info"] = adminInfo
+	}
+	adminInfo["po"] = relayInfo.ParamOverrideAudit
 }
 
 func appendStreamStatus(relayInfo *relaycommon.RelayInfo, other map[string]interface{}) {

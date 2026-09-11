@@ -571,3 +571,43 @@ func TestStreamScannerHandler_StreamStatus_ReplacesPreInitialized(t *testing.T) 
 	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.EndReason)
 	assert.Equal(t, 0, info.StreamStatus.TotalErrorCount())
 }
+
+func TestStreamScannerHandler_BareDoneLineTerminatesStream(t *testing.T) {
+	t.Parallel()
+
+	// A bare "[DONE]" line (no "data:" prefix) must terminate the stream
+	// cleanly; slicing it would push "]" to the data handler as garbage.
+	body := "data: {\"id\":1}\n[DONE]\ndata: should_not_appear\n"
+	c, resp, info := setupStreamTest(t, strings.NewReader(body))
+
+	var got []string
+	StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
+		got = append(got, data)
+	})
+
+	assert.Equal(t, []string{"{\"id\":1}"}, got)
+	require.NotNil(t, info.StreamStatus)
+	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.EndReason)
+	assert.True(t, info.StreamStatus.IsNormalEnd())
+	assert.False(t, info.StreamStatus.HasErrors())
+}
+
+func TestStreamScannerHandler_ZeroStreamingTimeoutUsesDefault(t *testing.T) {
+	// Not parallel: modifies global constant.StreamingTimeout
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 0
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+
+	// STREAMING_TIMEOUT=0 must fall back to the default instead of panicking
+	// in time.NewTicker for every streaming request.
+	c, resp, info := setupStreamTest(t, strings.NewReader(buildSSEBody(3)))
+
+	var count atomic.Int64
+	StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
+		count.Add(1)
+	})
+
+	assert.Equal(t, int64(3), count.Load())
+	require.NotNil(t, info.StreamStatus)
+	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.EndReason)
+}

@@ -353,6 +353,12 @@ func handleNovaRequest(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) 
 		return types.NewError(errors.Wrap(err, "unmarshal nova response"), types.ErrorCodeBadResponseBody), nil
 	}
 
+	// A content-filtered or otherwise empty upstream response has no content
+	// entries; indexing [0] would panic.
+	if len(novaResp.Output.Message.Content) == 0 {
+		return types.NewError(errors.New("nova response message content is empty"), types.ErrorCodeBadResponseBody), nil
+	}
+
 	// 构造OpenAI格式响应
 	response := dto.OpenAITextResponse{
 		Id:      helper.GetResponseID(c),

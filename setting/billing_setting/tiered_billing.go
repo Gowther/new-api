@@ -80,6 +80,13 @@ func smokeTestExpr(exprStr string) error {
 		{P: 1000, C: 1000, Len: 1000},
 		{P: 100000, C: 100000, Len: 100000},
 		{P: 1000000, C: 1000000, Len: 1000000},
+		// Sub-category axes: cache/image/audio heavy requests must not evaluate
+		// negative either, otherwise the expression slips past validation and
+		// only surfaces at settle time.
+		{P: 0, C: 0, Len: 1000000, CR: 1000000},
+		{P: 0, C: 0, Len: 1000000, CC: 1000000, CC1h: 1000000},
+		{P: 0, C: 0, Len: 1000000, Img: 1000000, AI: 1000000},
+		{P: 0, C: 0, ImgO: 1000000, AO: 1000000},
 	}
 	requests := []billingexpr.RequestInput{
 		{},

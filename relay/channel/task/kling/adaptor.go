@@ -189,6 +189,7 @@ func (a *TaskAdaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, req
 
 // DoResponse handles upstream response, returns taskID etc.
 func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (taskID string, taskData []byte, taskErr *dto.TaskError) {
+	defer service.CloseResponseBodyGracefully(resp)
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		taskErr = service.TaskErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
@@ -286,6 +287,14 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 	if err := taskcommon.UnmarshalMetadata(req.Metadata, &r); err != nil {
 		return nil, errors.Wrap(err, "unmarshal metadata failed")
 	}
+	// metadata can override duration past request validation; duration is a
+	// billing multiplier, so re-clamp it to the validated value when the
+	// override is unparseable or out of bounds.
+	duration, err := strconv.Atoi(strings.TrimSpace(r.Duration))
+	if err != nil || duration < 1 || duration > relaycommon.MaxTaskDurationSeconds {
+		duration = taskcommon.DefaultInt(req.Duration, 5)
+	}
+	r.Duration = strconv.Itoa(duration)
 	return &r, nil
 }
 

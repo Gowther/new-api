@@ -297,6 +297,19 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 		r.Duration = lo.ToPtr(dto.IntValue(sec))
 	}
 
+	// metadata can override Duration past standard request validation; clamp it
+	// because it bounds the video length this task is billed for.
+	if r.Duration != nil {
+		d := int(*r.Duration)
+		if d > relaycommon.MaxTaskDurationSeconds {
+			d = relaycommon.MaxTaskDurationSeconds
+		}
+		if d < 1 {
+			d = 1
+		}
+		r.Duration = lo.ToPtr(dto.IntValue(d))
+	}
+
 	r.Content = lo.Reject(r.Content, func(c ContentItem, _ int) bool { return c.Type == "text" })
 	r.Content = append(r.Content, ContentItem{
 		Type: "text",

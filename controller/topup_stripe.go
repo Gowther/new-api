@@ -78,8 +78,12 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 		c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("充值数量不能小于 %d", getStripeMinTopup()), "data": 10})
 		return
 	}
-	if req.Amount > 10000 {
-		c.JSON(http.StatusOK, gin.H{"message": "充值数量不能大于 10000", "data": 10})
+	maxStripeTopup := int64(10000)
+	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
+		maxStripeTopup = maxStripeTopup * int64(common.QuotaPerUnit)
+	}
+	if req.Amount > maxStripeTopup {
+		c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("充值数量不能大于 %d", maxStripeTopup), "data": 10})
 		return
 	}
 
@@ -99,7 +103,17 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "用户不存在"})
 		return
 	}
-	chargedMoney := GetChargedAmount(float64(req.Amount), *user)
+	// tokens 展示模式下 req.Amount 是 token 数，先换算成计费单元（与易支付路径一致），
+	// 否则校验/扣款/到账会多乘一个 QuotaPerUnit，导致全部充值被拒或金额错误。
+	amount := req.Amount
+	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
+		amount = decimal.NewFromInt(req.Amount).Div(decimal.NewFromFloat(common.QuotaPerUnit)).IntPart()
+		if amount <= 0 {
+			c.JSON(http.StatusOK, gin.H{"message": "error", "data": "充值数量过少"})
+			return
+		}
+	}
+	chargedMoney := GetChargedAmount(float64(amount), *user)
 	if rejectInvalidCreditedQuota(c, id,
 		decimal.NewFromFloat(chargedMoney).Mul(decimal.NewFromFloat(common.QuotaPerUnit)),
 	) {
@@ -109,7 +123,7 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 	reference := fmt.Sprintf("new-api-ref-%d-%d-%s", user.Id, time.Now().UnixMilli(), randstr.String(4))
 	referenceId := "ref_" + common.Sha1([]byte(reference))
 
-	payLink, err := genStripeLink(referenceId, user.StripeCustomer, user.Email, req.Amount, req.SuccessURL, req.CancelURL)
+	payLink, err := genStripeLink(referenceId, user.StripeCustomer, user.Email, amount, req.SuccessURL, req.CancelURL)
 	if err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Stripe 创建 Checkout Session 失败 user_id=%d trade_no=%s amount=%d error=%q", id, referenceId, req.Amount, err.Error()))
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "拉起支付失败"})
@@ -118,7 +132,7 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 
 	topUp := &model.TopUp{
 		UserId:          id,
-		Amount:          req.Amount,
+		Amount:          amount,
 		Money:           chargedMoney,
 		TradeNo:         referenceId,
 		PaymentMethod:   model.PaymentMethodStripe,
@@ -128,11 +142,11 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 	}
 	err = topUp.Insert()
 	if err != nil {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("Stripe 创建充值订单失败 user_id=%d trade_no=%s amount=%d error=%q", id, referenceId, req.Amount, err.Error()))
+		logger.LogError(c.Request.Context(), fmt.Sprintf("Stripe 创建充值订单失败 user_id=%d trade_no=%s amount=%d error=%q", id, referenceId, amount, err.Error()))
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "创建订单失败"})
 		return
 	}
-	logger.LogInfo(c.Request.Context(), fmt.Sprintf("Stripe 充值订单创建成功 user_id=%d trade_no=%s amount=%d money=%.2f", id, referenceId, req.Amount, chargedMoney))
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf("Stripe 充值订单创建成功 user_id=%d trade_no=%s amount=%d money=%.2f", id, referenceId, amount, chargedMoney))
 	c.JSON(http.StatusOK, gin.H{
 		"message": "success",
 		"data": gin.H{
@@ -416,9 +430,13 @@ func getStripeCreditedQuota(amount int64, group string) decimal.Decimal {
 	if topUpGroupRatio == 0 {
 		topUpGroupRatio = 1
 	}
-	return decimal.NewFromInt(amount).
-		Mul(decimal.NewFromFloat(topUpGroupRatio)).
-		Mul(decimal.NewFromFloat(common.QuotaPerUnit))
+	credited := decimal.NewFromInt(amount).
+		Mul(decimal.NewFromFloat(topUpGroupRatio))
+	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
+		// tokens 展示模式下 amount 本身就是 token(quota) 数量，不能再乘 QuotaPerUnit。
+		return credited
+	}
+	return credited.Mul(decimal.NewFromFloat(common.QuotaPerUnit))
 }
 
 func getStripePayMoney(amount float64, group string) float64 {

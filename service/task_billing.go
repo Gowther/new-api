@@ -156,10 +156,12 @@ func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) {
 		return
 	}
 
-	// 1. 退还资金来源（钱包或订阅）
+	// 1. 退还资金来源（钱包或订阅）；失败时仍继续退还令牌额度并记录日志，
+	// 避免出现资金来源未退但令牌额度未退、且无任何日志的部分退款状态
+	var fundingRefundErr error
 	if err := taskAdjustFunding(task, -quota); err != nil {
+		fundingRefundErr = err
 		logger.LogWarn(ctx, fmt.Sprintf("退还资金来源失败 task %s: %s", task.TaskID, err.Error()))
-		return
 	}
 
 	// 2. 退还令牌额度
@@ -169,6 +171,9 @@ func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) {
 	other := taskBillingOther(task)
 	other["task_id"] = task.TaskID
 	other["reason"] = reason
+	if fundingRefundErr != nil {
+		other["funding_refund_error"] = fundingRefundErr.Error()
+	}
 	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
 		UserId:    task.UserId,
 		LogType:   model.LogTypeRefund,

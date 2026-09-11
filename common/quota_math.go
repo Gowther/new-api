@@ -24,6 +24,10 @@ const (
 	QuotaClampOverflow  QuotaClampKind = "overflow"
 	QuotaClampUnderflow QuotaClampKind = "underflow"
 	QuotaClampNaN       QuotaClampKind = "nan"
+	// QuotaClampNegative marks a computed charge that came out negative (e.g. a
+	// billing expression evaluating below zero at settle time) and was floored
+	// to 0 so it can never become a user credit.
+	QuotaClampNegative QuotaClampKind = "negative"
 )
 
 // QuotaClamp describes a single saturation event: a quota conversion whose
@@ -31,8 +35,8 @@ const (
 // therefore clamped. It is surfaced to billing callers so the event can be
 // recorded on the related consume/task log for admin auditing.
 type QuotaClamp struct {
-	Op       string         `json:"op"`       // "QuotaFromFloat" | "QuotaRound" | "QuotaFromDecimal"
-	Kind     QuotaClampKind `json:"kind"`     // "overflow" | "underflow" | "nan"
+	Op       string         `json:"op"`       // "QuotaFromFloat" | "QuotaRound" | "QuotaFromDecimal" | "TieredSettle"
+	Kind     QuotaClampKind `json:"kind"`     // "overflow" | "underflow" | "nan" | "negative"
 	Original float64        `json:"original"` // best-effort pre-clamp value (decimal -> float64 approx)
 	Clamped  int            `json:"clamped"`  // the saturated result actually used
 }

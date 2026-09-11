@@ -25,7 +25,29 @@ func ComputeTieredQuotaWithRequest(snap *BillingSnapshot, params TokenParams, re
 	}
 
 	quotaBeforeGroup := quotaConversion(cost, snap)
-	afterGroup, clamp := common.QuotaRoundChecked(quotaBeforeGroup * snap.GroupRatio)
+	// Billing invariant: an expression that evaluates negative at settle time
+	// must never become a user credit (a negative settle delta would refund
+	// more than was pre-consumed). Floor the charge at zero and record the
+	// clamp so it is audited like any other quota saturation event.
+	var clamp *common.QuotaClamp
+	if quotaBeforeGroup < 0 {
+		clamp = &common.QuotaClamp{Op: "TieredSettle", Kind: common.QuotaClampNegative, Original: quotaBeforeGroup, Clamped: 0}
+		common.SysError(clamp.Error())
+		quotaBeforeGroup = 0
+	}
+
+	afterGroup, roundClamp := common.QuotaRoundChecked(quotaBeforeGroup * snap.GroupRatio)
+	if clamp == nil {
+		clamp = roundClamp
+	}
+	if afterGroup < 0 {
+		// A negative group ratio (misconfiguration) must not produce a credit either.
+		if clamp == nil {
+			clamp = &common.QuotaClamp{Op: "TieredSettle", Kind: common.QuotaClampNegative, Original: float64(afterGroup), Clamped: 0}
+			common.SysError(clamp.Error())
+		}
+		afterGroup = 0
+	}
 	crossed := trace.MatchedTier != snap.EstimatedTier
 
 	return TieredResult{

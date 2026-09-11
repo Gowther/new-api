@@ -237,6 +237,12 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 	if err := taskcommon.UnmarshalMetadata(req.Metadata, &r); err != nil {
 		return nil, errors.Wrap(err, "unmarshal metadata failed")
 	}
+	// metadata can override duration past request validation; duration is a
+	// billing multiplier, so re-clamp it to the validated value when the
+	// override is out of bounds.
+	if r.Duration < 1 || r.Duration > relaycommon.MaxTaskDurationSeconds {
+		r.Duration = taskcommon.DefaultInt(req.Duration, 5)
+	}
 	return &r, nil
 }
 

@@ -403,6 +403,16 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 		return nil, errors.Wrap(err, "unmarshal metadata failed")
 	}
 
+	// metadata can override Frames past standard request validation; clamp it
+	// because it maps to the video duration this task is billed for.
+	maxFrames := 24*relaycommon.MaxTaskDurationSeconds + 1
+	if r.Frames > maxFrames {
+		r.Frames = maxFrames
+	}
+	if r.Frames <= 0 {
+		r.Frames = 121 // 24*5+1, the 5s default above
+	}
+
 	// 即梦视频3.0 ReqKey转换
 	// https://www.volcengine.com/docs/85621/1792707
 	imageLen := lo.Max([]int{len(req.Images), len(r.BinaryDataBase64), len(r.ImageUrls)})

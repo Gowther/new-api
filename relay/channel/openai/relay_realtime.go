@@ -2,6 +2,7 @@ package openai
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
@@ -35,7 +36,13 @@ func OpenaiRealtimeHandler(c *gin.Context, info *relaycommon.RelayInfo) (*types.
 	localUsage := &dto.RealtimeUsage{}
 	sumUsage := &dto.RealtimeUsage{}
 
+	// readerWg tracks both reader goroutines; the main flow must wait for them
+	// to exit before reading the shared usage accumulators.
+	var readerWg sync.WaitGroup
+	readerWg.Add(2)
+
 	gopool.Go(func() {
+		defer readerWg.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				errChan <- fmt.Errorf("panic in client reader: %v", r)
@@ -96,6 +103,7 @@ func OpenaiRealtimeHandler(c *gin.Context, info *relaycommon.RelayInfo) (*types.
 	})
 
 	gopool.Go(func() {
+		defer readerWg.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				errChan <- fmt.Errorf("panic in target reader: %v", r)
@@ -209,6 +217,14 @@ func OpenaiRealtimeHandler(c *gin.Context, info *relaycommon.RelayInfo) (*types.
 		logger.LogError(c, "realtime error: "+err.Error())
 	case <-c.Done():
 	}
+
+	// Stop both reader goroutines before touching the shared usage accumulators.
+	// They are usually blocked in ReadMessage, so closing the connections is
+	// what makes them return; the deferred Close calls in the callers
+	// (WssHelper / Relay) tolerate an already-closed connection.
+	_ = clientConn.Close()
+	_ = targetConn.Close()
+	readerWg.Wait()
 
 	if usage.TotalTokens != 0 {
 		_ = preConsumeUsage(c, info, usage, sumUsage)

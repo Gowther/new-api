@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
@@ -166,9 +167,47 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 		inputPayload[key] = val
 	}
 
+	// Billing charges by the validated request.N; extra_fields / extra above can
+	// overwrite num_outputs with any client-supplied value, so re-clamp it.
+	if value, ok := inputPayload["num_outputs"]; ok {
+		inputPayload["num_outputs"] = clampNumOutputs(value)
+	}
+
 	return map[string]any{
 		"input": inputPayload,
 	}, nil
+}
+
+// clampNumOutputs bounds num_outputs to [1, dto.MaxImageN]. The value comes
+// from arbitrary client JSON, so it may arrive as float64, int, json.Number,
+// or a numeric string.
+func clampNumOutputs(value any) int {
+	f := float64(1)
+	switch v := value.(type) {
+	case float64:
+		f = v
+	case float32:
+		f = float64(v)
+	case int:
+		f = float64(v)
+	case int64:
+		f = float64(v)
+	case json.Number:
+		if parsed, err := v.Float64(); err == nil {
+			f = parsed
+		}
+	case string:
+		if parsed, err := strconv.ParseFloat(strings.TrimSpace(v), 64); err == nil {
+			f = parsed
+		}
+	}
+	if math.IsNaN(f) || f < 1 {
+		return 1
+	}
+	if f > dto.MaxImageN {
+		return dto.MaxImageN
+	}
+	return int(f)
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, requestBody io.Reader) (any, error) {

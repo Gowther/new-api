@@ -1690,106 +1690,104 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
 
       {/* Overrides pin whole channels across every model they serve, so the
           notice is page-level: inside the channels panel it would read as if
-          it belonged to whichever model happens to be selected. */}
+          it belonged to whichever model happens to be selected. It stays one
+          compact line of channel chips — a taller banner would push the three
+          columns below the fold, and each chip keeps its own restore button
+          next to the channel name instead of on the far edge. */}
       {routingOverrides.length > 0 ? (
-        <div className='shrink-0 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 dark:border-amber-900/60 dark:bg-amber-950/20'>
-          <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
-            <TriangleAlert className='size-4 shrink-0 text-amber-600 dark:text-amber-400' />
-            <span className='text-sm font-medium text-amber-900 dark:text-amber-100'>
-              {t('Temporary single-channel mode')}
-            </span>
-            <span className='text-muted-foreground text-xs tabular-nums'>
-              {t('{{count}} channel(s)', { count: routingOverrides.length })}
-            </span>
-            <Button
-              type='button'
-              variant='outline'
-              size='sm'
-              className='ml-auto'
-              onClick={() => setRestoreRoutingOverrideTarget('all')}
-              disabled={
-                !canEditRouting ||
-                isUpdatingRoutingOverride ||
-                routingPrompt.isSubmitting
-              }
-            >
-              <HugeiconsIcon icon={UndoIcon} data-icon='inline-start' />
-              {t('Restore normal routing')}
-            </Button>
-          </div>
-          <div className='mt-2 space-y-2 border-t border-amber-200/70 pt-2 dark:border-amber-900/60'>
-            {routingOverrides.map((routingOverride) => {
-              const overrideLabel =
-                routingOverride.channel_name ||
-                `#${routingOverride.channel_id}`
-              return (
-                <div
-                  key={routingOverride.channel_id}
-                  className='flex items-start gap-2'
-                >
-                  <div className='min-w-0 flex-1'>
-                    <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
-                      {/* The pinned channel need not serve the selected model,
-                          so without this the table below may not even list it.
-                          Selecting one of its covered models brings its row
-                          into view. */}
+        <div className='flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 dark:border-amber-900/60 dark:bg-amber-950/20'>
+          <TriangleAlert className='size-4 shrink-0 text-amber-600 dark:text-amber-400' />
+          <span className='text-sm font-medium text-amber-900 dark:text-amber-100'>
+            {t('Temporary single-channel mode')}
+          </span>
+          {routingOverrides.map((routingOverride) => {
+            const overrideLabel =
+              routingOverride.channel_name || `#${routingOverride.channel_id}`
+            return (
+              <span
+                key={routingOverride.channel_id}
+                className='bg-background inline-flex max-w-full items-center gap-1 rounded-md border border-amber-300/70 py-0.5 pr-1 pl-2 text-xs dark:border-amber-900/60'
+              >
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
                       <button
                         type='button'
-                        className='focus-visible:ring-ring flex min-w-0 items-center gap-2 rounded-sm underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:outline-none'
-                        title={t('Show this channel in the routing table')}
+                        className='focus-visible:ring-ring min-w-0 rounded-sm underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:outline-none'
                         aria-label={`${t('Show this channel in the routing table')}: ${overrideLabel}`}
                         onClick={() =>
                           focusRoutingOverrideChannel(routingOverride)
                         }
-                      >
-                        <span className='min-w-0 truncate text-sm font-medium'>
-                          {overrideLabel}
-                        </span>
-                        <span className='text-muted-foreground font-mono text-xs'>
-                          ID:{routingOverride.channel_id}
-                        </span>
-                      </button>
-                      <span className='text-muted-foreground text-xs'>
+                      />
+                    }
+                  >
+                    <span className='font-medium'>{overrideLabel}</span>{' '}
+                    <span className='text-muted-foreground font-mono'>
+                      #{routingOverride.channel_id}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side='top' className='max-w-xs'>
+                    <div className='space-y-1 text-xs'>
+                      <div>
                         {t('{{count}} covered model(s)', {
                           count: routingOverride.model_count,
                         })}
-                      </span>
-                      <span className='text-muted-foreground text-xs'>
+                        {' · '}
                         {t('Covered groups')}:{' '}
                         {routingOverride.groups.join(', ')}
-                      </span>
+                      </div>
+                      <div>
+                        {t(
+                          'Automatic requests for every covered model use only this channel. Requests that explicitly specify a channel are unaffected.'
+                        )}
+                      </div>
                     </div>
-                    <div className='text-muted-foreground mt-1 text-xs'>
-                      {t(
-                        'Automatic requests for every covered model use only this channel. Requests that explicitly specify a channel are unaffected.'
-                      )}
-                    </div>
-                  </div>
-                  {/* Per-override restore: the banner button clears every
-                      override at once, and a channel that does not serve the
-                      selected model has no table row to act on. */}
-                  <Button
-                    type='button'
-                    variant='ghost'
-                    size='icon-sm'
-                    className='shrink-0'
-                    title={t('Restore normal routing')}
-                    aria-label={`${t('Restore normal routing')}: ${overrideLabel}`}
-                    disabled={
-                      !canEditRouting ||
-                      isUpdatingRoutingOverride ||
-                      routingPrompt.isSubmitting
-                    }
-                    onClick={() =>
-                      setRestoreRoutingOverrideTarget(routingOverride)
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        type='button'
+                        variant='ghost'
+                        size='icon-sm'
+                        className='size-5 shrink-0'
+                        aria-label={`${t('Restore normal routing')}: ${overrideLabel}`}
+                        disabled={
+                          !canEditRouting ||
+                          isUpdatingRoutingOverride ||
+                          routingPrompt.isSubmitting
+                        }
+                        onClick={() =>
+                          setRestoreRoutingOverrideTarget(routingOverride)
+                        }
+                      />
                     }
                   >
-                    <HugeiconsIcon icon={UndoIcon} />
-                  </Button>
-                </div>
-              )
-            })}
-          </div>
+                    <HugeiconsIcon icon={UndoIcon} className='size-3.5' />
+                  </TooltipTrigger>
+                  <TooltipContent side='top'>
+                    {t('Restore normal routing')}
+                  </TooltipContent>
+                </Tooltip>
+              </span>
+            )
+          })}
+          <Button
+            type='button'
+            variant='outline'
+            size='sm'
+            className='ml-auto h-7'
+            onClick={() => setRestoreRoutingOverrideTarget('all')}
+            disabled={
+              !canEditRouting ||
+              isUpdatingRoutingOverride ||
+              routingPrompt.isSubmitting
+            }
+          >
+            <HugeiconsIcon icon={UndoIcon} data-icon='inline-start' />
+            {t('Restore normal routing')}
+          </Button>
         </div>
       ) : null}
 

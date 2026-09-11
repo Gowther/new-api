@@ -250,26 +250,29 @@ func RedisIncr(key string, delta int64) error {
 		return fmt.Errorf("failed to get TTL: %w", err)
 	}
 
-	// 只有在 key 存在且有 TTL 时才需要特殊处理
-	if ttl > 0 {
-		ctx := context.Background()
-		// 开始一个Redis事务
-		txn := RDB.TxPipeline()
-
-		// 减少余额
-		decrCmd := txn.IncrBy(ctx, key, delta)
-		if err := decrCmd.Err(); err != nil {
-			return err // 如果减少失败，则直接返回错误
-		}
-
-		// 重新设置过期时间，使用原来的过期时间
-		txn.Expire(ctx, key, ttl)
-
-		// 执行事务
-		_, err = txn.Exec(ctx)
-		return err
+	// TTL 返回 -2 表示 key 不存在，按原逻辑跳过写入；
+	// -1 表示 key 存在但没有过期时间，此时仍需写入（不重设 TTL），否则缓存会永久过期不更新
+	if ttl == -2 {
+		return nil
 	}
-	return nil
+	ctx := context.Background()
+	// 开始一个Redis事务
+	txn := RDB.TxPipeline()
+
+	// 减少余额
+	decrCmd := txn.IncrBy(ctx, key, delta)
+	if err := decrCmd.Err(); err != nil {
+		return err // 如果减少失败，则直接返回错误
+	}
+
+	// 仅在 key 原本有过期时间时重新设置过期时间，使用原来的过期时间
+	if ttl > 0 {
+		txn.Expire(ctx, key, ttl)
+	}
+
+	// 执行事务
+	_, err = txn.Exec(ctx)
+	return err
 }
 
 func RedisHIncrBy(key, field string, delta int64) error {
@@ -282,21 +285,24 @@ func RedisHIncrBy(key, field string, delta int64) error {
 		return fmt.Errorf("failed to get TTL: %w", err)
 	}
 
-	if ttl > 0 {
-		ctx := context.Background()
-		txn := RDB.TxPipeline()
+	// 同 RedisIncr：-2 跳过，-1 写入但不重设 TTL
+	if ttl == -2 {
+		return nil
+	}
+	ctx := context.Background()
+	txn := RDB.TxPipeline()
 
-		incrCmd := txn.HIncrBy(ctx, key, field, delta)
-		if err := incrCmd.Err(); err != nil {
-			return err
-		}
-
-		txn.Expire(ctx, key, ttl)
-
-		_, err = txn.Exec(ctx)
+	incrCmd := txn.HIncrBy(ctx, key, field, delta)
+	if err := incrCmd.Err(); err != nil {
 		return err
 	}
-	return nil
+
+	if ttl > 0 {
+		txn.Expire(ctx, key, ttl)
+	}
+
+	_, err = txn.Exec(ctx)
+	return err
 }
 
 func RedisHSetField(key, field string, value interface{}) error {
@@ -309,19 +315,22 @@ func RedisHSetField(key, field string, value interface{}) error {
 		return fmt.Errorf("failed to get TTL: %w", err)
 	}
 
-	if ttl > 0 {
-		ctx := context.Background()
-		txn := RDB.TxPipeline()
+	// 同 RedisIncr：-2 跳过，-1 写入但不重设 TTL
+	if ttl == -2 {
+		return nil
+	}
+	ctx := context.Background()
+	txn := RDB.TxPipeline()
 
-		hsetCmd := txn.HSet(ctx, key, field, value)
-		if err := hsetCmd.Err(); err != nil {
-			return err
-		}
-
-		txn.Expire(ctx, key, ttl)
-
-		_, err = txn.Exec(ctx)
+	hsetCmd := txn.HSet(ctx, key, field, value)
+	if err := hsetCmd.Err(); err != nil {
 		return err
 	}
-	return nil
+
+	if ttl > 0 {
+		txn.Expire(ctx, key, ttl)
+	}
+
+	_, err = txn.Exec(ctx)
+	return err
 }

@@ -1444,7 +1444,10 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 		tx = tx.Where("logs."+logGroupCol+" = ?", group)
 	}
 	tx = applyLogResultFilter(tx, "logs.", result)
-	err = tx.Model(&Log{}).Limit(logSearchCountLimit).Count(&total).Error
+	// COUNT 走 LIMIT 子查询：LIMIT 直接挂在 COUNT 上对聚合行无效（各方言一致），
+	// 这里的 logSearchCountLimit 上限需要真实生效。
+	countSub := tx.Session(&gorm.Session{}).Model(&Log{}).Select("logs.id").Limit(logSearchCountLimit)
+	err = LOG_DB.Table("(?) AS t", countSub).Count(&total).Error
 	if err != nil {
 		common.SysError("failed to count user logs: " + err.Error())
 		return nil, 0, errors.New("查询日志失败")
@@ -1622,7 +1625,14 @@ func DeleteOldLogBatch(ctx context.Context, targetTimestamp int64, limit int) (i
 		return total, nil
 	}
 
-	result := LOG_DB.WithContext(ctx).Where("created_at < ?", targetTimestamp).Limit(limit).Delete(&Log{})
+	// GORM's DELETE clause builders ignore Limit on the postgres and sqlite
+	// dialects, so a plain .Limit(limit).Delete would remove every matching row
+	// at once instead of one batch. Delete by primary-key subquery instead; the
+	// extra derived-table wrapping keeps it valid on MySQL, which rejects a
+	// LIMIT subquery against the table being deleted from.
+	idBatch := LOG_DB.Model(&Log{}).Select("id").Where("created_at < ?", targetTimestamp).Limit(limit)
+	idSubQuery := LOG_DB.Table("(?) AS t", idBatch).Select("id")
+	result := LOG_DB.WithContext(ctx).Where("id IN (?)", idSubQuery).Delete(&Log{})
 	if nil != result.Error {
 		return 0, result.Error
 	}

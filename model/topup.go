@@ -387,7 +387,9 @@ func SearchUserTopUps(userId int, keyword string, pageInfo *common.PageInfo) (to
 		query = query.Where("trade_no LIKE ? ESCAPE '!'", pattern)
 	}
 
-	if err = query.Limit(searchTopUpCountHardLimit).Count(&total).Error; err != nil {
+	// COUNT 走 LIMIT 子查询：LIMIT 直接挂在 COUNT 上对聚合行无效（各方言一致）。
+	countSub := query.Session(&gorm.Session{}).Select("id").Limit(searchTopUpCountHardLimit)
+	if err = tx.Table("(?) AS t", countSub).Count(&total).Error; err != nil {
 		tx.Rollback()
 		common.SysError("failed to count search topups: " + err.Error())
 		return nil, 0, errors.New("搜索充值记录失败")
@@ -427,7 +429,9 @@ func SearchAllTopUps(keyword string, pageInfo *common.PageInfo) (topups []*TopUp
 		query = query.Where("trade_no LIKE ? ESCAPE '!'", pattern)
 	}
 
-	if err = query.Limit(searchTopUpCountHardLimit).Count(&total).Error; err != nil {
+	// COUNT 走 LIMIT 子查询：LIMIT 直接挂在 COUNT 上对聚合行无效（各方言一致）。
+	countSub := query.Session(&gorm.Session{}).Select("id").Limit(searchTopUpCountHardLimit)
+	if err = tx.Table("(?) AS t", countSub).Count(&total).Error; err != nil {
 		tx.Rollback()
 		common.SysError("failed to count search topups: " + err.Error())
 		return nil, 0, errors.New("搜索充值记录失败")

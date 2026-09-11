@@ -13,6 +13,7 @@ import (
 	"github.com/samber/hot"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // Subscription duration units
@@ -1339,20 +1340,35 @@ func PreConsumeUserSubscription(requestId string, userId int, modelName string, 
 				PreConsumed:        amount,
 				Status:             "consumed",
 			}
-			if err := tx.Create(record).Error; err != nil {
+			// The create uses ON CONFLICT DO NOTHING so a concurrent request that
+			// already inserted this request_id does not raise a unique-violation
+			// error: on PostgreSQL such an error would abort the whole
+			// transaction and make the duplicate-record recovery below fail too.
+			result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(record)
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected == 0 {
+				// A concurrent request won the race and created the record first.
+				// Recover from that record and its own subscription, not from the
+				// current loop candidate, which may be a different subscription.
 				var dup SubscriptionPreConsumeRecord
-				if err2 := tx.Where("request_id = ?", requestId).First(&dup).Error; err2 == nil {
-					if dup.Status == "refunded" {
-						return errors.New("subscription pre-consume already refunded")
-					}
-					returnValue.UserSubscriptionId = sub.Id
-					returnValue.PreConsumed = dup.PreConsumed
-					returnValue.AmountTotal = sub.AmountTotal
-					returnValue.AmountUsedBefore = sub.AmountUsed
-					returnValue.AmountUsedAfter = sub.AmountUsed
-					return nil
+				if err := tx.Where("request_id = ?", requestId).First(&dup).Error; err != nil {
+					return err
 				}
-				return err
+				if dup.Status == "refunded" {
+					return errors.New("subscription pre-consume already refunded")
+				}
+				var dupSub UserSubscription
+				if err := tx.Where("id = ?", dup.UserSubscriptionId).First(&dupSub).Error; err != nil {
+					return err
+				}
+				returnValue.UserSubscriptionId = dup.UserSubscriptionId
+				returnValue.PreConsumed = dup.PreConsumed
+				returnValue.AmountTotal = dupSub.AmountTotal
+				returnValue.AmountUsedBefore = dupSub.AmountUsed
+				returnValue.AmountUsedAfter = dupSub.AmountUsed
+				return nil
 			}
 			sub.AmountUsed += amount
 			if err := tx.Save(&sub).Error; err != nil {

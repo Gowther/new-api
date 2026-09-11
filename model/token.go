@@ -177,7 +177,9 @@ func SearchUserTokens(userId int, keyword string, token string, offset int, limi
 	}
 
 	// 先查匹配总数（用于分页，受 maxTokens 上限保护，避免全表 COUNT）
-	err = baseQuery.Limit(maxTokens).Count(&total).Error
+	// COUNT 走 LIMIT 子查询：LIMIT 直接挂在 COUNT 上对聚合行无效（各方言一致）。
+	countSub := baseQuery.Session(&gorm.Session{}).Select("id").Limit(maxTokens)
+	err = DB.Table("(?) AS t", countSub).Count(&total).Error
 	if err != nil {
 		common.SysError("failed to count search tokens: " + err.Error())
 		return nil, 0, errors.New("搜索令牌失败")

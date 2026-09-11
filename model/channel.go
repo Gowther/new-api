@@ -432,7 +432,7 @@ func (channel *Channel) GetOtherInfo() map[string]interface{} {
 }
 
 func (channel *Channel) SetOtherInfo(otherInfo map[string]interface{}) {
-	otherInfoBytes, err := json.Marshal(otherInfo)
+	otherInfoBytes, err := common.Marshal(otherInfo)
 	if err != nil {
 		common.SysLog(fmt.Sprintf("failed to marshal other info: channel_id=%d, tag=%s, name=%s, error=%v", channel.Id, channel.GetTag(), channel.Name, err))
 		return
@@ -666,7 +666,7 @@ func (channel *Channel) GetBaseURL() string {
 		return ""
 	}
 	url := *channel.BaseURL
-	if url == "" {
+	if url == "" && channel.Type >= 0 && channel.Type < len(constant.ChannelBaseURLs) {
 		url = constant.ChannelBaseURLs[channel.Type]
 	}
 	return url
@@ -687,13 +687,15 @@ func (channel *Channel) GetStatusCodeMapping() string {
 }
 
 func (channel *Channel) Insert() error {
-	var err error
-	err = DB.Create(channel).Error
-	if err != nil {
-		return err
-	}
-	err = channel.AddAbilities(nil)
-	return err
+	// Create the channel and its abilities atomically, mirroring
+	// BatchInsertChannels: a failed ability insert must not leave a channel
+	// behind that a retry would then duplicate.
+	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(channel).Error; err != nil {
+			return err
+		}
+		return channel.AddAbilities(tx)
+	})
 }
 
 func (channel *Channel) Update() error {
@@ -1067,17 +1069,26 @@ func updateChannelStatus(channelId int, usingKey string, keyIndex *int, status i
 		}
 
 		if channel.ChannelInfo.IsMultiKey {
-			beforeStatus := channel.Status
-			// Protect map writes with the same per-channel lock used by readers
+			// Without the memory cache the channel row itself is the shared state,
+			// and SaveWithoutKey below rewrites the whole row. Hold the per-channel
+			// lock across the entire read-modify-write so a concurrent key-status
+			// update (or GetNextEnabledKey persisting the polling cursor) cannot
+			// last-write-wins a stale snapshot over this change.
 			pollingLock := GetChannelPollingLock(channelId)
 			pollingLock.Lock()
+			defer pollingLock.Unlock()
+			freshChannel, err := GetChannelById(channelId, true)
+			if err != nil {
+				return false, common.ChannelStatusUnknown
+			}
+			channel = freshChannel
+			beforeStatus := channel.Status
 			updated := false
 			if keyIndex != nil {
 				updated = handlerMultiKeyUpdateByIndex(channel, *keyIndex, status, reason)
 			} else {
 				updated = handlerMultiKeyUpdate(channel, usingKey, status, reason)
 			}
-			pollingLock.Unlock()
 			if !updated {
 				return false, common.ChannelStatusUnknown
 			}
@@ -1389,8 +1400,11 @@ func BatchSetChannelTag(ids []int, tag *string) error {
 	}
 
 	// update ability status
-	channels, err := GetChannelsByIds(ids)
-	if err != nil {
+	// The channels must be re-read through tx: reading from the global DB here
+	// would return the pre-update rows (the tag update above is not committed
+	// yet), and UpdateAbilities would rebuild ability rows with the stale tag.
+	var channels []*Channel
+	if err := tx.Where("id in (?)", ids).Find(&channels).Error; err != nil {
 		tx.Rollback()
 		return err
 	}

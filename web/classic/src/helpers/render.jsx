@@ -65,6 +65,15 @@ import {
 import { IconSub2api } from '../assets/IconSub2api';
 import { Logo } from '../assets/Logo';
 
+// 自定义图标注册表：@lobehub/icons 没有的图标放这里。做法是在 src/assets/
+// 下新建一个接受 size 属性的 SVG 组件，然后在此登记一个名字，模型/供应商
+// 的图标字段填这个名字即可。与 web/default 侧 lobe-icon.tsx 的 CUSTOM_ICONS
+// 保持同名，两套前端的显示就一致。
+const CUSTOM_LOBE_ICONS = {
+  Sub2API: IconSub2api,
+  NewAPI: Logo,
+};
+
 import {
   LayoutDashboard,
   TerminalSquare,
@@ -449,6 +458,11 @@ export function getLobeHubIcon(iconName, size = 14) {
   // 解析组件路径与点号链式属性
   const segments = String(iconName).split('.');
   const baseKey = segments[0];
+  // 自定义图标优先于 lobehub 同名查找，且不支持链式属性
+  const CustomIcon = CUSTOM_LOBE_ICONS[baseKey];
+  if (CustomIcon) {
+    return <CustomIcon size={size} />;
+  }
   const BaseIcon = LobeIcons[baseKey];
 
   let IconComponent = undefined;

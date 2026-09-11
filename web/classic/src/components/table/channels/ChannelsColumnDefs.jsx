@@ -693,8 +693,9 @@ export const getChannelsColumns = ({
       title: '',
       dataIndex: 'operate',
       fixed: 'right',
-      // 空标题 + 无宽度时 Semi 按表头宽度计算右固定列偏移，按钮区会左溢盖住权重列
-      width: 340,
+      // 空标题 + 无宽度时 Semi 按表头宽度计算右固定列偏移，按钮区会左溢盖住权重列；
+      // 一行按钮（测试/启停/编辑/复制/更多 + 单元格内边距）约需 362px，340 会把「更多」挤到折行
+      width: 380,
       render: (text, record, index) => {
         if (record.children === undefined) {
           const upstreamUpdateMeta = getUpstreamUpdateMeta(record);

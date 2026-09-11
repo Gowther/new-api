@@ -1812,7 +1812,8 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     {
       title: t('操作'),
       dataIndex: 'actions',
-      width: 225,
+      // 6 组 small 按钮（含测试 split 组）约 258px，225 会把测试组挤到折行
+      width: 300,
       render: (_, record) => {
         const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
         const isOverrideTarget = routingOverride.some(
@@ -2032,12 +2033,13 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
         ) : null}
       </div>
 
-      {/* 覆盖规则钉住的是整个渠道、对它承载的所有模型生效，所以提示条是
-          页面级的，放在三列之上。它保持一行的渠道 chip 形态：更高的横幅会把
-          三列挤出首屏，而每个 chip 的恢复按钮跟在渠道名旁边，不在遥远的右端。 */}
+      {/* 覆盖规则钉住的是整个渠道、对它承载的所有模型生效。左边距镜像下方
+          三列网格（280px + 320px + 两个 0.75rem 间距 = 39rem），让提示条与
+          右侧渠道面板对齐而不是横跨整个工作台，调整网格时需同步这里。
+          它保持一行的渠道 chip 形态，每个 chip 的恢复按钮跟在渠道名旁边。 */}
       {routingOverride.length > 0 ? (
         <div
-          className='flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1.5 rounded px-3 py-1.5'
+          className='flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1.5 rounded px-3 py-1.5 xl:ml-[39rem]'
           style={{
             border: '1px solid var(--semi-color-warning-light-active)',
             background: 'var(--semi-color-warning-light-default)',
@@ -2362,7 +2364,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                 }}
                 pagination={false}
                 size='small'
-                scroll={{ x: 1035 }}
+                scroll={{ x: 1110 }}
                 onRow={(record) => {
                   const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
                   const isTarget = record.id === spotlightChannelId;

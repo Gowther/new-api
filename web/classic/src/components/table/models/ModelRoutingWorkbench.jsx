@@ -34,6 +34,7 @@ import {
   Radio,
   RadioGroup,
   Spin,
+  SplitButtonGroup,
   Switch,
   Table,
   Tag,
@@ -52,6 +53,7 @@ import {
   IconRefresh,
   IconSave,
   IconSearch,
+  IconTreeTriangleDown,
   IconUndo,
 } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
@@ -604,6 +606,7 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   const [deletingChannelId, setDeletingChannelId] = useState(null);
   const [copyingChannelId, setCopyingChannelId] = useState(null);
   const [testingChannel, setTestingChannel] = useState(null);
+  const [directTestingChannelId, setDirectTestingChannelId] = useState(null);
   const [modelTestResults, setModelTestResults] = useState({});
   const [testingModels, setTestingModels] = useState(new Set());
   const [selectedModelKeys, setSelectedModelKeys] = useState([]);
@@ -1535,6 +1538,40 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     setTestingChannel(null);
   }, [selectedModelName]);
 
+  // 行内直测和渠道管理页的主按钮行为一致：直接测当前选中的路由模型，
+  // 弹窗只是换模型测试的次要入口。
+  const directTestChannel = async (channel) => {
+    if (!selectedModelName) return;
+    setDirectTestingChannelId(channel.id);
+    try {
+      const res = await API.get(
+        `/api/channel/test/${channel.id}?model=${encodeURIComponent(selectedModelName)}`,
+      );
+      const { success, message, time } = res.data || {};
+      if (success) {
+        showSuccess(t('测试成功'));
+        setChannels((prev) =>
+          prev.map((item) =>
+            item.id === channel.id
+              ? {
+                  ...item,
+                  response_time:
+                    typeof time === 'number' ? time * 1000 : item.response_time,
+                  test_time: Date.now() / 1000,
+                }
+              : item,
+          ),
+        );
+      } else {
+        showError(message || t('测试失败'));
+      }
+    } catch (error) {
+      showError(error.message || t('测试失败'));
+    } finally {
+      setDirectTestingChannelId(null);
+    }
+  };
+
   const testRoutingModel = async (channel, model, endpointType, stream) => {
     const testKey = `${channel.id}-${model}`;
     setTestingModels((prev) => new Set([...prev, model]));
@@ -1813,14 +1850,28 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                 onClick={() => handleEnableRoutingOverride(record)}
               />
             </Tooltip>
-            <Button
-              type='tertiary'
-              size='small'
-              disabled={!selectedModelName}
-              onClick={() => setTestingChannel(record)}
+            <SplitButtonGroup
+              className='overflow-hidden'
+              aria-label={t('测试单个渠道操作项目组')}
             >
-              {t('测试')}
-            </Button>
+              <Button
+                size='small'
+                type='tertiary'
+                loading={directTestingChannelId === record.id}
+                disabled={!selectedModelName}
+                onClick={() => directTestChannel(record)}
+              >
+                {t('测试')}
+              </Button>
+              <Button
+                size='small'
+                type='tertiary'
+                icon={<IconTreeTriangleDown />}
+                aria-label={`${t('选择模型测试')}: ${record.name}`}
+                disabled={!selectedModelName}
+                onClick={() => setTestingChannel(record)}
+              />
+            </SplitButtonGroup>
             <Button
               type='tertiary'
               size='small'

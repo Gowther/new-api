@@ -21,6 +21,7 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
+  ChevronDown,
   Copy,
   Gauge,
   Loader2,
@@ -98,7 +99,7 @@ import {
   SUCCESS_MESSAGES,
 } from '@/features/channels/constants'
 import { useRoutingOverridePrompt } from '@/features/channels/hooks/use-routing-override-prompt'
-import { channelsQueryKeys } from '@/features/channels/lib'
+import { channelsQueryKeys, handleTestChannel } from '@/features/channels/lib'
 import type {
   Channel,
   ChannelModelVendorGroup,
@@ -653,6 +654,9 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
   const [deletingChannel, setDeletingChannel] = useState<Channel | null>(null)
   const [copyingChannel, setCopyingChannel] = useState<Channel | null>(null)
   const [testingChannel, setTestingChannel] = useState<Channel | null>(null)
+  const [directTestingChannelId, setDirectTestingChannelId] = useState<
+    number | null
+  >(null)
   const [isDeletingChannel, setIsDeletingChannel] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const routingPrompt = useRoutingOverridePrompt()
@@ -1500,6 +1504,27 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
     void queryClient.invalidateQueries({
       queryKey: modelRoutingQueryKeys.channels(),
     })
+  }
+
+  // The row test mirrors the channels page: the primary action tests the
+  // channel against the currently selected model right away, and the dialog
+  // stays as the secondary entry for testing a different model.
+  const handleDirectTestChannel = async (channel: Channel) => {
+    if (!selectedModelName) return
+    setDirectTestingChannelId(channel.id)
+    try {
+      await handleTestChannel(
+        channel.id,
+        { testModel: selectedModelName, channelName: channel.name },
+        () => {
+          void queryClient.invalidateQueries({
+            queryKey: modelRoutingQueryKeys.channels(),
+          })
+        }
+      )
+    } finally {
+      setDirectTestingChannelId(null)
+    }
   }
 
   const handleSaveRouting = async () => {
@@ -2397,10 +2422,29 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                               className='shrink-0'
                               title={t('Test Connection')}
                               aria-label={`${t('Test Connection')}: ${channel.name}`}
+                              disabled={
+                                !selectedModelName ||
+                                directTestingChannelId === channel.id
+                              }
+                              onClick={() => handleDirectTestChannel(channel)}
+                            >
+                              {directTestingChannelId === channel.id ? (
+                                <Loader2 className='size-4 animate-spin' />
+                              ) : (
+                                <Gauge className='size-4' />
+                              )}
+                            </Button>
+                            <Button
+                              type='button'
+                              variant='ghost'
+                              size='icon-sm'
+                              className='shrink-0'
+                              title={t('Test with another model')}
+                              aria-label={`${t('Test with another model')}: ${channel.name}`}
                               disabled={!selectedModelName}
                               onClick={() => setTestingChannel(channel)}
                             >
-                              <Gauge className='size-4' />
+                              <ChevronDown className='size-3.5' />
                             </Button>
                             <Button
                               type='button'

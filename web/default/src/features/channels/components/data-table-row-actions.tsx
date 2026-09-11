@@ -62,6 +62,7 @@ import {
   hasPermission,
 } from '@/lib/admin-permissions'
 import { ROLE } from '@/lib/roles'
+import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { MODEL_FETCHABLE_TYPES } from '../constants'
@@ -204,8 +205,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   }
 
   const hasRoutingConflicts = routingPrompt.conflicts.length > 0
-  let temporaryRoutingLabel = t('Use this channel temporarily for all models')
-  let temporaryRoutingIcon = <LockKeyhole />
   let temporaryRoutingTitle = t('Enable temporary single-channel mode?')
   let temporaryRoutingDescription = t(
     'Automatic requests for the {{count}} model(s) on channel "{{channel}}" will use only this channel in its supported groups. Explicit channel selection is unaffected.',
@@ -216,8 +215,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
     : t('Enable temporary mode')
 
   if (isTemporaryRoutingTarget) {
-    temporaryRoutingLabel = t('Restore normal routing')
-    temporaryRoutingIcon = <Undo2 />
     temporaryRoutingTitle = t('Restore normal routing?')
     temporaryRoutingDescription = t(
       'The temporary routing rule for channel "{{channel}}" and its models will be removed. Existing channel statuses, priorities, weights, and affinity data will remain unchanged.',
@@ -270,26 +267,73 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         <TooltipContent>{t('Test Connection')}</TooltipContent>
       </Tooltip>
 
-      {layout === 'card' && (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant='ghost'
-                size='icon-sm'
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleTest()
-                }}
-                aria-label={t('Test Channel Connection')}
-              />
-            }
-          >
-            <PlugZap className='size-4' />
-          </TooltipTrigger>
-          <TooltipContent>{t('Test Channel Connection')}</TooltipContent>
-        </Tooltip>
-      )}
+      {/* The test dialog is a secondary entry next to the direct test in
+          every layout, matching the split test action in the routing
+          workbench. */}
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant='ghost'
+              size='icon-sm'
+              onClick={(e) => {
+                e.stopPropagation()
+                handleTest()
+              }}
+              aria-label={t('Test Channel Connection')}
+            />
+          }
+        >
+          <PlugZap className='size-4' />
+        </TooltipTrigger>
+        <TooltipContent>{t('Test Channel Connection')}</TooltipContent>
+      </Tooltip>
+
+      {/* Temporary single-channel mode earns a row-level button instead of
+          hiding in the overflow menu, matching the routing workbench. */}
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant='ghost'
+              size='icon-sm'
+              className={cn(
+                isTemporaryRoutingTarget && 'text-warning hover:text-warning'
+              )}
+              onClick={(e) => {
+                e.stopPropagation()
+                routingPrompt.open({
+                  id: channel.id,
+                  name: channel.name,
+                  isActive: isTemporaryRoutingTarget,
+                })
+              }}
+              disabled={
+                !canEditRouting ||
+                routingOverrideLoading ||
+                routingPrompt.isSubmitting ||
+                (!isTemporaryRoutingTarget && !isEnabled)
+              }
+              aria-label={
+                isTemporaryRoutingTarget
+                  ? t('Restore normal routing')
+                  : t('Temporary single-channel mode')
+              }
+            />
+          }
+        >
+          {isTemporaryRoutingTarget ? (
+            <Undo2 className='size-4' />
+          ) : (
+            <LockKeyhole className='size-4' />
+          )}
+        </TooltipTrigger>
+        <TooltipContent>
+          {isTemporaryRoutingTarget
+            ? t('Restore normal routing')
+            : t('Temporary single-channel mode')}
+        </TooltipContent>
+      </Tooltip>
 
       {canEditSensitive && (
         <Tooltip>
@@ -418,26 +462,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
               </DropdownMenuShortcut>
             </DropdownMenuItem>
           )}
-
-          <DropdownMenuItem
-            disabled={
-              !canEditRouting ||
-              routingOverrideLoading ||
-              routingPrompt.isSubmitting ||
-              (!isTemporaryRoutingTarget && !isEnabled)
-            }
-            onSelect={(event) => {
-              event.preventDefault()
-              routingPrompt.open({
-                id: channel.id,
-                name: channel.name,
-                isActive: isTemporaryRoutingTarget,
-              })
-            }}
-          >
-            {temporaryRoutingLabel}
-            <DropdownMenuShortcut>{temporaryRoutingIcon}</DropdownMenuShortcut>
-          </DropdownMenuItem>
 
           <DropdownMenuSeparator />
 

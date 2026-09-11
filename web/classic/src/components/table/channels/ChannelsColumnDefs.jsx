@@ -48,6 +48,8 @@ import {
   IconTreeTriangleDown,
   IconMore,
   IconAlertTriangle,
+  IconLock,
+  IconUndo,
 } from '@douyinfe/semi-icons';
 import { FaRandom } from 'react-icons/fa';
 import { ChannelRemarkTooltip } from '../../common/ChannelRemarkTooltip';
@@ -697,19 +699,7 @@ export const getChannelsColumns = ({
           const isRoutingOverrideTarget = routingOverrides.some(
             (override) => override.channel_id === record.id,
           );
-          const temporaryRoutingMenuName = isRoutingOverrideTarget
-            ? t('恢复正常路由')
-            : t('临时单渠道模式');
           const moreMenuItems = [
-            {
-              node: 'item',
-              name: temporaryRoutingMenuName,
-              disabled:
-                routingOverrideLoading ||
-                routingOverrideUpdating ||
-                (!isRoutingOverrideTarget && record.status !== 1),
-              onClick: () => toggleRoutingOverride?.(record),
-            },
             {
               node: 'item',
               name: t('删除'),
@@ -826,6 +816,33 @@ export const getChannelsColumns = ({
                   }}
                 />
               </SplitButtonGroup>
+
+              {/* 临时单渠道从「更多」菜单拿到行上，和路由工作台一致 */}
+              <Tooltip
+                content={
+                  isRoutingOverrideTarget
+                    ? t('恢复正常路由')
+                    : t('临时单渠道模式')
+                }
+              >
+                <Button
+                  theme={isRoutingOverrideTarget ? 'solid' : 'borderless'}
+                  type={isRoutingOverrideTarget ? 'warning' : 'tertiary'}
+                  size='small'
+                  icon={isRoutingOverrideTarget ? <IconUndo /> : <IconLock />}
+                  aria-label={`${
+                    isRoutingOverrideTarget
+                      ? t('恢复正常路由')
+                      : t('临时单渠道模式')
+                  }: ${record.name}`}
+                  disabled={
+                    routingOverrideLoading ||
+                    routingOverrideUpdating ||
+                    (!isRoutingOverrideTarget && record.status !== 1)
+                  }
+                  onClick={() => toggleRoutingOverride?.(record)}
+                />
+              </Tooltip>
 
               {record.status === 1 ? (
                 <Button

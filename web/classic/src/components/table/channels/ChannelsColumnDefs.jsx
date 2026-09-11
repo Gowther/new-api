@@ -693,8 +693,6 @@ export const getChannelsColumns = ({
       title: '',
       dataIndex: 'operate',
       fixed: 'right',
-      // 空标题 + 无宽度时 Semi 按表头宽度计算右固定列偏移，按钮区会左溢盖住权重列
-      width: 340,
       render: (text, record, index) => {
         if (record.children === undefined) {
           const upstreamUpdateMeta = getUpstreamUpdateMeta(record);

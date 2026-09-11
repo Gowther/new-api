@@ -4227,7 +4227,8 @@
     "前往": "Go",
     "留在此页": "Stay here",
     "最近时长": "Recent window",
-    "时间单位": "Time unit"
+    "时间单位": "Time unit",
+    "选择模型测试": "Test with another model"
   },
   "已保存官方价格预览失败": "Failed to preview saved official prices",
   "查看官方价格变更": "Review official price changes",

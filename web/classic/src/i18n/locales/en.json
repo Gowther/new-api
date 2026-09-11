@@ -922,7 +922,7 @@
     "最大可用": "Max Available",
     "最大条目数": "Max Entries",
     "最终抵扣": "Final Deduction",
-    "最近": "Latest",
+    "最近": "Last",
     "最近 {{hours}} 小时": "Last {{hours}} hours",
     "最近 1 小时": "Last 1 hour",
     "最近 24 小时": "Last 24 hours",
@@ -4225,7 +4225,9 @@
     "前往模型路由": "Open in model routing",
     "选择路由表要定位的模型": "Pick the model the routing table should land on.",
     "前往": "Go",
-    "留在此页": "Stay here"
+    "留在此页": "Stay here",
+    "最近时长": "Recent window",
+    "时间单位": "Time unit"
   },
   "已保存官方价格预览失败": "Failed to preview saved official prices",
   "查看官方价格变更": "Review official price changes",

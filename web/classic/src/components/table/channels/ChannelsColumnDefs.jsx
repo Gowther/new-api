@@ -376,15 +376,19 @@ export const getChannelsColumns = ({
           upstreamUpdateMeta.supported &&
           upstreamUpdateMeta.enabled &&
           (pendingAddCount > 0 || pendingRemoveCount > 0);
+        // 名称限宽截断：超长渠道名会把表格撑出容器，权重列会被固定操作列盖住；
+        // 全名悬浮可见（备注 tooltip / title）
         const nameNode =
           record.remark && record.remark.trim() !== '' ? (
             <ChannelRemarkTooltip remark={record.remark}>
-              <span className='-my-1 inline-flex min-h-7 cursor-help items-center py-1'>
-                {text}
+              <span className='-my-1 inline-flex min-h-7 max-w-[30rem] cursor-help items-center py-1'>
+                <span className='truncate'>{text}</span>
               </span>
             </ChannelRemarkTooltip>
           ) : (
-            <span>{text}</span>
+            <span className='block max-w-[30rem] truncate' title={text}>
+              {text}
+            </span>
           );
 
         if (!passThroughEnabled && !showUpstreamUpdateTag) {

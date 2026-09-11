@@ -1730,7 +1730,8 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     {
       title: t('渠道'),
       dataIndex: 'name',
-      width: 320,
+      // 不设宽度：吸收面板剩余空间，表格始终撑满面板，固定的优先级/权重列
+      // 才不会在 scroll.x 小于容器时内压状态列
       render: (_, record) => {
         const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
         const remark = record.remark?.trim();
@@ -1906,7 +1907,8 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
     {
       title: t('类型'),
       dataIndex: 'type',
-      width: 130,
+      // 图标 + “Anthropic Claude”这类长类型名需要一行放下
+      width: 170,
       render: (type) => (
         <span className='flex items-center gap-2'>
           {getChannelIcon(type)}
@@ -2364,7 +2366,6 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
                 }}
                 pagination={false}
                 size='small'
-                scroll={{ x: 1110 }}
                 onRow={(record) => {
                   const isEnabled = record.status === CHANNEL_STATUS.ENABLED;
                   const isTarget = record.id === spotlightChannelId;

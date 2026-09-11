@@ -2,9 +2,41 @@ export type LogTimeMode = 'today' | 'recent' | 'fixed'
 
 export interface LogTimeRange {
   timeMode: LogTimeMode
-  recentHours?: number
+  recentMinutes?: number
   start?: Date
   end?: Date
+}
+
+// The recent window is stored in minutes so sub-hour ranges are possible.
+// Links written before the change carry recentHours; they still resolve,
+// multiplied into minutes. Free-form input is capped at 30 days — wider
+// windows belong to the fixed range mode.
+export const RECENT_MINUTES_MIN = 1
+export const RECENT_MINUTES_MAX = 30 * 24 * 60
+const LEGACY_RECENT_HOURS_MAX = 24
+const RECENT_MINUTES_DEFAULT = 60
+
+export function normalizeRecentMinutes(search: {
+  recentMinutes?: unknown
+  recentHours?: unknown
+}): number {
+  const minutes = Number(search.recentMinutes)
+  if (
+    Number.isInteger(minutes) &&
+    minutes >= RECENT_MINUTES_MIN &&
+    minutes <= RECENT_MINUTES_MAX
+  ) {
+    return minutes
+  }
+  const legacyHours = Number(search.recentHours)
+  if (
+    Number.isInteger(legacyHours) &&
+    legacyHours >= 1 &&
+    legacyHours <= LEGACY_RECENT_HOURS_MAX
+  ) {
+    return legacyHours * 60
+  }
+  return RECENT_MINUTES_DEFAULT
 }
 
 export function resolveLogTimeRange(
@@ -34,13 +66,11 @@ export function resolveLogTimeRange(
     }
   }
   if (timeMode === 'recent') {
-    const hours = Number(search.recentHours)
-    const recentHours =
-      Number.isInteger(hours) && hours >= 1 && hours <= 24 ? hours : 1
+    const recentMinutes = normalizeRecentMinutes(search)
     return {
       timeMode,
-      recentHours,
-      start: new Date(now.getTime() - recentHours * 3600000),
+      recentMinutes,
+      start: new Date(now.getTime() - recentMinutes * 60000),
       end: now,
     }
   }

@@ -41,7 +41,7 @@ export function buildSearchParams(
 ): Record<string, unknown> {
   const baseParams: Record<string, unknown> = {
     timeMode: filters.timeMode,
-    ...(filters.timeMode === 'recent' && { recentHours: filters.recentHours }),
+    ...(filters.timeMode === 'recent' && { recentMinutes: filters.recentMinutes }),
     ...((!filters.timeMode || filters.timeMode === 'fixed') && {
       startTime: filters.startTime?.getTime(),
       endTime: filters.endTime?.getTime(),

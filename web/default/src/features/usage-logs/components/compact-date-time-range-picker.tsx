@@ -39,6 +39,8 @@ import dayjs from '@/lib/dayjs'
 import { cn } from '@/lib/utils'
 
 import {
+  RECENT_MINUTES_MAX,
+  RECENT_MINUTES_MIN,
   resolveLogTimeRange,
   type LogTimeMode,
   type LogTimeRange,
@@ -48,7 +50,7 @@ interface CompactDateTimeRangePickerProps {
   start?: Date
   end?: Date
   timeMode?: LogTimeMode
-  recentHours?: number
+  recentMinutes?: number
   onChange: (range: LogTimeRange) => void
   className?: string
 }
@@ -63,11 +65,32 @@ function fromInputValue(value: string): Date | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date
 }
 
+type RecentUnit = 'minute' | 'hour' | 'day'
+
+const RECENT_UNIT_MINUTES: Record<RecentUnit, number> = {
+  minute: 1,
+  hour: 60,
+  day: 1440,
+}
+
+const RECENT_UNIT_LABEL_KEYS: Record<RecentUnit, string> = {
+  minute: 'Minutes',
+  hour: 'Hours',
+  day: 'Days',
+}
+
+/** Split a minute count into the largest whole unit for display. */
+function splitRecentMinutes(minutes: number): { amount: number; unit: RecentUnit } {
+  if (minutes % 1440 === 0) return { amount: minutes / 1440, unit: 'day' }
+  if (minutes % 60 === 0) return { amount: minutes / 60, unit: 'hour' }
+  return { amount: minutes, unit: 'minute' }
+}
+
 export function CompactDateTimeRangePicker({
   start,
   end,
   timeMode = 'fixed',
-  recentHours = 1,
+  recentMinutes = 60,
   onChange,
   className,
 }: CompactDateTimeRangePickerProps) {
@@ -75,20 +98,39 @@ export function CompactDateTimeRangePicker({
   const [open, setOpen] = useState(false)
   const [draftStart, setDraftStart] = useState(toInputValue(start))
   const [draftEnd, setDraftEnd] = useState(toInputValue(end))
-  const hourItems = Array.from({ length: 24 }, (_, index) => ({
-    value: String(index + 1),
-    label:
-      index === 0
-        ? t('Last hour')
-        : t('Last {{hours}} hours', { hours: index + 1 }),
-  }))
+  // The recent row is a draft like the datetime inputs: it only applies on
+  // confirm, and only when the operator actually touched it this session.
+  const [recentAmountDraft, setRecentAmountDraft] = useState('1')
+  const [recentUnitDraft, setRecentUnitDraft] = useState<RecentUnit>('hour')
+  const [recentTouched, setRecentTouched] = useState(false)
+
+  const recentDraftMinutes = useMemo(() => {
+    const amount = Math.floor(Number(recentAmountDraft))
+    if (!Number.isInteger(amount) || String(amount) !== recentAmountDraft.trim()) {
+      return null
+    }
+    const minutes = amount * RECENT_UNIT_MINUTES[recentUnitDraft]
+    if (minutes < RECENT_MINUTES_MIN || minutes > RECENT_MINUTES_MAX) {
+      return null
+    }
+    return minutes
+  }, [recentAmountDraft, recentUnitDraft])
 
   const label = useMemo(() => {
     if (timeMode === 'today') return t('Today')
     if (timeMode === 'recent') {
-      return recentHours === 1
-        ? t('Last hour')
-        : t('Last {{hours}} hours', { hours: recentHours })
+      const { amount, unit } = splitRecentMinutes(recentMinutes)
+      if (unit === 'day') {
+        return amount === 1 ? t('Last day') : t('Last {{days}} days', { days: amount })
+      }
+      if (unit === 'hour') {
+        return amount === 1
+          ? t('Last hour')
+          : t('Last {{hours}} hours', { hours: amount })
+      }
+      return amount === 1
+        ? t('Last minute')
+        : t('Last {{minutes}} minutes', { minutes: amount })
     }
     if (!start && !end) return t('Date Range')
     // The popover's <input type="datetime-local"> only supports minute
@@ -98,23 +140,39 @@ export function CompactDateTimeRangePicker({
     const startText = start ? dayjs(start).format('YYYY-MM-DD HH:mm') : '-'
     const endText = end ? dayjs(end).format('YYYY-MM-DD HH:mm') : '-'
     return `${startText} ~ ${endText}`
-  }, [end, start, t, timeMode, recentHours])
+  }, [end, start, t, timeMode, recentMinutes])
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (nextOpen) {
       const range = resolveLogTimeRange({
         timeMode,
-        recentHours,
+        recentMinutes,
         startTime: start?.getTime(),
         endTime: end?.getTime(),
       })
       setDraftStart(toInputValue(range.start))
       setDraftEnd(toInputValue(range.end))
+      const recent = splitRecentMinutes(recentMinutes)
+      setRecentAmountDraft(String(recent.amount))
+      setRecentUnitDraft(recent.unit)
+      setRecentTouched(false)
     }
     setOpen(nextOpen)
   }
 
   const applyDraft = () => {
+    // A touched recent row wins over the datetime inputs: both describe the
+    // window, and the one the operator just edited is the intent.
+    if (recentTouched && recentDraftMinutes !== null) {
+      onChange(
+        resolveLogTimeRange({
+          timeMode: 'recent',
+          recentMinutes: recentDraftMinutes,
+        })
+      )
+      setOpen(false)
+      return
+    }
     onChange({
       timeMode: draftStart || draftEnd ? 'fixed' : 'today',
       start: fromInputValue(draftStart),
@@ -213,33 +271,58 @@ export function CompactDateTimeRangePicker({
             </div>
           </div>
 
-          <Select
-            items={hourItems}
-            value={timeMode === 'recent' ? String(recentHours) : null}
-            onValueChange={(value) => {
-              if (!value) return
-              onChange(
-                resolveLogTimeRange({
-                  timeMode: 'recent',
-                  recentHours: Number(value),
-                })
-              )
-              setOpen(false)
-            }}
-          >
-            <SelectTrigger className='w-full' aria-label={t('Recent hours')}>
-              <SelectValue placeholder={t('Recent hours')} />
-            </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false}>
-              <SelectGroup>
-                {hourItems.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+          <div className='space-y-1.5'>
+            <div className='text-muted-foreground text-xs'>{t('Recent')}</div>
+            <div className='flex gap-2'>
+              <Input
+                type='number'
+                min={1}
+                step={1}
+                aria-label={t('Recent amount')}
+                value={recentAmountDraft}
+                onChange={(e) => {
+                  setRecentAmountDraft(e.target.value)
+                  setRecentTouched(true)
+                }}
+                className={cn(
+                  'h-8 flex-1 text-sm leading-5 tabular-nums',
+                  recentTouched &&
+                    recentDraftMinutes === null &&
+                    'border-destructive'
+                )}
+              />
+              <Select
+                items={(
+                  ['minute', 'hour', 'day'] as const
+                ).map((unit) => ({
+                  value: unit,
+                  label: t(RECENT_UNIT_LABEL_KEYS[unit]),
+                }))}
+                value={recentUnitDraft}
+                onValueChange={(value) => {
+                  if (value === 'minute' || value === 'hour' || value === 'day') {
+                    setRecentUnitDraft(value)
+                    setRecentTouched(true)
+                  }
+                }}
+              >
+                <SelectTrigger className='w-28' aria-label={t('Recent unit')}>
+                  <SelectValue>
+                    {t(RECENT_UNIT_LABEL_KEYS[recentUnitDraft])}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent alignItemWithTrigger={false}>
+                  <SelectGroup>
+                    {(['minute', 'hour', 'day'] as const).map((unit) => (
+                      <SelectItem key={unit} value={unit}>
+                        {t(RECENT_UNIT_LABEL_KEYS[unit])}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
 
           <div className='flex flex-wrap gap-1.5'>
             <Button
@@ -303,9 +386,10 @@ export function CompactDateTimeRangePicker({
               size='sm'
               className='h-8'
               onClick={applyDraft}
-              disabled={Boolean(
-                draftStart && draftEnd && draftStart > draftEnd
-              )}
+              disabled={
+                Boolean(draftStart && draftEnd && draftStart > draftEnd) ||
+                (recentTouched && recentDraftMinutes === null)
+              }
             >
               {t('Confirm')}
             </Button>

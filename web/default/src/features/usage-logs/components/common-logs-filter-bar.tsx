@@ -86,6 +86,7 @@ function getLogTypeValue(value: unknown): LogTypeValue {
 
 function buildSearchSourceKey(values: {
   timeMode?: unknown
+  recentMinutes?: unknown
   recentHours?: unknown
   startTime?: unknown
   endTime?: unknown
@@ -101,6 +102,7 @@ function buildSearchSourceKey(values: {
 }) {
   return [
     values.timeMode,
+    values.recentMinutes,
     values.recentHours,
     values.startTime,
     values.endTime,
@@ -134,14 +136,16 @@ export function CommonLogsFilterBar<TData>(
   const fetchingLogs = useIsFetching({ queryKey: ['logs'] })
 
   const searchState = useMemo<CommonLogDraft>(() => {
-    const { start, end, timeMode, recentHours } = resolveLogTimeRange({
+    const { start, end, timeMode, recentMinutes } = resolveLogTimeRange({
       timeMode: searchParams.timeMode,
+      recentMinutes: searchParams.recentMinutes,
       recentHours: searchParams.recentHours,
       startTime: searchParams.startTime,
       endTime: searchParams.endTime,
     })
     const sourceValues = {
       timeMode: searchParams.timeMode,
+      recentMinutes: searchParams.recentMinutes,
       recentHours: searchParams.recentHours,
       startTime: searchParams.startTime,
       endTime: searchParams.endTime,
@@ -157,7 +161,7 @@ export function CommonLogsFilterBar<TData>(
     }
     const filters: CommonLogFilters = {
       timeMode,
-      recentHours,
+      recentMinutes,
       startTime: start,
       endTime: end,
       channel: searchParams.channel || undefined,
@@ -176,6 +180,7 @@ export function CommonLogsFilterBar<TData>(
     }
   }, [
     searchParams.timeMode,
+    searchParams.recentMinutes,
     searchParams.recentHours,
     searchParams.startTime,
     searchParams.endTime,
@@ -237,7 +242,7 @@ export function CommonLogsFilterBar<TData>(
       const nextFilters = {
         ...filters,
         timeMode: range.timeMode,
-        recentHours: range.recentHours,
+        recentMinutes: range.recentMinutes,
         startTime: range.start,
         endTime: range.end,
       }
@@ -378,7 +383,7 @@ export function CommonLogsFilterBar<TData>(
         start={filters.startTime}
         end={filters.endTime}
         timeMode={filters.timeMode}
-        recentHours={filters.recentHours}
+        recentMinutes={filters.recentMinutes}
         onChange={handleDateRangeChange}
       />
     </LogsFilterField>

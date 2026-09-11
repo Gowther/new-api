@@ -18,10 +18,28 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import { Button, Form, Select } from '@douyinfe/semi-ui';
+import { Button, Form, InputNumber, Select } from '@douyinfe/semi-ui';
 import { IconSearch } from '@douyinfe/semi-icons';
 
 import { DATE_RANGE_PRESETS } from '../../../constants/console.constants';
+
+/** 「最近」窗口的单位选项，值是分钟数。 */
+const RECENT_UNITS = [
+  { value: 'minute', minutes: 1, labelKey: '分钟' },
+  { value: 'hour', minutes: 60, labelKey: '小时' },
+  { value: 'day', minutes: 1440, labelKey: '天' },
+];
+
+/** 把分钟数拆成最大的整单位展示（90 分钟显示 90 分钟，120 分钟显示 2 小时）。 */
+function splitRecentMinutes(minutes) {
+  for (let i = RECENT_UNITS.length - 1; i >= 0; i--) {
+    const unit = RECENT_UNITS[i];
+    if (minutes % unit.minutes === 0) {
+      return { amount: minutes / unit.minutes, unit: unit.value };
+    }
+  }
+  return { amount: minutes, unit: 'minute' };
+}
 
 const LogsFilters = ({
   formInitValues,
@@ -31,11 +49,25 @@ const LogsFilters = ({
   resetFilters,
   timeRange,
   handleTimeModeChange,
+  handleRecentValueChange,
   handleDateRangeChange,
   loading,
   isAdminUser,
   t,
 }) => {
+  const recent = splitRecentMinutes(timeRange.recentMinutes || 60);
+
+  const handleRecentUnitChange = (nextUnit) => {
+    const unit = RECENT_UNITS.find((item) => item.value === nextUnit);
+    if (!unit) return;
+    // 切单位时把当前分钟数换算成新单位下的整数，窗口尽量贴近原值
+    const amount = Math.max(
+      1,
+      Math.round((timeRange.recentMinutes || 60) / unit.minutes),
+    );
+    handleRecentValueChange(amount, nextUnit);
+  };
+
   return (
     <Form
       initValues={formInitValues}
@@ -51,28 +83,46 @@ const LogsFilters = ({
         <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2'>
           {/* 时间选择器 */}
           <div className='col-span-1 lg:col-span-2 flex flex-col sm:flex-row gap-2 min-w-0'>
-            <Select
-              aria-label={t('时间范围')}
-              size='small'
-              className='w-full sm:w-44 shrink-0'
-              value={
-                timeRange.timeMode === 'recent'
-                  ? String(timeRange.recentHours)
-                  : timeRange.timeMode
-              }
-              onChange={(value) => handleTimeModeChange(value)}
-              optionList={[
-                { value: 'today', label: t('今天') },
-                { value: 'fixed', label: t('自定义时间') },
-                ...Array.from({ length: 24 }, (_, index) => ({
-                  value: String(index + 1),
-                  label:
-                    index === 0
-                      ? t('最近 1 小时')
-                      : t('最近 {{hours}} 小时', { hours: index + 1 }),
-                })),
-              ]}
-            />
+            <div className='flex gap-2 shrink-0'>
+              <Select
+                aria-label={t('时间范围')}
+                size='small'
+                className='w-full sm:w-36 shrink-0'
+                value={timeRange.timeMode}
+                onChange={(value) => handleTimeModeChange(value)}
+                optionList={[
+                  { value: 'today', label: t('今天') },
+                  { value: 'recent', label: t('最近') },
+                  { value: 'fixed', label: t('自定义时间') },
+                ]}
+              />
+              {timeRange.timeMode === 'recent' && (
+                <>
+                  <InputNumber
+                    aria-label={t('最近时长')}
+                    size='small'
+                    min={1}
+                    precision={0}
+                    value={recent.amount}
+                    onChange={(value) =>
+                      handleRecentValueChange(value, recent.unit)
+                    }
+                    className='w-24 shrink-0'
+                  />
+                  <Select
+                    aria-label={t('时间单位')}
+                    size='small'
+                    className='w-24 shrink-0'
+                    value={recent.unit}
+                    onChange={handleRecentUnitChange}
+                    optionList={RECENT_UNITS.map((unit) => ({
+                      value: unit.value,
+                      label: t(unit.labelKey),
+                    }))}
+                  />
+                </>
+              )}
+            </div>
             <Form.DatePicker
               field='dateRange'
               className='w-full'

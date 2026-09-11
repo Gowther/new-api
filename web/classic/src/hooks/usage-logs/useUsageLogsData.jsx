@@ -57,6 +57,27 @@ function getInitialAutoRefreshSeconds() {
   return AUTO_REFRESH_INTERVALS.includes(stored) ? stored : 0;
 }
 
+// 「最近」窗口以分钟存储，分钟级粒度才选得到。旧链接里的 recentHours 仍可读，
+// 读入后按 ×60 换算成分钟。自由输入上限 30 天，更大的窗口走自定义时间。
+const RECENT_MINUTES_MAX = 30 * 24 * 60;
+const RECENT_MINUTES_DEFAULT = 60;
+
+function normalizeRecentMinutesValue(initialFilters = {}) {
+  const minutes = Number(initialFilters.recentMinutes);
+  if (
+    Number.isInteger(minutes) &&
+    minutes >= 1 &&
+    minutes <= RECENT_MINUTES_MAX
+  ) {
+    return minutes;
+  }
+  const legacyHours = Number(initialFilters.recentHours);
+  if (Number.isInteger(legacyHours) && legacyHours >= 1 && legacyHours <= 24) {
+    return legacyHours * 60;
+  }
+  return RECENT_MINUTES_DEFAULT;
+}
+
 function getInitialUrlFilters() {
   if (typeof window === 'undefined') {
     return {};
@@ -71,6 +92,7 @@ function getInitialUrlFilters() {
   );
   return {
     timeMode: searchParams.get('timeMode'),
+    recentMinutes: Number(searchParams.get('recentMinutes')),
     recentHours: Number(searchParams.get('recentHours')),
     channel:
       searchParams.get('channel') || searchParams.get('channel_id') || '',
@@ -101,12 +123,10 @@ function getDefaultLogFormValues(initialFilters = {}) {
   if (['today', 'recent', 'fixed'].includes(initialFilters.timeMode)) {
     timeMode = initialFilters.timeMode;
   }
-  const hours = initialFilters.recentHours;
-  const recentHours =
-    Number.isInteger(hours) && hours >= 1 && hours <= 24 ? hours : 1;
+  const recentMinutes = normalizeRecentMinutesValue(initialFilters);
   return {
     timeMode,
-    recentHours,
+    recentMinutes,
     username: '',
     token_name: initialFilters.tokenName || '',
     model_name: initialFilters.modelName || '',
@@ -117,7 +137,7 @@ function getDefaultLogFormValues(initialFilters = {}) {
     dateRange: [
       timestamp2string(
         timeMode === 'recent'
-          ? now.getTime() / 1000 - recentHours * 3600
+          ? now.getTime() / 1000 - recentMinutes * 60
           : initialFilters.startTimestamp || getTodayStartTimestamp(),
       ),
       timestamp2string(initialFilters.endTimestamp || now.getTime() / 1000),
@@ -153,6 +173,7 @@ function clearInitialSearchParams() {
     'endTime',
     'timeMode',
     'recentHours',
+    'recentMinutes',
   ].forEach((key) => url.searchParams.delete(key));
   window.history.replaceState(
     {},
@@ -269,7 +290,7 @@ export const useLogsData = () => {
   );
   const [timeRange, setTimeRange] = useState(() => ({
     timeMode: formInitValues.timeMode,
-    recentHours: formInitValues.recentHours,
+    recentMinutes: formInitValues.recentMinutes,
   }));
   const timeRangeRef = useRef(timeRange);
 
@@ -405,12 +426,13 @@ export const useLogsData = () => {
       ...(formApi ? formApi.getValues() : formInitValues),
       ...timeRangeRef.current,
     };
-    const { timeMode, recentHours } = formValues;
+    const { timeMode, recentMinutes } = formValues;
     const now = Math.floor(Date.now() / 1000);
     let start_timestamp = getTodayStartTimestamp();
     let end_timestamp = now;
     if (timeMode === 'recent') {
-      start_timestamp = now - recentHours * 3600;
+      start_timestamp =
+        now - normalizeRecentMinutesValue({ recentMinutes }) * 60;
     } else if (timeMode === 'fixed') {
       start_timestamp = formValues.dateRange?.[0]
         ? Math.floor(new Date(formValues.dateRange[0]).getTime() / 1000)
@@ -422,7 +444,7 @@ export const useLogsData = () => {
 
     return {
       timeMode,
-      recentHours,
+      recentMinutes: normalizeRecentMinutesValue(formValues),
       dateRange: formValues.dateRange,
       username: formValues.username || '',
       token_name: formValues.token_name || '',
@@ -1069,14 +1091,10 @@ export const useLogsData = () => {
   };
 
   const handleTimeModeChange = (value, refreshNow = true) => {
-    const hours = Number(value);
-    const next =
-      Number.isInteger(hours) && hours >= 1 && hours <= 24
-        ? { timeMode: 'recent', recentHours: hours }
-        : {
-            timeMode: value === 'today' ? 'today' : 'fixed',
-            recentHours: timeRangeRef.current.recentHours,
-          };
+    const next = {
+      timeMode: ['today', 'recent', 'fixed'].includes(value) ? value : 'today',
+      recentMinutes: timeRangeRef.current.recentMinutes,
+    };
     timeRangeRef.current = next;
     setTimeRange(next);
     if (!refreshNow) return;
@@ -1087,6 +1105,33 @@ export const useLogsData = () => {
       formApi?.setValue('dateRange', values.dateRange);
     }
     void refresh(values);
+  };
+
+  // 数字 + 单位的「最近」窗口。单位切换时把当前分钟数换算成新单位下的整数，
+  // 窗口只能落在整分钟上。输入触发的刷新走防抖，连续敲数字不会每下都请求。
+  const handleRecentValueChange = (amount, unit) => {
+    const factor = unit === 'day' ? 1440 : unit === 'hour' ? 60 : 1;
+    const minutes = Math.round(Number(amount) * factor);
+    if (
+      !Number.isFinite(minutes) ||
+      minutes < 1 ||
+      minutes > RECENT_MINUTES_MAX
+    ) {
+      return;
+    }
+    const next = { timeMode: 'recent', recentMinutes: minutes };
+    timeRangeRef.current = next;
+    setTimeRange(next);
+    clearTimeout(dateChangeTimerRef.current);
+    dateChangeTimerRef.current = setTimeout(() => {
+      const values = {
+        ...(formApi?.getValues() || formInitValues),
+        ...next,
+        dateRange: getDefaultLogFormValues(next).dateRange,
+      };
+      formApi?.setValue('dateRange', values.dateRange);
+      void refresh(values);
+    }, 500);
   };
 
   const handleDateRangeChange = (value) => {
@@ -1111,7 +1156,7 @@ export const useLogsData = () => {
     initialUrlFiltersRef.current = {};
     clearInitialSearchParams();
     formApi.setValues(resetValues);
-    const next = { timeMode: 'today', recentHours: 1 };
+    const next = { timeMode: 'today', recentMinutes: RECENT_MINUTES_DEFAULT };
     timeRangeRef.current = next;
     setTimeRange(next);
     setLogType(0);
@@ -1241,6 +1286,7 @@ export const useLogsData = () => {
     getFormValues,
     timeRange,
     handleTimeModeChange,
+    handleRecentValueChange,
     handleDateRangeChange,
 
     // Column visibility

@@ -39,7 +39,7 @@ export type LogCategory = 'common' | 'drawing' | 'task'
  */
 export interface CommonFilters {
   timeMode?: 'today' | 'recent' | 'fixed'
-  recentHours?: number
+  recentMinutes?: number
   startTime?: Date
   endTime?: Date
   channel?: string

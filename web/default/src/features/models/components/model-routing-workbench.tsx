@@ -1714,13 +1714,13 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
       </div>
 
       {/* Overrides pin whole channels across every model they serve, so the
-          notice is page-level: inside the channels panel it would read as if
-          it belonged to whichever model happens to be selected. It stays one
-          compact line of channel chips — a taller banner would push the three
-          columns below the fold, and each chip keeps its own restore button
-          next to the channel name instead of on the far edge. */}
+          notice stays one compact line of channel chips, each with its own
+          restore button next to the channel name. The left margin mirrors the
+          routing grid below (17rem + 20rem columns + two 0.75rem gaps) so the
+          banner lines up with the channels panel it talks about instead of
+          spanning the whole workbench; keep the two in sync. */}
       {routingOverrides.length > 0 ? (
-        <div className='flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 dark:border-amber-900/60 dark:bg-amber-950/20'>
+        <div className='flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 lg:ml-[38.5rem] dark:border-amber-900/60 dark:bg-amber-950/20'>
           <TriangleAlert className='size-4 shrink-0 text-amber-600 dark:text-amber-400' />
           <span className='text-sm font-medium text-amber-900 dark:text-amber-100'>
             {t('Temporary single-channel mode')}
@@ -2073,11 +2073,13 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
               <EmptyState title={t('No channels support this model')} />
             )}
             {!isLoading && selectedModel && channelsForModel.length > 0 && (
-              <Table className='min-w-[62rem] table-fixed'>
+              <Table className='min-w-[65rem] table-fixed'>
                 <TableHeader>
                   <TableRow>
                     <TableHead className='w-80'>{t('Channel')}</TableHead>
-                    <TableHead className='w-52'>{t('Actions')}</TableHead>
+                    {/* 7 个 28px 图标按钮 + 6 个 4px 间距共 220px，w-52 扣除
+                        单元格 p-2 后只剩 192px，按钮会挤溢出列边界 */}
+                    <TableHead className='w-64'>{t('Actions')}</TableHead>
                     <TableHead className='w-28'>{t('Type')}</TableHead>
                     <TableHead className='w-36'>{t('Status')}</TableHead>
                     <TableHead className='bg-background sticky right-0 w-52'>
@@ -2330,7 +2332,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className='w-52'>
+                        <TableCell className='w-64'>
                           <div className='flex items-center gap-1'>
                             <TooltipProvider delay={100}>
                               <Tooltip>

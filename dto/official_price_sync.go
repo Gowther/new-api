@@ -7,16 +7,17 @@ type OfficialPriceMapping struct {
 }
 
 type OfficialPriceCandidate struct {
-	Source         string         `json:"source"`
-	Provider       string         `json:"provider,omitempty"`
-	UpstreamModel  string         `json:"upstream_model"`
-	Fields         map[string]any `json:"fields"`
-	InputPrice     *float64       `json:"input_price,omitempty"`
-	OutputPrice    *float64       `json:"output_price,omitempty"`
-	CacheReadPrice *float64       `json:"cache_read_price,omitempty"`
-	Score          int            `json:"score"`
-	Reasons        []string       `json:"reasons"`
-	Selected       bool           `json:"selected"`
+	Source          string         `json:"source"`
+	Provider        string         `json:"provider,omitempty"`
+	UpstreamModel   string         `json:"upstream_model"`
+	Fields          map[string]any `json:"fields"`
+	InputPrice      *float64       `json:"input_price,omitempty"`
+	OutputPrice     *float64       `json:"output_price,omitempty"`
+	CacheReadPrice  *float64       `json:"cache_read_price,omitempty"`
+	CacheWritePrice *float64       `json:"cache_write_price,omitempty"`
+	Score           int            `json:"score"`
+	Reasons         []string       `json:"reasons"`
+	Selected        bool           `json:"selected"`
 }
 
 type OfficialPriceModelPreview struct {

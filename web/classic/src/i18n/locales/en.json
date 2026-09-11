@@ -3196,6 +3196,7 @@
     "缓存读取 Token (cr)": "Cache Read Tokens (cr)",
     "缓存读取：{{tokens}} / 1M * 模型倍率 {{modelRatio}} * 缓存倍率 {{cacheRatio}} * {{ratioType}} {{ratio}} = {{amount}}": "Cache read: {{tokens}} / 1M * model ratio {{modelRatio}} * cache ratio {{cacheRatio}} * {{ratioType}} {{ratio}} = {{amount}}",
     "缓存读取价格": "Input Cache Read Price",
+    "缓存写入价格": "Cache Write Price",
     "缓存读取价格 {{symbol}}{{price}} / 1M tokens": "Cache read price {{symbol}}{{price}} / 1M tokens",
     "缓存读取价格：{{symbol}}{{price}} / 1M tokens": "Cache read price: {{symbol}}{{price}} / 1M tokens",
     "缓存读取价格：{{symbol}}{{total}} / 1M tokens": "Cache read price: {{symbol}}{{total}} / 1M tokens",

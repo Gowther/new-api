@@ -21,6 +21,7 @@ import (
 
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/samber/lo"
@@ -815,16 +816,41 @@ type modelsDevModel struct {
 }
 
 type modelsDevCost struct {
-	Input     *float64 `json:"input"`
-	Output    *float64 `json:"output"`
-	CacheRead *float64 `json:"cache_read"`
+	Input      *float64       `json:"input"`
+	Output     *float64       `json:"output"`
+	CacheRead  *float64       `json:"cache_read"`
+	CacheWrite *float64       `json:"cache_write"`
+	Tiers      []modelsDevTier `json:"tiers"`
+}
+
+type modelsDevTier struct {
+	Input      *float64 `json:"input"`
+	Output     *float64 `json:"output"`
+	CacheRead  *float64 `json:"cache_read"`
+	CacheWrite *float64 `json:"cache_write"`
+	Tier       struct {
+		Type string `json:"type"`
+		Size int64  `json:"size"`
+	} `json:"tier"`
 }
 
 type modelsDevCandidate struct {
-	Provider  string
-	Input     float64
-	Output    *float64
-	CacheRead *float64
+	Provider   string
+	Input      float64
+	Output     *float64
+	CacheRead  *float64
+	CacheWrite *float64
+	Tiers      []modelsDevTierPrice
+}
+
+// modelsDevTierPrice is a validated context tier: its prices apply when the
+// input context length exceeds Size tokens.
+type modelsDevTierPrice struct {
+	Size       int64
+	Input      float64
+	Output     *float64
+	CacheRead  *float64
+	CacheWrite *float64
 }
 
 func cloneFloatPtr(v *float64) *float64 {
@@ -870,12 +896,67 @@ func buildModelsDevCandidate(provider string, cost modelsDevCost) (modelsDevCand
 		cacheRead = cloneFloatPtr(cost.CacheRead)
 	}
 
+	var cacheWrite *float64
+	if cost.CacheWrite != nil && isValidNonNegativeCost(*cost.CacheWrite) {
+		cacheWrite = cloneFloatPtr(cost.CacheWrite)
+	}
+
+	tiers, tiersOK := buildModelsDevTierPrices(cost.Tiers)
+	if !tiersOK {
+		tiers = nil
+	}
+
 	return modelsDevCandidate{
-		Provider:  provider,
-		Input:     input,
-		Output:    output,
-		CacheRead: cacheRead,
+		Provider:   provider,
+		Input:      input,
+		Output:     output,
+		CacheRead:  cacheRead,
+		CacheWrite: cacheWrite,
+		Tiers:      tiers,
 	}, true
+}
+
+// buildModelsDevTierPrices validates raw models.dev tiers. Only "context"
+// tiers with usable input pricing are kept; any inconsistency discards the
+// whole tier list so callers fall back to flat base-tier pricing.
+func buildModelsDevTierPrices(raw []modelsDevTier) ([]modelsDevTierPrice, bool) {
+	if len(raw) == 0 {
+		return nil, false
+	}
+	tiers := make([]modelsDevTierPrice, 0, len(raw))
+	seenSizes := make(map[int64]struct{}, len(raw))
+	for _, t := range raw {
+		if t.Tier.Type != "context" || t.Tier.Size <= 0 {
+			return nil, false
+		}
+		if _, dup := seenSizes[t.Tier.Size]; dup {
+			return nil, false
+		}
+		seenSizes[t.Tier.Size] = struct{}{}
+		if t.Input == nil || !isValidNonNegativeCost(*t.Input) {
+			return nil, false
+		}
+		tier := modelsDevTierPrice{Size: t.Tier.Size, Input: *t.Input}
+		if t.Output != nil {
+			if !isValidNonNegativeCost(*t.Output) {
+				return nil, false
+			}
+			tier.Output = cloneFloatPtr(t.Output)
+		}
+		// input=0/output>0 cannot be transformed into local ratio.
+		if tier.Input == 0 && tier.Output != nil && *tier.Output > 0 {
+			return nil, false
+		}
+		if t.CacheRead != nil && isValidNonNegativeCost(*t.CacheRead) {
+			tier.CacheRead = cloneFloatPtr(t.CacheRead)
+		}
+		if t.CacheWrite != nil && isValidNonNegativeCost(*t.CacheWrite) {
+			tier.CacheWrite = cloneFloatPtr(t.CacheWrite)
+		}
+		tiers = append(tiers, tier)
+	}
+	sort.Slice(tiers, func(i, j int) bool { return tiers[i].Size < tiers[j].Size })
+	return tiers, true
 }
 
 func shouldReplaceModelsDevCandidate(current, next modelsDevCandidate) bool {
@@ -888,8 +969,153 @@ func shouldReplaceModelsDevCandidate(current, next modelsDevCandidate) bool {
 	if nextNonZero && !nearlyEqual(next.Input, current.Input) {
 		return next.Input < current.Input
 	}
+	// Same price: prefer the candidate carrying more complete pricing data, so
+	// usable tiers / cache pricing are not lost to a barren duplicate.
+	if richness := modelsDevDataRichness(next) - modelsDevDataRichness(current); richness != 0 {
+		return richness > 0
+	}
 	// Stable tie-breaker for deterministic result.
 	return next.Provider < current.Provider
+}
+
+func modelsDevDataRichness(candidate modelsDevCandidate) int {
+	score := 0
+	if len(candidate.Tiers) > 0 {
+		score += 4
+	}
+	if candidate.CacheWrite != nil {
+		score += 2
+	}
+	if candidate.CacheRead != nil {
+		score += 1
+	}
+	return score
+}
+
+// modelsDevBillingFields converts a candidate into pricing sync fields: flat
+// ratios (including create_cache_ratio for cache writes) plus, when the
+// candidate carries usable context tiers, a generated tiered_expr billing
+// expression covering every tier.
+func modelsDevBillingFields(candidate modelsDevCandidate) map[string]any {
+	fields := make(map[string]any)
+	if candidate.Input == 0 {
+		fields["model_ratio"] = 0.0
+		return fields
+	}
+
+	modelRatio := candidate.Input * float64(ratio_setting.USD) / modelsDevInputCostRatioBase
+	fields["model_ratio"] = roundRatioValue(modelRatio)
+
+	if candidate.Output != nil {
+		fields["completion_ratio"] = roundRatioValue(*candidate.Output / candidate.Input)
+	}
+	if candidate.CacheRead != nil {
+		fields["cache_ratio"] = roundRatioValue(*candidate.CacheRead / candidate.Input)
+	}
+	if candidate.CacheWrite != nil {
+		fields["create_cache_ratio"] = roundRatioValue(*candidate.CacheWrite / candidate.Input)
+	}
+
+	if expr := buildModelsDevTieredExpr(candidate); expr != "" {
+		fields[billing_setting.BillingModeField] = billing_setting.BillingModeTieredExpr
+		fields[billing_setting.BillingExprField] = expr
+	}
+	return fields
+}
+
+// buildModelsDevTieredExpr generates a tiered_expr billing expression from
+// models.dev context tiers, e.g.
+//
+//	len <= 272000 ? tier("standard", p * 4 + c * 20 + cr * 0.4 + cc * 5)
+//	  : tier("long_context", p * 8 + c * 30 + cr * 0.8 + cc * 10)
+//
+// Returns "" when tiers are unusable or identical to base pricing (flat ratios
+// alone describe the model). Cache variables are referenced only when base and
+// every tier carry the corresponding price, so a partially-specified tier
+// never bills cache tokens at zero.
+func buildModelsDevTieredExpr(candidate modelsDevCandidate) string {
+	if len(candidate.Tiers) == 0 || candidate.Input <= 0 || candidate.Output == nil {
+		return ""
+	}
+	// Work on a copy sorted by size; candidates built outside
+	// buildModelsDevTierPrices may carry unsorted tiers, and the wrong order
+	// would silently misprice context lengths.
+	tiers := make([]modelsDevTierPrice, len(candidate.Tiers))
+	copy(tiers, candidate.Tiers)
+	sort.Slice(tiers, func(i, j int) bool { return tiers[i].Size < tiers[j].Size })
+
+	useCacheRead := candidate.CacheRead != nil
+	useCacheWrite := candidate.CacheWrite != nil
+	identical := true
+	for _, tier := range tiers {
+		if tier.Input <= 0 || tier.Output == nil {
+			return ""
+		}
+		if useCacheRead != (tier.CacheRead != nil) || useCacheWrite != (tier.CacheWrite != nil) {
+			return ""
+		}
+		if identical && (!nearlyEqual(tier.Input, candidate.Input) ||
+			!nearlyEqual(*tier.Output, *candidate.Output) ||
+			!optionalFloatEqual(tier.CacheRead, candidate.CacheRead) ||
+			!optionalFloatEqual(tier.CacheWrite, candidate.CacheWrite)) {
+			identical = false
+		}
+	}
+	if identical {
+		return ""
+	}
+
+	parts := make([]string, 0, len(tiers)+1)
+	baseBody := fmt.Sprintf("tier(\"standard\", %s)",
+		modelsDevTierBodyExpr(candidate.Input, *candidate.Output, candidate.CacheRead, candidate.CacheWrite))
+	parts = append(parts, fmt.Sprintf("len <= %d ? %s", tiers[0].Size, baseBody))
+	for i, tier := range tiers {
+		label := "long_context"
+		if i < len(tiers)-1 {
+			label = fmt.Sprintf("tier_%d", i+2)
+		}
+		body := fmt.Sprintf("tier(\"%s\", %s)",
+			label, modelsDevTierBodyExpr(tier.Input, *tier.Output, tier.CacheRead, tier.CacheWrite))
+		if i < len(tiers)-1 {
+			body = fmt.Sprintf("len <= %d ? %s", tiers[i+1].Size, body)
+		}
+		parts = append(parts, body)
+	}
+
+	expr := strings.Join(parts, " : ")
+	if _, err := billingexpr.CompileFromCache(expr); err != nil {
+		// Generated expressions are deterministic; treat a compile failure as a
+		// generator bug and fall back to flat ratios rather than writing a
+		// broken expression into billing config.
+		common.SysError("failed to compile generated models.dev tiered expr: " + err.Error())
+		return ""
+	}
+	return expr
+}
+
+func modelsDevTierBodyExpr(input, output float64, cacheRead, cacheWrite *float64) string {
+	parts := []string{
+		"p * " + formatModelsDevPrice(input),
+		"c * " + formatModelsDevPrice(output),
+	}
+	if cacheRead != nil {
+		parts = append(parts, "cr * "+formatModelsDevPrice(*cacheRead))
+	}
+	if cacheWrite != nil {
+		parts = append(parts, "cc * "+formatModelsDevPrice(*cacheWrite))
+	}
+	return strings.Join(parts, " + ")
+}
+
+func formatModelsDevPrice(value float64) string {
+	return strconv.FormatFloat(value, 'f', -1, 64)
+}
+
+func optionalFloatEqual(a, b *float64) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return nearlyEqual(*a, *b)
 }
 
 // convertModelsDevToRatioData parses models.dev /api.json and converts
@@ -899,6 +1125,10 @@ func shouldReplaceModelsDevCandidate(current, next modelsDevCandidate) bool {
 //	model_ratio = input_cost_per_1M / 2
 //	completion_ratio = output_cost / input_cost
 //	cache_ratio = cache_read_cost / input_cost
+//	create_cache_ratio = cache_write_cost / input_cost
+//
+// Models with context tiers additionally get a generated tiered_expr
+// billing expression (billing_mode / billing_expr fields).
 //
 // Duplicate model keys across providers are resolved by selecting the
 // cheapest non-zero input cost. If only zero-priced candidates exist,
@@ -947,39 +1177,22 @@ func convertModelsDevToRatioData(reader io.Reader) (map[string]any, error) {
 		return nil, fmt.Errorf("no valid models.dev pricing entries found")
 	}
 
-	modelRatioMap := make(map[string]any)
-	completionRatioMap := make(map[string]any)
-	cacheRatioMap := make(map[string]any)
-
+	fieldsByModel := make(map[string]map[string]any, len(selectedCandidates))
 	for modelName, candidate := range selectedCandidates {
-		if candidate.Input == 0 {
-			modelRatioMap[modelName] = 0.0
-			continue
-		}
-
-		modelRatio := candidate.Input * float64(ratio_setting.USD) / modelsDevInputCostRatioBase
-		modelRatioMap[modelName] = roundRatioValue(modelRatio)
-
-		if candidate.Output != nil {
-			completionRatio := *candidate.Output / candidate.Input
-			completionRatioMap[modelName] = roundRatioValue(completionRatio)
-		}
-
-		if candidate.CacheRead != nil {
-			cacheRatio := *candidate.CacheRead / candidate.Input
-			cacheRatioMap[modelName] = roundRatioValue(cacheRatio)
-		}
+		fieldsByModel[modelName] = modelsDevBillingFields(candidate)
 	}
 
 	converted := make(map[string]any)
-	if len(modelRatioMap) > 0 {
-		converted["model_ratio"] = modelRatioMap
-	}
-	if len(completionRatioMap) > 0 {
-		converted["completion_ratio"] = completionRatioMap
-	}
-	if len(cacheRatioMap) > 0 {
-		converted["cache_ratio"] = cacheRatioMap
+	for _, field := range pricingSyncFields {
+		values := make(map[string]any)
+		for modelName, fields := range fieldsByModel {
+			if value, ok := fields[field]; ok {
+				values[modelName] = value
+			}
+		}
+		if len(values) > 0 {
+			converted[field] = values
+		}
 	}
 	return converted, nil
 }

@@ -3074,6 +3074,7 @@
     "缓存读 {{price}} / 1M tokens": "キャッシュ読み取り {{price}} / 1M tokens",
     "缓存读取：{{tokens}} / 1M * 模型倍率 {{modelRatio}} * 缓存倍率 {{cacheRatio}} * {{ratioType}} {{ratio}} = {{amount}}": "キャッシュ読み取り: {{tokens}} / 1M * モデル倍率 {{modelRatio}} * キャッシュ倍率 {{cacheRatio}} * {{ratioType}} {{ratio}} = {{amount}}",
     "缓存读取价格": "入力キャッシュ読み取り価格",
+    "缓存写入价格": "入力キャッシュ書き込み価格",
     "缓存读取价格 {{symbol}}{{price}} / 1M tokens": "キャッシュ読み取り価格 {{symbol}}{{price}} / 1M tokens",
     "缓存读取价格：{{symbol}}{{price}} / 1M tokens": "キャッシュ読み取り価格：{{symbol}}{{price}} / 1M tokens",
     "缓存读取价格：{{symbol}}{{total}} / 1M tokens": "キャッシュ読み取り価格：{{symbol}}{{total}} / 1M tokens",

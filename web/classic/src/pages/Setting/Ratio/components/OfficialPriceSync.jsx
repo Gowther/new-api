@@ -497,6 +497,9 @@ function OfficialPriceSyncContent({
                 candidate.cache_read_price !== undefined
                   ? `${t('缓存读取价格')}: ${candidate.cache_read_price}`
                   : null,
+                candidate.cache_write_price !== undefined
+                  ? `${t('缓存写入价格')}: ${candidate.cache_write_price}`
+                  : null,
               ].filter(Boolean);
 
               return (

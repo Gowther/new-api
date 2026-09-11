@@ -190,6 +190,9 @@ function CandidateButton({
     candidate.cache_read_price !== undefined
       ? `${t('Cache read price')}: ${candidate.cache_read_price}`
       : undefined,
+    candidate.cache_write_price !== undefined
+      ? `${t('Cache write price')}: ${candidate.cache_write_price}`
+      : undefined,
   ].filter(Boolean)
 
   return (

@@ -17,7 +17,6 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/gin-gonic/gin"
 )
@@ -96,13 +95,14 @@ var knownModelProviderPrefixes = []string{
 }
 
 type officialPriceEntry struct {
-	Source         string
-	Provider       string
-	UpstreamModel  string
-	Fields         map[string]any
-	InputPrice     *float64
-	OutputPrice    *float64
-	CacheReadPrice *float64
+	Source          string
+	Provider        string
+	UpstreamModel   string
+	Fields          map[string]any
+	InputPrice      *float64
+	OutputPrice     *float64
+	CacheReadPrice  *float64
+	CacheWritePrice *float64
 }
 
 type officialPriceSource struct {
@@ -487,18 +487,19 @@ func parseModelsDevOfficialPriceEntries(reader io.Reader) ([]officialPriceEntry,
 			if !ok {
 				continue
 			}
-			fields := modelsDevCandidateFields(candidate)
+			fields := modelsDevBillingFields(candidate)
 			if len(fields) == 0 {
 				continue
 			}
 			entries = append(entries, officialPriceEntry{
-				Source:         officialPriceSourceModelsDev,
-				Provider:       provider,
-				UpstreamModel:  modelName,
-				Fields:         fields,
-				InputPrice:     cloneFloatPtr(&candidate.Input),
-				OutputPrice:    cloneFloatPtr(candidate.Output),
-				CacheReadPrice: cloneFloatPtr(candidate.CacheRead),
+				Source:          officialPriceSourceModelsDev,
+				Provider:        provider,
+				UpstreamModel:   modelName,
+				Fields:          fields,
+				InputPrice:      cloneFloatPtr(&candidate.Input),
+				OutputPrice:     cloneFloatPtr(candidate.Output),
+				CacheReadPrice:  cloneFloatPtr(candidate.CacheRead),
+				CacheWritePrice: cloneFloatPtr(candidate.CacheWrite),
 			})
 		}
 	}
@@ -506,25 +507,6 @@ func parseModelsDevOfficialPriceEntries(reader io.Reader) ([]officialPriceEntry,
 		return nil, fmt.Errorf("no valid official models.dev pricing entries found")
 	}
 	return entries, nil
-}
-
-func modelsDevCandidateFields(candidate modelsDevCandidate) map[string]any {
-	fields := make(map[string]any)
-	if candidate.Input == 0 {
-		fields["model_ratio"] = 0.0
-		return fields
-	}
-
-	modelRatio := candidate.Input * float64(ratio_setting.USD) / modelsDevInputCostRatioBase
-	fields["model_ratio"] = roundRatioValue(modelRatio)
-
-	if candidate.Output != nil {
-		fields["completion_ratio"] = roundRatioValue(*candidate.Output / candidate.Input)
-	}
-	if candidate.CacheRead != nil {
-		fields["cache_ratio"] = roundRatioValue(*candidate.CacheRead / candidate.Input)
-	}
-	return fields
 }
 
 func parseBaseLLMOfficialPriceEntries(reader io.Reader) ([]officialPriceEntry, error) {
@@ -717,16 +699,17 @@ func buildOfficialPriceCandidates(modelName string, entries []officialPriceEntry
 		}
 
 		candidate := dto.OfficialPriceCandidate{
-			Source:         entry.Source,
-			Provider:       entry.Provider,
-			UpstreamModel:  entry.UpstreamModel,
-			Fields:         entry.Fields,
-			InputPrice:     cloneFloatPtr(entry.InputPrice),
-			OutputPrice:    cloneFloatPtr(entry.OutputPrice),
-			CacheReadPrice: cloneFloatPtr(entry.CacheReadPrice),
-			Score:          score,
-			Reasons:        reasons,
-			Selected:       selected,
+			Source:          entry.Source,
+			Provider:        entry.Provider,
+			UpstreamModel:   entry.UpstreamModel,
+			Fields:          entry.Fields,
+			InputPrice:      cloneFloatPtr(entry.InputPrice),
+			OutputPrice:     cloneFloatPtr(entry.OutputPrice),
+			CacheReadPrice:  cloneFloatPtr(entry.CacheReadPrice),
+			CacheWritePrice: cloneFloatPtr(entry.CacheWritePrice),
+			Score:           score,
+			Reasons:         reasons,
+			Selected:        selected,
 		}
 		key := officialPriceMappingKey(dto.OfficialPriceMapping{
 			Source:        candidate.Source,

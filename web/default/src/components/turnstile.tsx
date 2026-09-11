@@ -21,7 +21,12 @@ import { useEffect, useRef } from 'react'
 declare global {
   interface Window {
     turnstile?: {
-      render: (element: HTMLElement, options: Record<string, unknown>) => void
+      render: (
+        element: HTMLElement,
+        options: Record<string, unknown>
+      ) => string
+      remove?: (widgetId: string) => void
+      reset?: (widgetId: string) => void
     }
   }
 }
@@ -40,37 +45,67 @@ export function Turnstile({
   className,
 }: TurnstileProps) {
   const ref = useRef<HTMLDivElement | null>(null)
+  const widgetIdRef = useRef<string | null>(null)
+  // Keep callbacks in refs so a new function identity from the parent never
+  // re-triggers the render effect below (which would stack duplicate widgets).
+  const onVerifyRef = useRef(onVerify)
+  const onExpireRef = useRef(onExpire)
+  useEffect(() => {
+    onVerifyRef.current = onVerify
+    onExpireRef.current = onExpire
+  })
 
   useEffect(() => {
     const render = () => {
       if (!ref.current || !window.turnstile) return
+      if (widgetIdRef.current != null) return
       try {
-        window.turnstile.render(ref.current, {
+        widgetIdRef.current = window.turnstile.render(ref.current, {
           sitekey: siteKey,
-          callback: (token: string) => onVerify(token),
-          'error-callback': () => onExpire?.(),
-          'expired-callback': () => onExpire?.(),
+          callback: (token: string) => onVerifyRef.current(token),
+          'error-callback': () => onExpireRef.current?.(),
+          'expired-callback': () => onExpireRef.current?.(),
         })
       } catch {
         /* empty */
       }
     }
 
+    let scriptEl: HTMLElement | null = null
     if (window.turnstile) {
       render()
-      return
+    } else {
+      const scriptId = 'cf-turnstile'
+      const existing = document.getElementById(scriptId)
+      if (existing) {
+        // Script is already loading (added by another instance); render once
+        // it finishes instead of dropping this widget.
+        existing.addEventListener('load', render, { once: true })
+        scriptEl = existing
+      } else {
+        const s = document.createElement('script')
+        s.id = scriptId
+        s.src =
+          'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
+        s.async = true
+        s.defer = true
+        s.onload = () => render()
+        document.head.appendChild(s)
+      }
     }
-    const scriptId = 'cf-turnstile'
-    if (document.getElementById(scriptId)) return
-    const s = document.createElement('script')
-    s.id = scriptId
-    s.src =
-      'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
-    s.async = true
-    s.defer = true
-    s.onload = () => render()
-    document.head.appendChild(s)
-  }, [siteKey, onVerify, onExpire])
+
+    return () => {
+      scriptEl?.removeEventListener('load', render)
+      if (widgetIdRef.current != null) {
+        try {
+          window.turnstile?.remove?.(widgetIdRef.current)
+        } catch {
+          /* empty */
+        }
+        widgetIdRef.current = null
+      }
+    }
+  }, [siteKey])
 
   return <div ref={ref} className={className} />
 }

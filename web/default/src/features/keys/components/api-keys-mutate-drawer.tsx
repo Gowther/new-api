@@ -139,11 +139,19 @@ export function ApiKeysMutateDrawer({
   // Load existing data when updating
   useEffect(() => {
     if (open && isUpdate && currentRow) {
-      getApiKey(currentRow.id).then((result) => {
-        if (result.success && result.data) {
+      let cancelled = false
+      const rowId = currentRow.id
+      getApiKey(rowId).then((result) => {
+        // Ignore stale responses: the drawer may have closed or switched to
+        // another row while the request was in flight.
+        if (cancelled) return
+        if (result.success && result.data && result.data.id === rowId) {
           form.reset(transformApiKeyToFormDefaults(result.data))
         }
       })
+      return () => {
+        cancelled = true
+      }
     } else if (open && !isUpdate) {
       form.reset(
         getApiKeyFormDefaultValues(defaultUseAutoGroup && backendHasAuto)

@@ -24,7 +24,23 @@ export function handleServerError(error: unknown) {
   // eslint-disable-next-line no-console
   console.log(error)
 
-  let errMsg = i18next.t('Something went wrong!')
+  if (error instanceof AxiosError) {
+    // The shared axios instance's response interceptor already shows an error
+    // toast for these requests; only toast here when the request opted out of
+    // the interceptor (skipErrorHandler), otherwise errors would toast twice.
+    if (!error.config?.skipErrorHandler) return
+
+    const data = error.response?.data as
+      | { message?: unknown; error?: { message?: unknown } }
+      | undefined
+    const errMsg =
+      (typeof data?.message === 'string' && data.message) ||
+      (typeof data?.error?.message === 'string' && data.error.message) ||
+      error.message ||
+      i18next.t('Something went wrong!')
+    toast.error(errMsg)
+    return
+  }
 
   if (
     error &&
@@ -32,12 +48,9 @@ export function handleServerError(error: unknown) {
     'status' in error &&
     Number(error.status) === 204
   ) {
-    errMsg = i18next.t('Content not found.')
+    toast.error(i18next.t('Content not found.'))
+    return
   }
 
-  if (error instanceof AxiosError) {
-    errMsg = error.response?.data.title
-  }
-
-  toast.error(errMsg)
+  toast.error(i18next.t('Something went wrong!'))
 }

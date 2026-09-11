@@ -186,6 +186,15 @@ export function useTableUrlState(
     return typeof raw === 'string' ? raw : ''
   })
 
+  // Same contract as columnFilters above: the URL is the single source of
+  // truth, so re-sync when search changes (e.g. browser back/forward).
+  useEffect(() => {
+    if (!globalFilterEnabled) return
+    const raw = (search as SearchRecord)[globalFilterKey]
+    setGlobalFilter(typeof raw === 'string' ? raw : '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search])
+
   const onGlobalFilterChange: OnChangeFn<string> | undefined =
     globalFilterEnabled
       ? (updater) => {

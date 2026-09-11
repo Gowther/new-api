@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { SSE } from 'sse.js'
 
 import { getCommonHeaders } from '@/lib/api'
@@ -132,6 +132,16 @@ export function useStreamRequest() {
   const stopStream = useCallback(() => {
     closeActiveStream()
   }, [closeActiveStream])
+
+  // Abort any in-flight stream when the component unmounts (e.g. navigating
+  // away mid-generation) so callbacks stop firing against an unmounted tree.
+  useEffect(
+    () => () => {
+      sseSourceRef.current?.close()
+      sseSourceRef.current = null
+    },
+    []
+  )
 
   return {
     sendStreamRequest,

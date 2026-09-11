@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, useEffect, useRef, type ReactNode } from 'react'
+import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 
 import { cn } from '@/lib/utils'
 
@@ -173,11 +173,10 @@ export function HeroTerminalDemo(props: HeroTerminalDemoProps) {
   const [transitioning, setTransitioning] = useState(false)
   const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined)
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const reducedMotionRef = useRef(false)
 
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
-    if (mq.matches) return
-
+  const startRotation = useCallback(() => {
+    if (intervalRef.current) clearInterval(intervalRef.current)
     intervalRef.current = setInterval(() => {
       setTransitioning(true)
       timeoutRef.current = setTimeout(() => {
@@ -185,22 +184,34 @@ export function HeroTerminalDemo(props: HeroTerminalDemoProps) {
         setTransitioning(false)
       }, TRANSITION_MS)
     }, CYCLE_INTERVAL)
+  }, [])
+
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    if (mq.matches) {
+      reducedMotionRef.current = true
+      return
+    }
+
+    startRotation()
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
       if (timeoutRef.current) clearTimeout(timeoutRef.current)
     }
-  }, [])
+  }, [startRotation])
 
   const handleSelect = (index: number) => {
     if (index === activeIndex) return
-    if (intervalRef.current) clearInterval(intervalRef.current)
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
     setTransitioning(true)
     timeoutRef.current = setTimeout(() => {
       setActiveIndex(index)
       setTransitioning(false)
     }, TRANSITION_MS)
+    // Restart auto-rotation so the demo keeps cycling after a manual pick;
+    // the fresh interval gives a full cycle before the next auto-advance.
+    if (!reducedMotionRef.current) startRotation()
   }
 
   const demo = API_DEMOS[activeIndex]

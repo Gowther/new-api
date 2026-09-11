@@ -134,6 +134,10 @@ export function useChatHandler({
       if (streamFlushTimerRef.current !== null) {
         window.clearTimeout(streamFlushTimerRef.current)
       }
+      // Abort any in-flight non-streaming request; the SSE stream owned by
+      // useStreamRequest is closed by that hook's own unmount cleanup.
+      abortControllerRef.current?.abort()
+      abortControllerRef.current = null
     },
     []
   )

@@ -121,6 +121,9 @@ export interface LogOtherData {
     admin_id?: number | string
     admin_role?: number
     auth_method?: 'session' | 'access_token' | string
+    // Param-override audit lines (injected prompts, header ops). Admin-only:
+    // the backend nests them under admin_info, stripped for non-admin viewers.
+    po?: string[]
     // Quota saturation marker: set when a quota conversion clamped at the
     // int32 bound (overflow/underflow) or hit a NaN fallback while computing
     // this request's charge. Admin-only (nested under admin_info).
@@ -200,7 +203,6 @@ export interface LogOtherData {
   image_generation_call?: boolean
   image_generation_call_price?: number
   is_system_prompt_overwritten?: boolean
-  po?: string[]
   billing_source?: string
   group?: string
   stream_status?: {

@@ -136,11 +136,19 @@ export function UsersMutateDrawer({
   useEffect(() => {
     if (open && isUpdate && currentRow) {
       // For update, fetch fresh data
-      getUser(currentRow.id).then((result) => {
-        if (result.success && result.data) {
+      let cancelled = false
+      const rowId = currentRow.id
+      getUser(rowId).then((result) => {
+        // Ignore stale responses: the drawer may have closed or switched to
+        // another row while the request was in flight.
+        if (cancelled) return
+        if (result.success && result.data && result.data.id === rowId) {
           form.reset(transformUserToFormDefaults(result.data))
         }
       })
+      return () => {
+        cancelled = true
+      }
     } else if (open && !isUpdate) {
       // For create, reset to defaults
       form.reset(USER_FORM_DEFAULT_VALUES)

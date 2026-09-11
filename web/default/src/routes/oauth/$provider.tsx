@@ -60,19 +60,18 @@ function OAuthCallback() {
   useEffect(() => {
     ;(async () => {
       const safeNavigate = (target: string) => {
-        navigate({ to: target as never, replace: true })
+        // Only allow same-origin absolute paths; anything else (e.g.
+        // https://evil.com, //evil.com, /\evil.com) falls back to the
+        // dashboard to prevent open redirects via the redirect param.
+        const isSafePath = /^\/[^\\/]/.test(target) || target === '/'
+        const to = isSafePath ? target : '/dashboard'
+        navigate({ to: to as never, replace: true })
         if (typeof window !== 'undefined') {
           setTimeout(() => {
-            const normalizedTarget = target.startsWith('/')
-              ? target
-              : `/${target}`
             const currentPath =
               window.location.pathname + window.location.search
-            if (
-              currentPath !== normalizedTarget &&
-              currentPath !== `${normalizedTarget}/`
-            ) {
-              window.location.replace(target)
+            if (currentPath !== to && currentPath !== `${to}/`) {
+              window.location.replace(to)
             }
           }, 100)
         }

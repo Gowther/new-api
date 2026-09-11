@@ -100,7 +100,7 @@ func runMidjourneyTaskUpdateOnce(ctx context.Context, report func(processed, tot
 			}
 			continue
 		}
-		requestUrl := fmt.Sprintf("%s/mj/task/list-by-condition", *midjourneyChannel.BaseURL)
+		requestUrl := fmt.Sprintf("%s/mj/task/list-by-condition", midjourneyChannel.GetBaseURL())
 
 		body, err := common.Marshal(map[string]any{
 			"ids": taskIds,

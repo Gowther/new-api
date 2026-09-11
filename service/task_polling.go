@@ -243,11 +243,11 @@ func updateSunoTasks(ctx context.Context, channelId int, taskIds []string, taskM
 		common.SysLog(fmt.Sprintf("Get Task Do req error: %v", err))
 		return err
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		logger.LogError(ctx, fmt.Sprintf("Get Task status code: %d", resp.StatusCode))
 		return fmt.Errorf("Get Task status code: %d", resp.StatusCode)
 	}
-	defer resp.Body.Close()
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		common.SysLog(fmt.Sprintf("Get Suno Task parse body error: %v", err))
@@ -261,7 +261,7 @@ func updateSunoTasks(ctx context.Context, channelId int, taskIds []string, taskM
 	}
 	if !responseItems.IsSuccess() {
 		common.SysLog(fmt.Sprintf("渠道 #%d 未完成的任务有: %d, 成功获取到任务数: %s", channelId, len(taskIds), string(responseBody)))
-		return err
+		return fmt.Errorf("suno task fetch failed, code: %s, message: %s", responseItems.Code, responseItems.Message)
 	}
 
 	for _, responseItem := range responseItems.Data {

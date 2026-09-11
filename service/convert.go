@@ -1,7 +1,6 @@
 package service
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -36,7 +35,7 @@ func ClaudeToOpenAIRequest(claudeRequest dto.ClaudeRequest, info *relaycommon.Re
 
 	if isOpenRouter {
 		if effort := claudeRequest.GetEfforts(); effort != "" {
-			effortBytes, _ := json.Marshal(effort)
+			effortBytes, _ := common.Marshal(effort)
 			openAIRequest.Verbosity = effortBytes
 		}
 		if claudeRequest.Thinking != nil {
@@ -51,7 +50,7 @@ func ClaudeToOpenAIRequest(claudeRequest dto.ClaudeRequest, info *relaycommon.Re
 					Enabled: true,
 				}
 			}
-			reasoningJSON, err := json.Marshal(reasoning)
+			reasoningJSON, err := common.Marshal(reasoning)
 			if err != nil {
 				return nil, fmt.Errorf("failed to marshal reasoning: %w", err)
 			}
@@ -651,7 +650,7 @@ func stopReasonOpenAI2Claude(reason string) string {
 }
 
 func toJSONString(v interface{}) string {
-	b, err := json.Marshal(v)
+	b, err := common.Marshal(v)
 	if err != nil {
 		return "{}"
 	}
@@ -757,7 +756,11 @@ func GeminiToOpenAIRequest(geminiRequest *dto.GeminiChatRequest, info *relaycomm
 	}
 	// gemini stop sequences 最多 5 个，openai stop 最多 4 个
 	if len(geminiRequest.GenerationConfig.StopSequences) > 0 {
-		openaiRequest.Stop = geminiRequest.GenerationConfig.StopSequences[:4]
+		stopSequences := geminiRequest.GenerationConfig.StopSequences
+		if len(stopSequences) > 4 {
+			stopSequences = stopSequences[:4]
+		}
+		openaiRequest.Stop = stopSequences
 	}
 	if geminiRequest.GenerationConfig.CandidateCount != nil && *geminiRequest.GenerationConfig.CandidateCount > 0 {
 		openaiRequest.N = lo.ToPtr(*geminiRequest.GenerationConfig.CandidateCount)
@@ -971,7 +974,7 @@ func StreamResponseOpenAI2Gemini(openAIResponse *dto.ChatCompletionsStreamRespon
 				// 解析参数
 				var args map[string]interface{}
 				if toolCall.Function.Arguments != "" {
-					if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
+					if err := common.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
 						args = map[string]interface{}{"arguments": toolCall.Function.Arguments}
 					}
 				} else {

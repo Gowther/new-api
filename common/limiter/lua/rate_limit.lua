@@ -39,6 +39,12 @@ end
 
 ---- 更新桶状态并设置过期时间
 redis.call('HMSET', key, 'tokens', tokens, 'last_time', last_time)
---redis.call('EXPIRE', key, math.ceil(capacity / rate) + 60) -- 适当延长过期时间
+-- 空闲过期：桶从空到满的恢复窗口，并给 60s 下限；
+-- 避免空闲用户的限流键永久残留（rate 异常时退化为下限，窗口异常放大时也不设超长 TTL）
+local expire_seconds = 60
+if rate > 0 then
+    expire_seconds = math.max(math.ceil(capacity / rate), 60)
+end
+redis.call('EXPIRE', key, expire_seconds)
 
 return allowed and 1 or 0

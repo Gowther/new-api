@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/QuantumNous/new-api/common"
 	"github.com/go-redis/redis/v8"
 )
 
@@ -14,8 +13,8 @@ import (
 var rateLimitScript string
 
 type RedisLimiter struct {
-	client         *redis.Client
-	limitScriptSHA string
+	client *redis.Client
+	script *redis.Script
 }
 
 var (
@@ -25,14 +24,12 @@ var (
 
 func New(ctx context.Context, r *redis.Client) *RedisLimiter {
 	once.Do(func() {
-		// 预加载脚本
-		limitSHA, err := r.ScriptLoad(ctx, rateLimitScript).Result()
-		if err != nil {
-			common.SysLog(fmt.Sprintf("Failed to load rate limit script: %v", err))
-		}
 		instance = &RedisLimiter{
-			client:         r,
-			limitScriptSHA: limitSHA,
+			client: r,
+			// redis.Script 本地保存脚本及其 SHA1，无需启动时 ScriptLoad：
+			// Run 优先 EVALSHA，脚本丢失（NOSCRIPT，如 Redis 重启或 SCRIPT FLUSH）
+			// 时自动回退 EVAL 重新载入，不会出现预加载失败后 SHA 永久为空的问题。
+			script: redis.NewScript(rateLimitScript),
 		}
 	})
 
@@ -53,9 +50,9 @@ func (rl *RedisLimiter) Allow(ctx context.Context, key string, opts ...Option) (
 	}
 
 	// 执行限流
-	result, err := rl.client.EvalSha(
+	result, err := rl.script.Run(
 		ctx,
-		rl.limitScriptSHA,
+		rl.client,
 		[]string{key},
 		config.Requested,
 		config.Rate,

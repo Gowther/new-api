@@ -6,7 +6,10 @@ import (
 
 func Cache() func(c *gin.Context) {
 	return func(c *gin.Context) {
-		if c.Request.RequestURI == "/" {
+		// Compare the path only: RequestURI includes the query string, so
+		// "/?utm=..." would otherwise get the long-lived asset cache header.
+		path := c.Request.URL.Path
+		if path == "/" || path == "/index.html" {
 			c.Header("Cache-Control", "no-cache")
 		} else {
 			c.Header("Cache-Control", "max-age=604800") // one week

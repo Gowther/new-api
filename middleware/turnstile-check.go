@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/gin-contrib/sessions"
@@ -13,6 +14,11 @@ import (
 type turnstileCheckResponse struct {
 	Success bool `json:"success"`
 }
+
+// turnstileHttpClient sets an explicit timeout for the siteverify call: it runs
+// on the unauthenticated login/register path, and http.DefaultClient has no
+// timeout, so a stalled Cloudflare connection would hang request goroutines.
+var turnstileHttpClient = &http.Client{Timeout: 10 * time.Second}
 
 func TurnstileCheck() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -32,7 +38,7 @@ func TurnstileCheck() gin.HandlerFunc {
 				c.Abort()
 				return
 			}
-			rawRes, err := http.PostForm("https://challenges.cloudflare.com/turnstile/v0/siteverify", url.Values{
+			rawRes, err := turnstileHttpClient.PostForm("https://challenges.cloudflare.com/turnstile/v0/siteverify", url.Values{
 				"secret":   {common.TurnstileSecretKey},
 				"response": {response},
 				"remoteip": {c.ClientIP()},

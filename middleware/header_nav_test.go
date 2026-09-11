@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
@@ -59,6 +60,9 @@ func performHeaderNavRequest(t *testing.T, handler gin.HandlerFunc, authenticate
 
 	var cookies []*http.Cookie
 	if authenticated {
+		// UserAuth 现在会回查用户缓存/DB（session 复校验），需要真实用户记录。
+		db := setupAuthTestDB(t)
+		require.NoError(t, db.Create(&model.User{Id: 1, Username: "tester", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default"}).Error)
 		loginRecorder := httptest.NewRecorder()
 		loginRequest := httptest.NewRequest(http.MethodGet, "/login", nil)
 		router.ServeHTTP(loginRecorder, loginRequest)

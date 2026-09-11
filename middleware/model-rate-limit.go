@@ -40,10 +40,16 @@ func checkRedisRateLimit(ctx context.Context, rdb *redis.Client, key string, max
 	}
 
 	// 检查时间窗口
-	oldTimeStr, _ := rdb.LIndex(ctx, key, -1).Result()
+	oldTimeStr, err := rdb.LIndex(ctx, key, -1).Result()
+	if err != nil || oldTimeStr == "" {
+		// LLen 与 LIndex 之间 key 可能已过期，窗口数据缺失按窗口已过期处理，放行
+		return true, nil
+	}
 	oldTime, err := time.Parse(timeFormat, oldTimeStr)
 	if err != nil {
-		return false, err
+		// 窗口数据异常不应导致 500，按放行处理并记录日志
+		common.SysLog(fmt.Sprintf("checkRedisRateLimit parse oldest time failed, key=%s value=%q: %v", key, oldTimeStr, err))
+		return true, nil
 	}
 
 	nowTimeStr := time.Now().Format(timeFormat)
@@ -85,7 +91,7 @@ func redisRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) g
 		successKey := fmt.Sprintf("rateLimit:%s:%s", ModelRequestRateLimitSuccessCountMark, userId)
 		allowed, err := checkRedisRateLimit(ctx, rdb, successKey, successMaxCount, duration)
 		if err != nil {
-			fmt.Println("检查成功请求数限制失败:", err.Error())
+			common.SysLog("检查成功请求数限制失败: " + err.Error())
 			abortWithOpenAiMessage(c, http.StatusInternalServerError, "rate_limit_check_failed")
 			return
 		}
@@ -108,7 +114,7 @@ func redisRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) g
 			)
 
 			if err != nil {
-				fmt.Println("检查总请求数限制失败:", err.Error())
+				common.SysLog("检查总请求数限制失败: " + err.Error())
 				abortWithOpenAiMessage(c, http.StatusInternalServerError, "rate_limit_check_failed")
 				return
 			}
@@ -144,10 +150,9 @@ func memoryRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) 
 			return
 		}
 
-		// 2. 检查成功请求数限制
-		// 使用一个临时key来检查限制，这样可以避免实际记录
-		checkKey := successKey + "_check"
-		if !inMemoryRateLimiter.Request(checkKey, successMaxCount, duration) {
+		// 2. 检查成功请求数限制（只读预检，不消耗成功配额；
+		// 与 Redis 路径 checkRedisRateLimit 的只读语义一致，成功后才在实际 key 上记录）
+		if !inMemoryRateLimiter.Check(successKey, successMaxCount, duration) {
 			c.Status(http.StatusTooManyRequests)
 			c.Abort()
 			return
@@ -157,7 +162,7 @@ func memoryRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) 
 		c.Next()
 
 		// 4. 如果请求成功，记录到实际的成功请求计数中
-		if c.Writer.Status() < 400 {
+		if c.Writer.Status() < 400 && successMaxCount > 0 {
 			inMemoryRateLimiter.Request(successKey, successMaxCount, duration)
 		}
 	}

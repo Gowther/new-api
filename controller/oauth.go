@@ -23,13 +23,18 @@ func providerParams(name string) map[string]any {
 // GenerateOAuthCode generates a state code for OAuth CSRF protection
 func GenerateOAuthCode(c *gin.Context) {
 	session := sessions.Default(c)
-	state := common.GetRandomString(12)
+	// The state is a CSRF token and must be cryptographically random.
+	state, err := common.GenerateRandomCharsKey(32)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	affCode := c.Query("aff")
 	if affCode != "" {
 		session.Set("aff", affCode)
 	}
 	session.Set("oauth_state", state)
-	err := session.Save()
+	err = session.Save()
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -62,6 +67,13 @@ func HandleOAuth(c *gin.Context) {
 			"success": false,
 			"message": i18n.T(c, i18n.MsgOAuthStateInvalid),
 		})
+		return
+	}
+
+	// Consume the state so it cannot be replayed within this session.
+	session.Delete("oauth_state")
+	if err := session.Save(); err != nil {
+		common.ApiError(c, err)
 		return
 	}
 

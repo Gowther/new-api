@@ -52,6 +52,53 @@ var classicBuildFS embed.FS
 //go:embed web/classic/dist/index.html
 var classicIndexPage []byte
 
+// defaultTrustedProxies are trusted when TRUSTED_PROXIES is unset: loopback and
+// private ranges, so a local reverse proxy keeps working while a directly
+// exposed instance ignores X-Forwarded-For / X-Real-IP from public clients.
+var defaultTrustedProxies = []string{
+	"127.0.0.0/8",
+	"::1/128",
+	"10.0.0.0/8",
+	"172.16.0.0/12",
+	"192.168.0.0/16",
+	"fc00::/7",
+	"fe80::/10",
+}
+
+// setupTrustedProxies configures which proxies may supply client IP headers
+// (X-Forwarded-For / X-Real-IP). TRUSTED_PROXIES semantics:
+//   - unset: trust loopback + private ranges (defaultTrustedProxies)
+//   - "none" / "direct": trust no proxy, client IP is always the remote address
+//   - otherwise: comma-separated list of IPs/CIDRs to trust
+func setupTrustedProxies(server *gin.Engine) error {
+	env := strings.TrimSpace(os.Getenv("TRUSTED_PROXIES"))
+	var proxies []string
+	switch {
+	case env == "":
+		proxies = defaultTrustedProxies
+	case strings.EqualFold(env, "none") || strings.EqualFold(env, "direct"):
+		proxies = nil
+	default:
+		for _, proxy := range strings.Split(env, ",") {
+			if proxy = strings.TrimSpace(proxy); proxy != "" {
+				proxies = append(proxies, proxy)
+			}
+		}
+		if len(proxies) == 0 {
+			proxies = defaultTrustedProxies
+		}
+	}
+	if err := server.SetTrustedProxies(proxies); err != nil {
+		return err
+	}
+	if proxies == nil {
+		common.SysLog("trusted proxies: none (direct deployment, X-Forwarded-For/X-Real-IP headers are ignored)")
+	} else {
+		common.SysLog("trusted proxies: " + strings.Join(proxies, ", "))
+	}
+	return nil
+}
+
 func main() {
 	startTime := time.Now()
 
@@ -178,6 +225,12 @@ func main() {
 
 	// Initialize HTTP server
 	server := gin.New()
+	// Restrict which proxies may supply client IP headers. gin defaults to
+	// trusting all proxies, which makes ClientIP() spoofable when the instance
+	// is directly reachable (token IP allowlists, rate limits, audit logs).
+	if err := setupTrustedProxies(server); err != nil {
+		common.FatalLog("invalid TRUSTED_PROXIES: " + err.Error())
+	}
 	server.Use(gin.CustomRecovery(func(c *gin.Context, err any) {
 		common.SysLog(fmt.Sprintf("panic detected: %v", err))
 		c.JSON(http.StatusInternalServerError, gin.H{

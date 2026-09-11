@@ -63,6 +63,7 @@ import {
   Replicate,
 } from '@lobehub/icons';
 import { IconSub2api } from '../assets/IconSub2api';
+import { IconDots } from '../assets/IconDots';
 import { Logo } from '../assets/Logo';
 
 // 自定义图标注册表：@lobehub/icons 没有的图标放这里。做法是在 src/assets/
@@ -72,6 +73,7 @@ import { Logo } from '../assets/Logo';
 const CUSTOM_LOBE_ICONS = {
   Sub2API: IconSub2api,
   NewAPI: Logo,
+  Dots: IconDots,
 };
 
 import {

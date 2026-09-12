@@ -31,6 +31,7 @@ import { IconAlertTriangle, IconDelete } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
 import ModelPricingEditor from './components/ModelPricingEditor';
 import ModelRatioSettings from './ModelRatioSettings';
+import PriceReferenceSettings from './PriceReferenceSettings';
 import { API, showError, showSuccess } from '../../../helpers';
 
 const { Text } = Typography;
@@ -212,6 +213,11 @@ export default function ModelPricingCombined({ options, refresh }) {
       ) : (
         <ModelRatioSettings options={options} refresh={refresh} />
       )}
+      <PriceReferenceSettings
+        options={options}
+        refresh={refresh}
+        unsetModels={pricingHealth?.unset_pricing || []}
+      />
     </div>
   );
 }

@@ -152,21 +152,30 @@ func UpdateCreateCacheRatioByJSONString(jsonStr string) error {
 	return types.LoadFromJsonStringWithCallback(createCacheRatioMap, jsonStr, InvalidateExposedDataCache)
 }
 
-// GetCacheRatio returns the cache ratio for a model
+// GetCacheRatio returns the cache ratio for a model.
+// 自身未配置时，沿价格跟随链取源模型的缓存倍率。
 func GetCacheRatio(name string) (float64, bool) {
-	ratio, ok := cacheRatioMap.Get(name)
-	if !ok {
-		return 1, false // Default to 1 if not found
+	if ratio, ok := cacheRatioMap.Get(name); ok {
+		return ratio, true
 	}
-	return ratio, true
+	for _, candidate := range priceReferenceSources(name) {
+		if ratio, ok := cacheRatioMap.Get(candidate); ok {
+			return ratio, true
+		}
+	}
+	return 1, false // Default to 1 if not found
 }
 
 func GetCreateCacheRatio(name string) (float64, bool) {
-	ratio, ok := createCacheRatioMap.Get(name)
-	if !ok {
-		return 1.25, false // Default to 1.25 if not found
+	if ratio, ok := createCacheRatioMap.Get(name); ok {
+		return ratio, true
 	}
-	return ratio, true
+	for _, candidate := range priceReferenceSources(name) {
+		if ratio, ok := createCacheRatioMap.Get(candidate); ok {
+			return ratio, true
+		}
+	}
+	return 1.25, false // Default to 1.25 if not found
 }
 
 func GetCacheRatioCopy() map[string]float64 {

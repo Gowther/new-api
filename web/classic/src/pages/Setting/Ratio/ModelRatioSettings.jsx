@@ -48,6 +48,7 @@ export default function ModelRatioSettings(props) {
     ImageRatio: '',
     AudioRatio: '',
     AudioCompletionRatio: '',
+    ModelPriceReference: '',
     ExposeRatioEnabled: false,
   });
   const refForm = useRef();
@@ -315,6 +316,32 @@ export default function ModelRatioSettings(props) {
               ]}
               onChange={(value) =>
                 setInputs({ ...inputs, AudioCompletionRatio: value })
+              }
+            />
+          </Col>
+        </Row>
+        <Row gutter={16}>
+          <Col xs={24} sm={16}>
+            <Form.TextArea
+              label={t('价格跟随绑定')}
+              extraText={t(
+                '将未定价的别名模型绑定到已定价的模型，别名未单独设置的价格项将取自所绑定的模型并自动跟随其变化，包括官方价格同步',
+              )}
+              placeholder={t(
+                '为一个 JSON 文本，键为别名模型，值为跟随的模型，例如：{"my-gpt-4o": "gpt-4o"}',
+              )}
+              field={'ModelPriceReference'}
+              autosize={{ minRows: 3, maxRows: 10 }}
+              trigger='blur'
+              stopValidateWithError
+              rules={[
+                {
+                  validator: (rule, value) => verifyJSON(value),
+                  message: '不是合法的 JSON 字符串',
+                },
+              ]}
+              onChange={(value) =>
+                setInputs({ ...inputs, ModelPriceReference: value })
               }
             />
           </Col>

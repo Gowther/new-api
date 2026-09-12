@@ -356,7 +356,8 @@ func UpdateModelPriceByJSONString(jsonStr string) error {
 	return types.LoadFromJsonStringWithCallback(modelPriceMap, jsonStr, InvalidateExposedDataCache)
 }
 
-// GetModelPrice 返回模型的价格，如果模型不存在则返回-1，false
+// GetModelPrice 返回模型的价格，如果模型不存在则返回-1，false。
+// 自身未配置价格时，沿价格跟随链取源模型的价格。
 func GetModelPrice(name string, printErr bool) (float64, bool) {
 	name = FormatMatchingModelName(name)
 
@@ -365,14 +366,15 @@ func GetModelPrice(name string, printErr bool) (float64, bool) {
 	}
 
 	if strings.HasSuffix(name, CompactModelSuffix) {
-		price, ok := modelPriceMap.Get(CompactWildcardModelKey)
-		if !ok {
-			if printErr {
-				common.SysError("model price not found: " + name)
-			}
-			return -1, false
+		if price, ok := modelPriceMap.Get(CompactWildcardModelKey); ok {
+			return price, true
 		}
-		return price, true
+	}
+
+	for _, candidate := range priceReferenceSources(name) {
+		if price, ok := modelPriceMap.Get(FormatMatchingModelName(candidate)); ok {
+			return price, true
+		}
 	}
 
 	if printErr {
@@ -393,6 +395,8 @@ func handleThinkingBudgetModel(name, prefix, wildcard string) string {
 	return name
 }
 
+// GetModelRatio 返回模型倍率。自身未配置时先看 compact 通配，再沿价格跟随链取源模型倍率，
+// 都没有则按未定价模型兜底（自用模式下按 37.5 计费）。
 func GetModelRatio(name string) (float64, bool, string) {
 	name = FormatMatchingModelName(name)
 
@@ -402,7 +406,11 @@ func GetModelRatio(name string) (float64, bool, string) {
 			if wildcardRatio, ok := modelRatioMap.Get(CompactWildcardModelKey); ok {
 				return wildcardRatio, true, name
 			}
-			//return 0, true, name
+		}
+		for _, candidate := range priceReferenceSources(name) {
+			if ratio, ok := modelRatioMap.Get(FormatMatchingModelName(candidate)); ok {
+				return ratio, true, name
+			}
 		}
 		return 37.5, operation_setting.SelfUseModeEnabled, name
 	}
@@ -433,22 +441,38 @@ func UpdateCompletionRatioByJSONString(jsonStr string) error {
 	return types.LoadFromJsonStringWithCallback(completionRatioMap, jsonStr, InvalidateExposedDataCache)
 }
 
-func GetCompletionRatio(name string) float64 {
+// completionRatioLookup 沿价格跟随链解析有效补全倍率。
+// 链上任意模型有专属配置（带供应商前缀的名称优先查自定义倍率，其次锁定的硬编码规则，再次自定义倍率）即返回，
+// locked 表示结果是否来自锁定的硬编码规则；整条链都无专属配置时，按链尾模型的有效补全倍率兜底。
+func completionRatioLookup(name string) (float64, bool) {
 	name = FormatMatchingModelName(name)
-
-	if strings.Contains(name, "/") {
-		if ratio, ok := completionRatioMap.Get(name); ok {
-			return ratio
+	chain := priceReferenceChain(name)
+	for _, candidate := range chain {
+		candidate = FormatMatchingModelName(candidate)
+		if strings.Contains(candidate, "/") {
+			if ratio, ok := completionRatioMap.Get(candidate); ok {
+				return ratio, false
+			}
+		}
+		hardCodedRatio, contain := getHardcodedCompletionModelRatio(candidate)
+		if contain {
+			return hardCodedRatio, true
+		}
+		if ratio, ok := completionRatioMap.Get(candidate); ok {
+			return ratio, false
 		}
 	}
-	hardCodedRatio, contain := getHardcodedCompletionModelRatio(name)
-	if contain {
-		return hardCodedRatio
+	if tail := chain[len(chain)-1]; tail != name {
+		hardCodedRatio, _ := getHardcodedCompletionModelRatio(FormatMatchingModelName(tail))
+		return hardCodedRatio, false
 	}
-	if ratio, ok := completionRatioMap.Get(name); ok {
-		return ratio
-	}
-	return hardCodedRatio
+	hardCodedRatio, _ := getHardcodedCompletionModelRatio(name)
+	return hardCodedRatio, false
+}
+
+func GetCompletionRatio(name string) float64 {
+	ratio, _ := completionRatioLookup(name)
+	return ratio
 }
 
 type CompletionRatioInfo struct {
@@ -457,35 +481,10 @@ type CompletionRatioInfo struct {
 }
 
 func GetCompletionRatioInfo(name string) CompletionRatioInfo {
-	name = FormatMatchingModelName(name)
-
-	if strings.Contains(name, "/") {
-		if ratio, ok := completionRatioMap.Get(name); ok {
-			return CompletionRatioInfo{
-				Ratio:  ratio,
-				Locked: false,
-			}
-		}
-	}
-
-	hardCodedRatio, locked := getHardcodedCompletionModelRatio(name)
-	if locked {
-		return CompletionRatioInfo{
-			Ratio:  hardCodedRatio,
-			Locked: true,
-		}
-	}
-
-	if ratio, ok := completionRatioMap.Get(name); ok {
-		return CompletionRatioInfo{
-			Ratio:  ratio,
-			Locked: false,
-		}
-	}
-
+	ratio, locked := completionRatioLookup(name)
 	return CompletionRatioInfo{
-		Ratio:  hardCodedRatio,
-		Locked: false,
+		Ratio:  ratio,
+		Locked: locked,
 	}
 }
 
@@ -625,6 +624,11 @@ func GetAudioRatio(name string) float64 {
 	if ratio, ok := audioRatioMap.Get(name); ok {
 		return ratio
 	}
+	for _, candidate := range priceReferenceSources(name) {
+		if ratio, ok := audioRatioMap.Get(FormatMatchingModelName(candidate)); ok {
+			return ratio
+		}
+	}
 	return 1
 }
 
@@ -633,19 +637,38 @@ func GetAudioCompletionRatio(name string) float64 {
 	if ratio, ok := audioCompletionRatioMap.Get(name); ok {
 		return ratio
 	}
+	for _, candidate := range priceReferenceSources(name) {
+		if ratio, ok := audioCompletionRatioMap.Get(FormatMatchingModelName(candidate)); ok {
+			return ratio
+		}
+	}
 	return 1
 }
 
 func ContainsAudioRatio(name string) bool {
 	name = FormatMatchingModelName(name)
-	_, ok := audioRatioMap.Get(name)
-	return ok
+	if _, ok := audioRatioMap.Get(name); ok {
+		return true
+	}
+	for _, candidate := range priceReferenceSources(name) {
+		if _, ok := audioRatioMap.Get(FormatMatchingModelName(candidate)); ok {
+			return true
+		}
+	}
+	return false
 }
 
 func ContainsAudioCompletionRatio(name string) bool {
 	name = FormatMatchingModelName(name)
-	_, ok := audioCompletionRatioMap.Get(name)
-	return ok
+	if _, ok := audioCompletionRatioMap.Get(name); ok {
+		return true
+	}
+	for _, candidate := range priceReferenceSources(name) {
+		if _, ok := audioCompletionRatioMap.Get(FormatMatchingModelName(candidate)); ok {
+			return true
+		}
+	}
+	return false
 }
 
 func ModelRatio2JSONString() string {
@@ -668,11 +691,15 @@ func UpdateImageRatioByJSONString(jsonStr string) error {
 }
 
 func GetImageRatio(name string) (float64, bool) {
-	ratio, ok := imageRatioMap.Get(name)
-	if !ok {
-		return 1, false // Default to 1 if not found
+	if ratio, ok := imageRatioMap.Get(name); ok {
+		return ratio, true
 	}
-	return ratio, true
+	for _, candidate := range priceReferenceSources(name) {
+		if ratio, ok := imageRatioMap.Get(candidate); ok {
+			return ratio, true
+		}
+	}
+	return 1, false // Default to 1 if not found
 }
 
 func AudioRatio2JSONString() string {

@@ -40,6 +40,7 @@ import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
 import { GroupRatioForm } from './group-ratio-form'
 import { ModelRatioForm } from './model-ratio-form'
+import { PriceReferenceEditor } from './price-reference-editor'
 import { ToolPriceSettings } from './tool-price-settings'
 import { UpstreamRatioSync } from './upstream-ratio-sync'
 import {
@@ -147,6 +148,7 @@ type RatioSettingsCardProps = {
   modelDefaults: ModelFormValues
   groupDefaults: GroupFormValues
   toolPricesDefault: string
+  priceReferenceDefault?: string
   titleKey?: string
   visibleTabs?: RatioTabId[]
 }
@@ -155,6 +157,7 @@ export function RatioSettingsCard({
   modelDefaults,
   groupDefaults,
   toolPricesDefault,
+  priceReferenceDefault,
   titleKey = 'Pricing Ratios',
   visibleTabs = ['models', 'groups', 'tool-prices', 'upstream-sync'],
 }: RatioSettingsCardProps) {
@@ -541,6 +544,12 @@ export function RatioSettingsCard({
             onReset={handleResetRatios}
             isSaving={updateOption.isPending}
             isResetting={resetMutation.isPending}
+          />
+          <PriceReferenceEditor
+            defaultValue={priceReferenceDefault ?? '{}'}
+            modelPrice={modelDefaults.ModelPrice}
+            modelRatio={modelDefaults.ModelRatio}
+            unsetModels={pricingHealthQuery.data?.data?.unset_pricing ?? []}
           />
         </div>
       )

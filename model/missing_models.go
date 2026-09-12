@@ -188,6 +188,14 @@ func GetEnabledModelsWithoutPricingConfig() ([]string, error) {
 	billingMode := billing_setting.GetBillingModeCopy()
 	billingExpr := billing_setting.GetBillingExprCopy()
 
+	hasExplicitPricing := func(name string) bool {
+		if _, ok := modelPrice[name]; ok {
+			return true
+		}
+		_, ok := modelRatio[name]
+		return ok
+	}
+
 	unset := make([]string, 0)
 	for _, modelName := range modelNames {
 		if _, ok := modelPrice[modelName]; ok {
@@ -197,6 +205,10 @@ func GetEnabledModelsWithoutPricingConfig() ([]string, error) {
 			continue
 		}
 		if billingMode[modelName] == billing_setting.BillingModeTieredExpr && strings.TrimSpace(billingExpr[modelName]) != "" {
+			continue
+		}
+		// 价格跟随链上存在已定价源模型的，按已定价处理
+		if ratio_setting.HasPricedReference(modelName, hasExplicitPricing) {
 			continue
 		}
 		unset = append(unset, modelName)

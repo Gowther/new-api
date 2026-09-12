@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -69,6 +70,42 @@ func TestUnsetPricingUsesEnabledChannelModels(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, unsetModels, activeModel)
 	assert.NotContains(t, unsetModels, orphanModel)
+}
+
+func TestUnsetPricingExcludesPricedReferenceAliases(t *testing.T) {
+	db := setupModelPricingHealthTestDB(t)
+	const (
+		pricedModel   = "pricing-health-priced-source"
+		boundAlias    = "pricing-health-bound-alias"
+		danglingAlias = "pricing-health-dangling-alias"
+		unboundAlias  = "pricing-health-unbound-alias"
+	)
+
+	prevRatioJSON, err := common.Marshal(ratio_setting.GetModelRatioCopy())
+	require.NoError(t, err)
+	prevReference := ratio_setting.ModelPriceReference2JSONString()
+	t.Cleanup(func() {
+		require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(string(prevRatioJSON)))
+		require.NoError(t, ratio_setting.UpdateModelPriceReferenceByJSONString(prevReference))
+	})
+
+	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{"`+pricedModel+`": 1.25}`))
+	require.NoError(t, ratio_setting.UpdateModelPriceReferenceByJSONString(`{"`+boundAlias+`": "`+pricedModel+`", "`+danglingAlias+`": "`+unboundAlias+`"}`))
+
+	require.NoError(t, db.Create(&Channel{
+		Name:   "pricing health reference channel",
+		Key:    "test-key",
+		Status: common.ChannelStatusEnabled,
+		Models: strings.Join([]string{pricedModel, boundAlias, danglingAlias, unboundAlias}, ","),
+		Group:  "default",
+	}).Error)
+
+	unsetModels, err := GetEnabledModelsWithoutPricingConfig()
+	require.NoError(t, err)
+	assert.NotContains(t, unsetModels, pricedModel)
+	assert.NotContains(t, unsetModels, boundAlias, "绑定了已定价源模型的别名应视为已定价")
+	assert.Contains(t, unsetModels, unboundAlias)
+	assert.Contains(t, unsetModels, danglingAlias, "悬空绑定（源模型未定价）仍应出现在未定价列表中")
 }
 
 func TestDeleteDisabledChannelDeletesAbilities(t *testing.T) {

@@ -226,7 +226,35 @@ const buildModelState = (name, sourceMaps) => {
 
 export const isBasePricingUnset = (model) =>
   model.billingMode !== 'tiered_expr' &&
-  !hasValue(model.fixedPrice) && !hasValue(model.inputPrice);
+  !hasValue(model.fixedPrice) &&
+  !hasValue(model.inputPrice);
+
+const MAX_REFERENCE_HOPS = 3;
+
+// 判断模型是否绑定了价格跟随、且链上存在已定价的源模型（固定价格 / 倍率 / 计费表达式）。
+// 与后端 GetEnabledModelsWithoutPricingConfig 的判定保持一致，防环并限制跳数。
+export const hasPricedReferenceBinding = (name, sourceMaps) => {
+  const bindings = sourceMaps?.ModelPriceReference;
+  if (!bindings || typeof bindings !== 'object') return false;
+  const visited = new Set([name]);
+  let current = name;
+  for (let i = 0; i < MAX_REFERENCE_HOPS; i++) {
+    let next = bindings[current];
+    if (typeof next !== 'string' || next.trim() === '') return false;
+    next = next.trim();
+    if (visited.has(next)) return false;
+    visited.add(next);
+    if (
+      hasValue(sourceMaps.ModelPrice[next]) ||
+      hasValue(sourceMaps.ModelRatio[next]) ||
+      hasValue(sourceMaps.ModelBillingExpr?.[next])
+    ) {
+      return true;
+    }
+    current = next;
+  }
+  return false;
+};
 
 export const getModelWarnings = (model, t) => {
   if (!model) {
@@ -292,8 +320,8 @@ export const getModelWarnings = (model, t) => {
 export const buildSummaryText = (model, t) => {
   const requestRuleSuffix =
     model.billingMode === 'tiered_expr' && model.requestRuleExpr
-    ? `，${t('请求规则')}`
-    : '';
+      ? `，${t('请求规则')}`
+      : '';
   if (model.billingMode === 'tiered_expr') {
     const expr = model.billingExpr;
     if (!expr) return `${t('表达式计费')}${requestRuleSuffix}`;
@@ -649,8 +677,13 @@ export function useModelPricingEditorState({
       ImageRatio: parseOptionJSON(options.ImageRatio),
       AudioRatio: parseOptionJSON(options.AudioRatio),
       AudioCompletionRatio: parseOptionJSON(options.AudioCompletionRatio),
-      ModelBillingMode: parseOptionJSON(options['billing_setting.billing_mode']),
-      ModelBillingExpr: parseOptionJSON(options['billing_setting.billing_expr']),
+      ModelBillingMode: parseOptionJSON(
+        options['billing_setting.billing_mode'],
+      ),
+      ModelBillingExpr: parseOptionJSON(
+        options['billing_setting.billing_expr'],
+      ),
+      ModelPriceReference: parseOptionJSON(options.ModelPriceReference),
     };
 
     const names = new Set([
@@ -677,7 +710,11 @@ export function useModelPricingEditorState({
     setInitialVisibleModelNames(
       filterMode === 'unset'
         ? nextModels
-            .filter((model) => isBasePricingUnset(model))
+            .filter(
+              (model) =>
+                isBasePricingUnset(model) &&
+                !hasPricedReferenceBinding(model.name, sourceMaps),
+            )
             .map((model) => model.name)
         : nextModels.map((model) => model.name),
     );
@@ -693,7 +730,11 @@ export function useModelPricingEditorState({
       }
       const nextVisibleModels =
         filterMode === 'unset'
-          ? nextModels.filter((model) => isBasePricingUnset(model))
+          ? nextModels.filter(
+              (model) =>
+                isBasePricingUnset(model) &&
+                !hasPricedReferenceBinding(model.name, sourceMaps),
+            )
           : nextModels;
       return nextVisibleModels[0]?.name || '';
     });
@@ -1068,8 +1109,10 @@ export function useModelPricingEditorState({
             model.requestRuleExpr,
           );
           if (finalBillingExpr) {
-            tieredOutput['billing_setting.billing_mode'][model.name] = 'tiered_expr';
-            tieredOutput['billing_setting.billing_expr'][model.name] = finalBillingExpr;
+            tieredOutput['billing_setting.billing_mode'][model.name] =
+              'tiered_expr';
+            tieredOutput['billing_setting.billing_expr'][model.name] =
+              finalBillingExpr;
           }
         }
 

@@ -29,7 +29,7 @@ func HasPricedReference(name string, hasPricing func(model string) bool) bool {
 	if hasPricing == nil {
 		return false
 	}
-	for _, source := range priceReferenceSources(name) {
+	for _, source := range PriceReferenceSources(name) {
 		if hasPricing(source) {
 			return true
 		}
@@ -62,8 +62,9 @@ func priceReferenceChain(name string) []string {
 	return chain
 }
 
-// priceReferenceSources 返回 name 需要跟随的源模型（不含 name 自身）。
-func priceReferenceSources(name string) []string {
+// PriceReferenceSources 返回 name 需要跟随的源模型（不含 name 自身），
+// 供跨包消费方（如 billing_setting 的计费表达式解析）沿链取值。
+func PriceReferenceSources(name string) []string {
 	chain := priceReferenceChain(name)
 	if len(chain) <= 1 {
 		return nil

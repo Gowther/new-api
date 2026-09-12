@@ -192,8 +192,13 @@ func GetEnabledModelsWithoutPricingConfig() ([]string, error) {
 		if _, ok := modelPrice[name]; ok {
 			return true
 		}
-		_, ok := modelRatio[name]
-		return ok
+		if _, ok := modelRatio[name]; ok {
+			return true
+		}
+		if expr, ok := billingExpr[name]; ok && strings.TrimSpace(expr) != "" {
+			return true
+		}
+		return false
 	}
 
 	unset := make([]string, 0)

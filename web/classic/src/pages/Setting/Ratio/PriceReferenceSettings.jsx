@@ -65,6 +65,40 @@ function parseModelNames(value) {
   }
 }
 
+// 阶梯计费模型只配置在 billing_mode/billing_expr 里，也要作为跟随目标
+function parseTieredModelNames(billingMode, billingExpr) {
+  const names = new Set();
+  try {
+    const modes = JSON.parse(billingMode || '{}');
+    if (modes && typeof modes === 'object' && !Array.isArray(modes)) {
+      for (const [name, mode] of Object.entries(modes)) {
+        if (mode === 'tiered_expr' && name.trim() !== '') {
+          names.add(name);
+        }
+      }
+    }
+  } catch (e) {
+    // ignore invalid JSON
+  }
+  try {
+    const exprs = JSON.parse(billingExpr || '{}');
+    if (exprs && typeof exprs === 'object' && !Array.isArray(exprs)) {
+      for (const [name, expr] of Object.entries(exprs)) {
+        if (
+          typeof expr === 'string' &&
+          expr.trim() !== '' &&
+          name.trim() !== ''
+        ) {
+          names.add(name);
+        }
+      }
+    }
+  } catch (e) {
+    // ignore invalid JSON
+  }
+  return [...names];
+}
+
 export default function PriceReferenceSettings({
   options,
   refresh,
@@ -97,6 +131,10 @@ export default function PriceReferenceSettings({
     const names = new Set([
       ...parseModelNames(options?.ModelPrice),
       ...parseModelNames(options?.ModelRatio),
+      ...parseTieredModelNames(
+        options?.['billing_setting.billing_mode'],
+        options?.['billing_setting.billing_expr'],
+      ),
     ]);
     return [...names]
       .sort((a, b) => a.localeCompare(b))

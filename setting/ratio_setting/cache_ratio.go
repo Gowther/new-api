@@ -158,7 +158,7 @@ func GetCacheRatio(name string) (float64, bool) {
 	if ratio, ok := cacheRatioMap.Get(name); ok {
 		return ratio, true
 	}
-	for _, candidate := range priceReferenceSources(name) {
+	for _, candidate := range PriceReferenceSources(name) {
 		if ratio, ok := cacheRatioMap.Get(candidate); ok {
 			return ratio, true
 		}
@@ -170,7 +170,7 @@ func GetCreateCacheRatio(name string) (float64, bool) {
 	if ratio, ok := createCacheRatioMap.Get(name); ok {
 		return ratio, true
 	}
-	for _, candidate := range priceReferenceSources(name) {
+	for _, candidate := range PriceReferenceSources(name) {
 		if ratio, ok := createCacheRatioMap.Get(candidate); ok {
 			return ratio, true
 		}

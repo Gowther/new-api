@@ -549,6 +549,8 @@ export function RatioSettingsCard({
             defaultValue={priceReferenceDefault ?? '{}'}
             modelPrice={modelDefaults.ModelPrice}
             modelRatio={modelDefaults.ModelRatio}
+            billingMode={modelDefaults.BillingMode}
+            billingExpr={modelDefaults.BillingExpr}
             unsetModels={pricingHealthQuery.data?.data?.unset_pricing ?? []}
           />
         </div>

@@ -47,6 +47,8 @@ type PriceReferenceEditorProps = {
   defaultValue: string
   modelPrice: string
   modelRatio: string
+  billingMode: string
+  billingExpr: string
   unsetModels: string[]
 }
 
@@ -82,6 +84,8 @@ export function PriceReferenceEditor({
   defaultValue,
   modelPrice,
   modelRatio,
+  billingMode,
+  billingExpr,
   unsetModels,
 }: PriceReferenceEditorProps) {
   const { t } = useTranslation()
@@ -118,10 +122,33 @@ export function PriceReferenceEditor({
         }
       }
     }
+    // 阶梯计费模型只配置在 billing_mode/billing_expr 里，也要作为跟随目标
+    const modeRecord = safeJsonParse<Record<string, string>>(billingMode, {
+      fallback: {},
+      silent: true,
+    })
+    for (const [name, mode] of Object.entries(modeRecord)) {
+      if (mode === 'tiered_expr' && name.trim() !== '') {
+        names.add(name)
+      }
+    }
+    const exprRecord = safeJsonParse<Record<string, string>>(billingExpr, {
+      fallback: {},
+      silent: true,
+    })
+    for (const [name, expr] of Object.entries(exprRecord)) {
+      if (
+        typeof expr === 'string' &&
+        expr.trim() !== '' &&
+        name.trim() !== ''
+      ) {
+        names.add(name)
+      }
+    }
     return [...names]
       .sort((a, b) => a.localeCompare(b))
       .map((name) => ({ value: name, label: name }))
-  }, [modelPrice, modelRatio])
+  }, [modelPrice, modelRatio, billingMode, billingExpr])
 
   const aliasOptions = useMemo(() => {
     const names = new Set<string>()

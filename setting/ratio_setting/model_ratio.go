@@ -371,7 +371,7 @@ func GetModelPrice(name string, printErr bool) (float64, bool) {
 		}
 	}
 
-	for _, candidate := range priceReferenceSources(name) {
+	for _, candidate := range PriceReferenceSources(name) {
 		if price, ok := modelPriceMap.Get(FormatMatchingModelName(candidate)); ok {
 			return price, true
 		}
@@ -407,7 +407,7 @@ func GetModelRatio(name string) (float64, bool, string) {
 				return wildcardRatio, true, name
 			}
 		}
-		for _, candidate := range priceReferenceSources(name) {
+		for _, candidate := range PriceReferenceSources(name) {
 			if ratio, ok := modelRatioMap.Get(FormatMatchingModelName(candidate)); ok {
 				return ratio, true, name
 			}
@@ -624,7 +624,7 @@ func GetAudioRatio(name string) float64 {
 	if ratio, ok := audioRatioMap.Get(name); ok {
 		return ratio
 	}
-	for _, candidate := range priceReferenceSources(name) {
+	for _, candidate := range PriceReferenceSources(name) {
 		if ratio, ok := audioRatioMap.Get(FormatMatchingModelName(candidate)); ok {
 			return ratio
 		}
@@ -637,7 +637,7 @@ func GetAudioCompletionRatio(name string) float64 {
 	if ratio, ok := audioCompletionRatioMap.Get(name); ok {
 		return ratio
 	}
-	for _, candidate := range priceReferenceSources(name) {
+	for _, candidate := range PriceReferenceSources(name) {
 		if ratio, ok := audioCompletionRatioMap.Get(FormatMatchingModelName(candidate)); ok {
 			return ratio
 		}
@@ -650,7 +650,7 @@ func ContainsAudioRatio(name string) bool {
 	if _, ok := audioRatioMap.Get(name); ok {
 		return true
 	}
-	for _, candidate := range priceReferenceSources(name) {
+	for _, candidate := range PriceReferenceSources(name) {
 		if _, ok := audioRatioMap.Get(FormatMatchingModelName(candidate)); ok {
 			return true
 		}
@@ -663,7 +663,7 @@ func ContainsAudioCompletionRatio(name string) bool {
 	if _, ok := audioCompletionRatioMap.Get(name); ok {
 		return true
 	}
-	for _, candidate := range priceReferenceSources(name) {
+	for _, candidate := range PriceReferenceSources(name) {
 		if _, ok := audioCompletionRatioMap.Get(FormatMatchingModelName(candidate)); ok {
 			return true
 		}
@@ -694,7 +694,7 @@ func GetImageRatio(name string) (float64, bool) {
 	if ratio, ok := imageRatioMap.Get(name); ok {
 		return ratio, true
 	}
-	for _, candidate := range priceReferenceSources(name) {
+	for _, candidate := range PriceReferenceSources(name) {
 		if ratio, ok := imageRatioMap.Get(candidate); ok {
 			return ratio, true
 		}

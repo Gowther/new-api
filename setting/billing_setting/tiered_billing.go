@@ -5,6 +5,7 @@ import (
 
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/setting/config"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/samber/lo"
 )
 
@@ -35,16 +36,30 @@ func init() {
 // Read accessors (hot path, must be fast)
 // ---------------------------------------------------------------------------
 
+// GetBillingMode 返回模型的计费模式。自身未配置时沿价格跟随链取源模型的配置，
+// 因此绑定到阶梯计费模型的别名会一并跟随其计费表达式（表达式自包含，含版本前缀）。
 func GetBillingMode(model string) string {
 	if mode, ok := billingSetting.BillingMode[model]; ok {
 		return mode
+	}
+	for _, candidate := range ratio_setting.PriceReferenceSources(model) {
+		if mode, ok := billingSetting.BillingMode[candidate]; ok {
+			return mode
+		}
 	}
 	return BillingModeRatio
 }
 
 func GetBillingExpr(model string) (string, bool) {
-	expr, ok := billingSetting.BillingExpr[model]
-	return expr, ok
+	if expr, ok := billingSetting.BillingExpr[model]; ok {
+		return expr, true
+	}
+	for _, candidate := range ratio_setting.PriceReferenceSources(model) {
+		if expr, ok := billingSetting.BillingExpr[candidate]; ok {
+			return expr, true
+		}
+	}
+	return "", false
 }
 
 func GetBillingModeCopy() map[string]string {

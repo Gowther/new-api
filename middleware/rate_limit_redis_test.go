@@ -51,8 +51,14 @@ func TestWindowRedisRateLimitDeniesBeyondMaxWithinWindow(t *testing.T) {
 	key := "rateLimit:UT:127.0.0.1"
 	require.Equal(t, http.StatusOK, runWindowRateLimit(key, 2, 60).Code)
 	require.Equal(t, http.StatusOK, runWindowRateLimit(key, 2, 60).Code)
-	// Third request inside the same window is rejected atomically.
-	require.Equal(t, http.StatusTooManyRequests, runWindowRateLimit(key, 2, 60).Code)
+	// Third request inside the same window is rejected atomically,
+	// with a Retry-After hint of the remaining window seconds.
+	limited := runWindowRateLimit(key, 2, 60)
+	require.Equal(t, http.StatusTooManyRequests, limited.Code)
+	retryAfter, err := strconv.Atoi(limited.Header().Get("Retry-After"))
+	require.NoError(t, err)
+	assert.Greater(t, retryAfter, 0)
+	assert.LessOrEqual(t, retryAfter, 60)
 	require.Equal(t, http.StatusTooManyRequests, runWindowRateLimit(key, 2, 60).Code)
 }
 

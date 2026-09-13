@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 )
@@ -23,7 +25,7 @@ var defNext = func(c *gin.Context) {
 // 替代原先 LLen/LIndex 检查与 LPush/LTrim 记录跨多次往返的非原子实现，
 // 消除并发突刺超限，以及 LLen 之后 key 过期导致 LIndex 读空、解析失败返回 500 的问题。
 // 列表元素为 Unix 秒时间戳；窗口数据缺失或异常（如部署前的旧格式数据）按窗口已过期处理（放行）。
-// 返回值：1 放行（已记录），0 拒绝。
+// 返回值：-1 放行（已记录）；拒绝时返回窗口剩余秒数，供 429 响应携带 Retry-After。
 var windowRateLimitScript = redis.NewScript(`
 local key = KEYS[1]
 local maxRequestNum = tonumber(ARGV[1])
@@ -35,7 +37,7 @@ local function record()
     redis.call('LPUSH', key, now)
     redis.call('LTRIM', key, 0, maxRequestNum - 1)
     redis.call('EXPIRE', key, expiration)
-    return 1
+    return -1
 end
 
 if redis.call('LLEN', key) < maxRequestNum then
@@ -48,7 +50,7 @@ if not oldest then
 end
 if now - oldest < duration then
     redis.call('EXPIRE', key, expiration)
-    return 0
+    return duration - (now - oldest)
 end
 return record()
 `)
@@ -56,7 +58,7 @@ return record()
 // windowRedisRateLimit 以固定窗口语义（duration 秒内最多 maxRequestNum 次）对 key 限流，
 // 检查与记录在同一 Lua 脚本中原子完成。
 func windowRedisRateLimit(c *gin.Context, maxRequestNum int, duration int64, key string) {
-	allowed, err := windowRateLimitScript.Run(
+	retryAfterSeconds, err := windowRateLimitScript.Run(
 		context.Background(),
 		common.RDB,
 		[]string{key},
@@ -64,18 +66,29 @@ func windowRedisRateLimit(c *gin.Context, maxRequestNum int, duration int64, key
 		duration,
 		time.Now().Unix(),
 		int64(common.RateLimitKeyExpirationDuration/time.Second),
-	).Int()
+	).Int64()
 	if err != nil {
-		common.SysLog("redis rate limit error: " + err.Error())
+		logger.LogError(c.Request.Context(), fmt.Sprintf("rate limit check failed (key=%s): %v", key, err))
 		c.Status(http.StatusInternalServerError)
 		c.Abort()
 		return
 	}
-	if allowed != 1 {
-		c.Status(http.StatusTooManyRequests)
-		c.Abort()
+	if retryAfterSeconds >= 0 {
+		writeRateLimited(c, retryAfterSeconds)
 		return
 	}
+}
+
+// writeRateLimited rejects the request with 429 and a Retry-After hint so
+// clients can back off instead of treating the rejection as a fatal error.
+// The in-memory limiter cannot report the remaining window, so callers
+// without a TTL pass the full window duration as a conservative upper bound.
+func writeRateLimited(c *gin.Context, retryAfterSeconds int64) {
+	if retryAfterSeconds > 0 {
+		c.Header("Retry-After", strconv.FormatInt(retryAfterSeconds, 10))
+	}
+	c.Status(http.StatusTooManyRequests)
+	c.Abort()
 }
 
 func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark string) {
@@ -86,8 +99,7 @@ func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark st
 func memoryRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark string) {
 	key := mark + c.ClientIP()
 	if !inMemoryRateLimiter.Request(key, maxRequestNum, duration) {
-		c.Status(http.StatusTooManyRequests)
-		c.Abort()
+		writeRateLimited(c, duration)
 		return
 	}
 }
@@ -176,8 +188,7 @@ func userRateLimitFactory(maxRequestNum int, duration int64, mark string) func(c
 		}
 		key := fmt.Sprintf("%s:user:%d", mark, userId)
 		if !inMemoryRateLimiter.Request(key, maxRequestNum, duration) {
-			c.Status(http.StatusTooManyRequests)
-			c.Abort()
+			writeRateLimited(c, duration)
 			return
 		}
 	}

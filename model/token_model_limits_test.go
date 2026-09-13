@@ -85,7 +85,7 @@ func TestCleanupStaleTokenModelLimitsKeepsServedModels(t *testing.T) {
 	createEnabledAbilityModel(t, "gpt-4o")
 	token := createTokenWithLimits(t, 1, "mixed", true, "gpt-4o,dead-model")
 
-	changed, err := CleanupStaleTokenModelLimits(1, []int{token.Id})
+	changed, err := CleanupStaleTokenModelLimits(1, []int{token.Id}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, changed)
 
@@ -99,7 +99,7 @@ func TestCleanupStaleTokenModelLimitsDisablesEmptyLimits(t *testing.T) {
 	setupTokenModelLimitsTestDB(t)
 	token := createTokenWithLimits(t, 1, "all-stale", true, "dead-model,another-dead")
 
-	changed, err := CleanupStaleTokenModelLimits(1, []int{token.Id})
+	changed, err := CleanupStaleTokenModelLimits(1, []int{token.Id}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, changed)
 
@@ -109,6 +109,27 @@ func TestCleanupStaleTokenModelLimitsDisablesEmptyLimits(t *testing.T) {
 	assert.Empty(t, cleanToken.ModelLimits)
 }
 
+func TestCleanupStaleTokenModelLimitsRemovesOnlySelectedModels(t *testing.T) {
+	setupTokenModelLimitsTestDB(t)
+	createEnabledAbilityModel(t, "gpt-4o")
+	first := createTokenWithLimits(t, 1, "first", true, "gpt-4o,dead-a,dead-b")
+	second := createTokenWithLimits(t, 1, "second", true, "dead-b")
+
+	changed, err := CleanupStaleTokenModelLimits(1, []int{first.Id, second.Id}, []string{"dead-b"})
+	require.NoError(t, err)
+	assert.Equal(t, 2, changed)
+
+	firstAfter, err := GetTokenByIds(first.Id, 1)
+	require.NoError(t, err)
+	assert.True(t, firstAfter.ModelLimitsEnabled)
+	assert.Equal(t, "gpt-4o,dead-a", firstAfter.ModelLimits)
+
+	secondAfter, err := GetTokenByIds(second.Id, 1)
+	require.NoError(t, err)
+	assert.False(t, secondAfter.ModelLimitsEnabled)
+	assert.Empty(t, secondAfter.ModelLimits)
+}
+
 func TestCleanupStaleTokenModelLimitsIgnoresOtherUsersAndCleanTokens(t *testing.T) {
 	setupTokenModelLimitsTestDB(t)
 	createEnabledAbilityModel(t, "gpt-4o")
@@ -116,7 +137,7 @@ func TestCleanupStaleTokenModelLimitsIgnoresOtherUsersAndCleanTokens(t *testing.
 	others := createTokenWithLimits(t, 2, "theirs", true, "dead-model")
 	staleMine := createTokenWithLimits(t, 1, "stale", true, "dead-model")
 
-	changed, err := CleanupStaleTokenModelLimits(1, []int{mine.Id, others.Id, staleMine.Id})
+	changed, err := CleanupStaleTokenModelLimits(1, []int{mine.Id, others.Id, staleMine.Id}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, changed)
 
@@ -127,4 +148,19 @@ func TestCleanupStaleTokenModelLimitsIgnoresOtherUsersAndCleanTokens(t *testing.
 	othersAfter, err := GetTokenById(others.Id)
 	require.NoError(t, err)
 	assert.Equal(t, "dead-model", othersAfter.ModelLimits)
+}
+
+func TestCleanupStaleTokenModelLimitsSelectionIsIntersectionWithStale(t *testing.T) {
+	setupTokenModelLimitsTestDB(t)
+	createEnabledAbilityModel(t, "gpt-4o")
+	token := createTokenWithLimits(t, 1, "mixed", true, "gpt-4o,dead-a,dead-b")
+
+	changed, err := CleanupStaleTokenModelLimits(1, []int{token.Id}, []string{"gpt-4o", "dead-a"})
+	require.NoError(t, err)
+	assert.Equal(t, 1, changed)
+
+	cleanToken, err := GetTokenByIds(token.Id, 1)
+	require.NoError(t, err)
+	assert.True(t, cleanToken.ModelLimitsEnabled)
+	assert.Equal(t, "gpt-4o,dead-b", cleanToken.ModelLimits)
 }

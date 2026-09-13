@@ -20,6 +20,7 @@ import { useQuery } from '@tanstack/react-query'
 import { getRouteApi, Link } from '@tanstack/react-router'
 import type { Table as TanstackTable } from '@tanstack/react-table'
 import { Database } from 'lucide-react'
+import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -57,7 +58,13 @@ import { useApiKeysColumns } from './api-keys-columns'
 import { useApiKeys } from './api-keys-provider'
 import { DataTableBulkActions } from './data-table-bulk-actions'
 import { DataTableRowActions } from './data-table-row-actions'
-import { StaleModelLimitsBanner } from './stale-model-limits-banner'
+import {
+  StaleModelLimitsBadge,
+  StaleModelLimitsDialog,
+  StaleModelLimitsEntry,
+  useStaleByTokenId,
+  useStaleTokenModelLimitsReport,
+} from './stale-model-limits'
 
 const route = getRouteApi('/_authenticated/keys/')
 const API_KEYS_COLUMN_VISIBILITY_STORAGE_KEY = 'api-keys:column-visibility'
@@ -93,9 +100,13 @@ function ApiKeysMobileSkeleton() {
 function ApiKeysMobileList({
   table,
   isLoading,
+  staleByTokenId,
+  onOpenStaleDetails,
 }: {
   table: TanstackTable<ApiKey>
   isLoading: boolean
+  staleByTokenId: Map<number, string[]>
+  onOpenStaleDetails: (tokenId: number) => void
 }) {
   const { t } = useTranslation()
   const rows = table.getRowModel().rows
@@ -128,6 +139,7 @@ function ApiKeysMobileList({
         const apiKey = row.original
         const statusConfig = API_KEY_STATUSES[apiKey.status]
         const total = apiKey.used_quota + apiKey.remain_quota
+        const staleModels = staleByTokenId.get(apiKey.id)
 
         return (
           <div
@@ -150,6 +162,14 @@ function ApiKeysMobileList({
                 <div className='text-muted-foreground text-[11px]'>
                   {t('API Key')}
                 </div>
+                {staleModels?.length ? (
+                  <div className='mt-1'>
+                    <StaleModelLimitsBadge
+                      staleModels={staleModels}
+                      onOpen={() => onOpenStaleDetails(apiKey.id)}
+                    />
+                  </div>
+                ) : null}
               </div>
               {statusConfig && (
                 <StatusBadge
@@ -191,7 +211,19 @@ function ApiKeysMobileList({
 export function ApiKeysTable() {
   const { t } = useTranslation()
   const { refreshTrigger } = useApiKeys()
-  const columns = useApiKeysColumns()
+  const { data: staleReport } = useStaleTokenModelLimitsReport()
+  const staleByTokenId = useStaleByTokenId(staleReport)
+  const [staleDialogOpen, setStaleDialogOpen] = useState(false)
+  const [staleFocusTokenId, setStaleFocusTokenId] = useState<number | null>(
+    null
+  )
+
+  const openStaleDialog = useCallback((tokenId?: number) => {
+    setStaleFocusTokenId(tokenId ?? null)
+    setStaleDialogOpen(true)
+  }, [])
+
+  const columns = useApiKeysColumns(staleByTokenId, openStaleDialog)
 
   const {
     globalFilter,
@@ -288,7 +320,12 @@ export function ApiKeysTable() {
 
   return (
     <>
-      <StaleModelLimitsBanner />
+      <StaleModelLimitsDialog
+        open={staleDialogOpen}
+        onOpenChange={setStaleDialogOpen}
+        report={staleReport ?? null}
+        focusTokenId={staleFocusTokenId}
+      />
       <DataTablePage
       table={table}
       columns={columns}
@@ -301,6 +338,9 @@ export function ApiKeysTable() {
       skeletonKeyPrefix='api-keys-skeleton'
       applyHeaderSize
       toolbarProps={{
+        preActions: (
+          <StaleModelLimitsEntry report={staleReport} onOpen={openStaleDialog} />
+        ),
         searchPlaceholder: t('Filter by name...'),
         additionalSearch: (
           <Input
@@ -320,7 +360,14 @@ export function ApiKeysTable() {
           },
         ],
       }}
-      mobile={<ApiKeysMobileList table={table} isLoading={isLoading} />}
+      mobile={
+        <ApiKeysMobileList
+          table={table}
+          isLoading={isLoading}
+          staleByTokenId={staleByTokenId}
+          onOpenStaleDetails={openStaleDialog}
+        />
+      }
       getRowClassName={(row) =>
         isDisabledApiKeyRow(row.original) ? DISABLED_ROW_DESKTOP : undefined
       }

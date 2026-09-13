@@ -68,8 +68,11 @@ func GetUserStaleTokenModelLimits(userId int) (*StaleTokenModelLimitsReport, err
 // CleanupStaleTokenModelLimits strips stale entries from the given tokens of a
 // user. Staleness is recomputed at cleanup time, so only currently unserved
 // models are removed; a token whose limits become empty falls back to no model
-// restriction.
-func CleanupStaleTokenModelLimits(userId int, tokenIds []int) (int, error) {
+// restriction. When onlyModels is non-empty, removal is limited to each
+// token's stale models that also appear in that list, so "clean some tokens
+// only" and "clean selected models per token" are both expressed with one
+// flat list; stale models left out of the list are kept.
+func CleanupStaleTokenModelLimits(userId int, tokenIds []int, onlyModels []string) (int, error) {
 	if len(tokenIds) == 0 {
 		return 0, nil
 	}
@@ -87,6 +90,14 @@ func CleanupStaleTokenModelLimits(userId int, tokenIds []int) (int, error) {
 		staleByToken[item.TokenId] = staleSet
 	}
 
+	selection := make(map[string]struct{}, len(onlyModels))
+	for _, modelName := range onlyModels {
+		if modelName == "" {
+			continue
+		}
+		selection[modelName] = struct{}{}
+	}
+
 	changed := 0
 	for _, tokenId := range tokenIds {
 		staleSet, ok := staleByToken[tokenId]
@@ -97,12 +108,22 @@ func CleanupStaleTokenModelLimits(userId int, tokenIds []int) (int, error) {
 		if err != nil {
 			continue
 		}
+		dropModels := make(map[string]struct{}, len(staleSet))
+		if len(selection) > 0 {
+			for modelName := range selection {
+				if _, isStale := staleSet[modelName]; isStale {
+					dropModels[modelName] = struct{}{}
+				}
+			}
+		} else {
+			dropModels = staleSet
+		}
 		keptModels := make([]string, 0)
 		for _, modelName := range token.GetModelLimits() {
 			if strings.TrimSpace(modelName) == "" {
 				continue
 			}
-			if _, isStale := staleSet[modelName]; isStale {
+			if _, remove := dropModels[modelName]; remove {
 				continue
 			}
 			keptModels = append(keptModels, modelName)

@@ -47,6 +47,7 @@ import {
   IconEyeOpened,
   IconEyeClosed,
 } from '@douyinfe/semi-icons';
+import { StaleModelLimitsTag } from './StaleModelLimits';
 
 // progress color helper
 const getProgressColor = (pct) => {
@@ -462,19 +463,33 @@ export const getTokensColumns = ({
   setShowEdit,
   refresh,
   groupRatios = {},
+  staleByTokenId,
+  openStaleDetails,
 }) => {
   return [
     {
       title: t('名称'),
       dataIndex: 'name',
-      render: (text) => (
-        <Link
-          to={`/console/log?token_name=${encodeURIComponent(text)}`}
-          className='text-blue-500 underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2'
-        >
-          {text}
-        </Link>
-      ),
+      render: (text, record) => {
+        const staleModels = staleByTokenId?.get(record.id);
+        return (
+          <span className='flex items-center gap-1.5 min-w-0'>
+            <Link
+              to={`/console/log?token_name=${encodeURIComponent(text)}`}
+              className='text-blue-500 underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2'
+            >
+              {text}
+            </Link>
+            {staleModels?.length && openStaleDetails ? (
+              <StaleModelLimitsTag
+                staleModels={staleModels}
+                onOpen={() => openStaleDetails(record.id)}
+                t={t}
+              />
+            ) : null}
+          </span>
+        );
+      },
     },
     {
       title: t('状态'),

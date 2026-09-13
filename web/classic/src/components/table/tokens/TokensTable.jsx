@@ -49,6 +49,8 @@ const TokensTable = (tokensData) => {
     setShowEdit,
     refresh,
     groupRatios,
+    staleByTokenId,
+    openStaleDetails,
     t,
   } = tokensData;
 
@@ -67,6 +69,8 @@ const TokensTable = (tokensData) => {
       setShowEdit,
       refresh,
       groupRatios,
+      staleByTokenId,
+      openStaleDetails,
     });
   }, [
     t,
@@ -81,6 +85,8 @@ const TokensTable = (tokensData) => {
     setShowEdit,
     refresh,
     groupRatios,
+    staleByTokenId,
+    openStaleDetails,
   ]);
 
   // Handle compact mode by removing fixed positioning

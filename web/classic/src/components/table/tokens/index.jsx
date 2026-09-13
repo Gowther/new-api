@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Notification,
   Button,
@@ -39,7 +39,10 @@ import TokensFilters from './TokensFilters';
 import TokensDescription from './TokensDescription';
 import EditTokenModal from './modals/EditTokenModal';
 import CCSwitchModal from './modals/CCSwitchModal';
-import StaleModelLimitsBanner from './StaleModelLimitsBanner';
+import {
+  StaleModelLimitsEntry,
+  StaleModelLimitsModal,
+} from './StaleModelLimits';
 import { useTokensData } from '../../../hooks/tokens/useTokensData';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 import { createCardProPagination } from '../../../helpers/utils';
@@ -67,6 +70,9 @@ function TokensPage() {
   const [prefillKey, setPrefillKey] = useState('');
   const [ccSwitchVisible, setCCSwitchVisible] = useState(false);
   const [ccSwitchKey, setCCSwitchKey] = useState('');
+  const [staleReport, setStaleReport] = useState(null);
+  const [staleModalVisible, setStaleModalVisible] = useState(false);
+  const [staleFocusTokenId, setStaleFocusTokenId] = useState(null);
 
   // Keep latest data for handlers inside notifications
   useEffect(() => {
@@ -86,6 +92,38 @@ function TokensPage() {
     prefillKey,
     tokensData.fetchTokenKey,
   ]);
+
+  const loadStaleReport = async () => {
+    try {
+      const res = await API.get('/api/token/stale_model_limits');
+      const { success, message, data } = res.data || {};
+      if (success) {
+        setStaleReport(data || { stale_models: [], tokens: [] });
+      } else {
+        showError(message || tokensData.t('加载失效模型信息失败'));
+      }
+    } catch (e) {
+      showError(e.message || tokensData.t('加载失效模型信息失败'));
+    }
+  };
+
+  useEffect(() => {
+    loadStaleReport();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const staleByTokenId = useMemo(() => {
+    const map = new Map();
+    staleReport?.tokens?.forEach((token) => {
+      map.set(token.token_id, token.stale_models);
+    });
+    return map;
+  }, [staleReport]);
+
+  const openStaleDetails = (tokenId) => {
+    setStaleFocusTokenId(tokenId ?? null);
+    setStaleModalVisible(true);
+  };
 
   const loadModels = async () => {
     try {
@@ -392,7 +430,17 @@ function TokensPage() {
         modelOptions={modelOptions}
       />
 
-      <StaleModelLimitsBanner onChanged={refresh} t={t} />
+      <StaleModelLimitsModal
+        visible={staleModalVisible}
+        onClose={() => setStaleModalVisible(false)}
+        report={staleReport}
+        focusTokenId={staleFocusTokenId}
+        t={tokensData.t}
+        onChanged={() => {
+          tokensData.refresh();
+          loadStaleReport();
+        }}
+      />
 
       <CardPro
         type='type1'
@@ -401,6 +449,13 @@ function TokensPage() {
             compactMode={compactMode}
             setCompactMode={setCompactMode}
             t={t}
+            actions={
+              <StaleModelLimitsEntry
+                report={staleReport}
+                onOpen={openStaleDetails}
+                t={tokensData.t}
+              />
+            }
           />
         }
         actionsArea={
@@ -437,7 +492,11 @@ function TokensPage() {
         })}
         t={tokensData.t}
       >
-        <TokensTable {...tokensData} />
+        <TokensTable
+          {...tokensData}
+          staleByTokenId={staleByTokenId}
+          openStaleDetails={openStaleDetails}
+        />
       </CardPro>
     </>
   );

@@ -127,10 +127,16 @@ export async function getStaleTokenModelLimits(): Promise<
   return res.data
 }
 
-// Remove the currently stale entries from the given tokens' model limits
+// Remove stale entries from the given tokens' model limits. When models is
+// provided, only those stale models are removed (intersection per token);
+// omitted/empty removes every currently stale entry.
 export async function cleanupStaleTokenModelLimits(
-  ids: number[]
+  ids: number[],
+  models?: string[]
 ): Promise<ApiResponse<number>> {
-  const res = await api.post('/api/token/stale_model_limits/cleanup', { ids })
+  const res = await api.post('/api/token/stale_model_limits/cleanup', {
+    ids,
+    ...(models && models.length > 0 ? { models } : {}),
+  })
   return res.data
 }

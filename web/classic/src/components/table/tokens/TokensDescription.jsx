@@ -24,7 +24,7 @@ import CompactModeToggle from '../../common/ui/CompactModeToggle';
 
 const { Text } = Typography;
 
-const TokensDescription = ({ compactMode, setCompactMode, t }) => {
+const TokensDescription = ({ compactMode, setCompactMode, t, actions }) => {
   return (
     <div className='flex flex-col md:flex-row justify-between items-start md:items-center gap-2 w-full'>
       <div className='flex items-center text-blue-500'>
@@ -32,11 +32,14 @@ const TokensDescription = ({ compactMode, setCompactMode, t }) => {
         <Text>{t('令牌管理')}</Text>
       </div>
 
-      <CompactModeToggle
-        compactMode={compactMode}
-        setCompactMode={setCompactMode}
-        t={t}
-      />
+      <div className='flex items-center gap-2'>
+        {actions}
+        <CompactModeToggle
+          compactMode={compactMode}
+          setCompactMode={setCompactMode}
+          t={t}
+        />
+      </div>
     </div>
   );
 };

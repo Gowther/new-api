@@ -43,6 +43,7 @@ import {
   IpRestrictionsCell,
 } from './api-keys-cells'
 import { DataTableRowActions } from './data-table-row-actions'
+import { StaleModelLimitsBadge } from './stale-model-limits'
 
 function getQuotaProgressColor(percentage: number): string {
   if (percentage <= 10) return '[&_[data-slot=progress-indicator]]:bg-rose-500'
@@ -70,7 +71,10 @@ function useGroupRatios(): Record<string, number> {
   return data ?? {}
 }
 
-export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
+export function useApiKeysColumns(
+  staleByTokenId?: Map<number, string[]>,
+  onOpenStaleDetails?: (tokenId: number) => void
+): ColumnDef<ApiKey>[] {
   const { t } = useTranslation()
   const groupRatios = useGroupRatios()
   return [
@@ -100,16 +104,29 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
     {
       accessorKey: 'name',
       header: t('Name'),
-      cell: ({ row }) => (
-        <Link
-          to='/usage-logs/$section'
-          params={{ section: 'common' }}
-          search={{ token: String(row.getValue('name')) }}
-          className='text-primary focus-visible:ring-ring inline-flex rounded-sm font-medium underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:outline-none'
-        >
-          {row.getValue('name')}
-        </Link>
-      ),
+      cell: ({ row }) => {
+        const staleModels = staleByTokenId?.get(row.original.id)
+        return (
+          <div className='flex min-w-0 items-center gap-1.5'>
+            <Link
+              to='/usage-logs/$section'
+              params={{ section: 'common' }}
+              search={{ token: String(row.getValue('name')) }}
+              className='text-primary focus-visible:ring-ring inline-flex rounded-sm font-medium underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:outline-none'
+            >
+              {row.getValue('name')}
+            </Link>
+            {staleModels &&
+              staleModels.length > 0 &&
+              onOpenStaleDetails && (
+                <StaleModelLimitsBadge
+                  staleModels={staleModels}
+                  onOpen={() => onOpenStaleDetails(row.original.id)}
+                />
+              )}
+          </div>
+        )
+      },
       size: 180,
       meta: { mobileTitle: true },
     },

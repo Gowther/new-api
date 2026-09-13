@@ -316,6 +316,14 @@ type TokenBatch struct {
 	Ids []int `json:"ids"`
 }
 
+// StaleTokenModelLimitsCleanupRequest removes stale model-limit entries from
+// tokens. When Models is empty every stale entry is removed; otherwise only
+// the stale models named in Models are removed from each token.
+type StaleTokenModelLimitsCleanupRequest struct {
+	Ids    []int    `json:"ids"`
+	Models []string `json:"models"`
+}
+
 func DeleteTokenBatch(c *gin.Context) {
 	tokenBatch := TokenBatch{}
 	if err := c.ShouldBindJSON(&tokenBatch); err != nil || len(tokenBatch.Ids) == 0 {
@@ -370,12 +378,12 @@ func GetStaleTokenModelLimits(c *gin.Context) {
 
 func CleanupStaleTokenModelLimits(c *gin.Context) {
 	userId := c.GetInt("id")
-	req := TokenBatch{}
+	req := StaleTokenModelLimitsCleanupRequest{}
 	if err := c.ShouldBindJSON(&req); err != nil || len(req.Ids) == 0 {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
 	}
-	changed, err := model.CleanupStaleTokenModelLimits(userId, req.Ids)
+	changed, err := model.CleanupStaleTokenModelLimits(userId, req.Ids, req.Models)
 	if err != nil {
 		common.ApiError(c, err)
 		return

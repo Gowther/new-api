@@ -57,6 +57,7 @@ import { useApiKeysColumns } from './api-keys-columns'
 import { useApiKeys } from './api-keys-provider'
 import { DataTableBulkActions } from './data-table-bulk-actions'
 import { DataTableRowActions } from './data-table-row-actions'
+import { StaleModelLimitsBanner } from './stale-model-limits-banner'
 
 const route = getRouteApi('/_authenticated/keys/')
 const API_KEYS_COLUMN_VISIBILITY_STORAGE_KEY = 'api-keys:column-visibility'
@@ -286,7 +287,9 @@ export function ApiKeysTable() {
   })
 
   return (
-    <DataTablePage
+    <>
+      <StaleModelLimitsBanner />
+      <DataTablePage
       table={table}
       columns={columns}
       isLoading={isLoading}
@@ -322,6 +325,7 @@ export function ApiKeysTable() {
         isDisabledApiKeyRow(row.original) ? DISABLED_ROW_DESKTOP : undefined
       }
       bulkActions={<DataTableBulkActions table={table} />}
-    />
+      />
+    </>
   )
 }

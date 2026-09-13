@@ -357,3 +357,28 @@ func GetTokenKeysBatch(c *gin.Context) {
 	}
 	common.ApiSuccess(c, gin.H{"keys": keysMap})
 }
+
+func GetStaleTokenModelLimits(c *gin.Context) {
+	userId := c.GetInt("id")
+	report, err := model.GetUserStaleTokenModelLimits(userId)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, report)
+}
+
+func CleanupStaleTokenModelLimits(c *gin.Context) {
+	userId := c.GetInt("id")
+	req := TokenBatch{}
+	if err := c.ShouldBindJSON(&req); err != nil || len(req.Ids) == 0 {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	changed, err := model.CleanupStaleTokenModelLimits(userId, req.Ids)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, changed)
+}

@@ -39,6 +39,7 @@ import TokensFilters from './TokensFilters';
 import TokensDescription from './TokensDescription';
 import EditTokenModal from './modals/EditTokenModal';
 import CCSwitchModal from './modals/CCSwitchModal';
+import StaleModelLimitsBanner from './StaleModelLimitsBanner';
 import { useTokensData } from '../../../hooks/tokens/useTokensData';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 import { createCardProPagination } from '../../../helpers/utils';
@@ -390,6 +391,8 @@ function TokensPage() {
         tokenKey={ccSwitchKey}
         modelOptions={modelOptions}
       />
+
+      <StaleModelLimitsBanner onChanged={refresh} t={t} />
 
       <CardPro
         type='type1'

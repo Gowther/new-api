@@ -25,6 +25,7 @@ import type {
   GetApiKeysResponse,
   SearchApiKeysParams,
   ApiKeyFormData,
+  StaleTokenModelLimitsReport,
 } from './types'
 
 // ============================================================================
@@ -114,5 +115,22 @@ export async function fetchTokenKeysBatch(ids: number[]): Promise<{
   data?: { keys: Record<number, string> }
 }> {
   const res = await api.post('/api/token/batch/keys', { ids })
+  return res.data
+}
+
+// Get models referenced by the user's token model limits that no enabled
+// channel serves. Stale entries are harmless and must only be removed manually.
+export async function getStaleTokenModelLimits(): Promise<
+  ApiResponse<StaleTokenModelLimitsReport>
+> {
+  const res = await api.get('/api/token/stale_model_limits')
+  return res.data
+}
+
+// Remove the currently stale entries from the given tokens' model limits
+export async function cleanupStaleTokenModelLimits(
+  ids: number[]
+): Promise<ApiResponse<number>> {
+  const res = await api.post('/api/token/stale_model_limits/cleanup', { ids })
   return res.data
 }

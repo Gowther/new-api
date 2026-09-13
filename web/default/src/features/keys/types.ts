@@ -75,6 +75,17 @@ export interface GetApiKeysResponse {
   }
 }
 
+export interface StaleTokenModelLimit {
+  token_id: number
+  token_name: string
+  stale_models: string[]
+}
+
+export interface StaleTokenModelLimitsReport {
+  stale_models: string[]
+  tokens: StaleTokenModelLimit[]
+}
+
 export interface SearchApiKeysParams {
   keyword?: string
   token?: string

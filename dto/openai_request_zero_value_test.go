@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -164,4 +165,43 @@ func TestGetOpenAIChatCapabilities(t *testing.T) {
 			assert.Equal(t, tt.temperature, capabilities.SupportsTemperature)
 		})
 	}
+}
+
+func TestRequestMarshalJSONToolLoadingOmitsContentKey(t *testing.T) {
+	tools := json.RawMessage(`[{"type":"function","function":{"name":"get_current_time"}}]`)
+
+	// 工具加载消息：content 键必须整体缺席，tools 原样透传
+	encoded, err := common.Marshal(&GeneralOpenAIRequest{
+		Model:    "kimi-k3",
+		Messages: []Message{{Role: "system", Tools: tools}, {Role: "assistant"}},
+	})
+	require.NoError(t, err)
+	toolLoadingContent := gjson.Get(string(encoded), "messages.0.content")
+	assert.False(t, toolLoadingContent.Exists())
+	assert.JSONEq(t, string(tools), gjson.Get(string(encoded), "messages.0.tools").Raw)
+
+	// 普通消息保持原有行为："content": null 仍然输出
+	content := gjson.Get(string(encoded), "messages.1.content")
+	assert.True(t, content.Exists())
+	assert.Equal(t, "null", content.Raw)
+
+	// 无工具加载消息时不走逐消息编码，输出与默认序列化一致
+	encoded, err = common.Marshal(&GeneralOpenAIRequest{
+		Model:    "gpt-4o",
+		Messages: []Message{{Role: "assistant"}},
+	})
+	require.NoError(t, err)
+	content = gjson.Get(string(encoded), "messages.0.content")
+	assert.True(t, content.Exists())
+	assert.Equal(t, "null", content.Raw)
+	assert.NotContains(t, string(encoded), "tools")
+
+	// 带 content 的工具加载消息不受影响
+	encoded, err = common.Marshal(&GeneralOpenAIRequest{
+		Model:    "kimi-k3",
+		Messages: []Message{{Role: "system", Content: "load tools", Tools: tools}},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "load tools", gjson.Get(string(encoded), "messages.0.content").String())
+	assert.JSONEq(t, string(tools), gjson.Get(string(encoded), "messages.0.tools").Raw)
 }

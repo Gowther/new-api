@@ -40,6 +40,7 @@ import {
 import { useUsageLogsAutoRefresh } from '../hooks/use-usage-logs-auto-refresh'
 import { useColumnsByCategory } from '../lib/columns'
 import { parseLogOther } from '../lib/format'
+import { resolveLogTimeRange } from '../lib/time-range'
 import { fetchLogsByCategory } from '../lib/utils'
 import type { LogCategory } from '../types'
 import { CommonLogsFilterBar } from './common-logs-filter-bar'
@@ -175,6 +176,23 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
     ) {
       return
     }
+    const { start, end, timeMode } = resolveLogTimeRange(searchParams)
+    if (timeMode !== 'fixed' && start && end) {
+      // today/recent resolve against the current clock, so re-pinning the
+      // resolved range into the URL is what advances the displayed window.
+      // timeMode must be written too: bare timestamps alone would make
+      // resolveLogTimeRange infer 'fixed' on the next tick. A pinned 'fixed'
+      // range is skipped so a user-specified span is never overwritten.
+      await navigate({
+        replace: true,
+        search: (previous) => ({
+          ...previous,
+          timeMode,
+          startTime: start.getTime(),
+          endTime: end.getTime(),
+        }),
+      })
+    }
     await Promise.all([
       queryClient.invalidateQueries(
         { queryKey: ['logs'] },
@@ -185,7 +203,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
         { cancelRefetch: false }
       ),
     ])
-  }, [queryClient])
+  }, [navigate, queryClient, searchParams])
 
   useUsageLogsAutoRefresh(autoRefreshSeconds, refreshLogs, autoRefreshingRef)
 

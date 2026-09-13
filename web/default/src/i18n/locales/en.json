@@ -4669,6 +4669,7 @@
     "Test selected models": "Test selected models",
     "Test with another model": "Test with another model",
     "Testing all enabled channels started. Please refresh to see results.": "Testing all enabled channels started. Please refresh to see results.",
+    "Testing channel {{name}}...": "Testing channel {{name}}...",
     "Testing...": "Testing...",
     "Text": "Text",
     "Text description of the desired image": "Text description of the desired image",

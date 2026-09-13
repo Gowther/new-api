@@ -4669,6 +4669,7 @@
     "Test selected models": "選択したモデルをテスト",
     "Test with another model": "他のモデルでテスト",
     "Testing all enabled channels started. Please refresh to see results.": "有効な全チャネルのテストを開始しました。結果を確認するにはページを更新してください。",
+    "Testing channel {{name}}...": "チャネル {{name}} をテスト中...",
     "Testing...": "テスト中...",
     "Text": "テキスト",
     "Text description of the desired image": "生成したい画像のテキスト説明",

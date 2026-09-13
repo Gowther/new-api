@@ -4669,6 +4669,7 @@
     "Test selected models": "测试所选模型",
     "Test with another model": "用其他模型测试",
     "Testing all enabled channels started. Please refresh to see results.": "测试所有启用的渠道已开始。请刷新以查看结果。",
+    "Testing channel {{name}}...": "正在测试渠道 {{name}}...",
     "Testing...": "测试中...",
     "Text": "文本",
     "Text description of the desired image": "想要生成图像的文字描述",

@@ -314,7 +314,8 @@ export const getChannelsColumns = ({
   manageChannel,
   manageTag,
   submitTagEdit,
-  testChannel,
+  directTestChannel,
+  directTestingId,
   setCurrentTestChannel,
   setShowModelTestModal,
   setEditingChannel,
@@ -811,7 +812,8 @@ export const getChannelsColumns = ({
                 <Button
                   size='small'
                   type='tertiary'
-                  onClick={() => testChannel(record, '')}
+                  loading={directTestingId === record.id}
+                  onClick={() => directTestChannel(record)}
                 >
                   {t('测试')}
                 </Button>

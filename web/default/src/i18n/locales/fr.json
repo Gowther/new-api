@@ -4669,6 +4669,7 @@
     "Test selected models": "Tester les modèles sélectionnés",
     "Test with another model": "Tester avec un autre modèle",
     "Testing all enabled channels started. Please refresh to see results.": "Test de tous les canaux activés démarré. Veuillez actualiser pour voir les résultats.",
+    "Testing channel {{name}}...": "Test du canal {{name}}...",
     "Testing...": "Test en cours...",
     "Text": "Texte",
     "Text description of the desired image": "Description textuelle de l'image souhaitée",

@@ -98,7 +98,10 @@ import type {
   GetChannelsResponse,
   SearchChannelsResponse,
 } from '../../types'
-import { useChannels } from '../channels-provider'
+import {
+  useChannels,
+  type ChannelDirectTestFailure,
+} from '../channels-provider'
 
 type ChannelTestDialogProps = {
   open: boolean
@@ -112,6 +115,8 @@ type ChannelTestDialogProps = {
 
 type ChannelTestDialogContentProps = ChannelTestDialogProps & {
   currentRow: Channel
+  directTestFailure?: ChannelDirectTestFailure | null
+  onConsumeDirectTestFailure?: () => void
 }
 
 type ModelRow = {
@@ -311,7 +316,11 @@ export function ChannelTestDialog({
   currentRow: currentRowProp,
   restrictToModels,
 }: ChannelTestDialogProps) {
-  const { currentRow: contextRow } = useChannels()
+  const {
+    currentRow: contextRow,
+    directTestFailure,
+    setDirectTestFailure,
+  } = useChannels()
   const currentRow = currentRowProp ?? contextRow
 
   if (!currentRow) {
@@ -325,6 +334,8 @@ export function ChannelTestDialog({
       onOpenChange={onOpenChange}
       currentRow={currentRow}
       restrictToModels={restrictToModels}
+      directTestFailure={directTestFailure}
+      onConsumeDirectTestFailure={() => setDirectTestFailure(null)}
     />
   )
 }
@@ -334,6 +345,8 @@ function ChannelTestDialogContent({
   onOpenChange,
   currentRow,
   restrictToModels,
+  directTestFailure,
+  onConsumeDirectTestFailure,
 }: ChannelTestDialogContentProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
@@ -406,6 +419,29 @@ function ChannelTestDialogContent({
   }, [batchProgress, dismissBatchProgressToast, isBatchStopRequested, t])
 
   useEffect(() => dismissBatchProgressToast, [dismissBatchProgressToast])
+
+  // A failed direct (row button) test opens this dialog and lands on the
+  // tested model's row, so the error stays visible like a dialog-run test.
+  useEffect(() => {
+    if (!open || !directTestFailure) return
+    if (directTestFailure.channelId !== currentRow.id) return
+
+    setTestResults((prev) => ({
+      ...prev,
+      [directTestFailure.model]: {
+        status: 'error',
+        error: directTestFailure.error,
+        errorCode: directTestFailure.errorCode,
+        completedAt: directTestFailure.completedAt,
+      },
+    }))
+    onConsumeDirectTestFailure?.()
+  }, [
+    open,
+    directTestFailure,
+    currentRow.id,
+    onConsumeDirectTestFailure,
+  ])
 
   const resetState = useCallback(() => {
     batchStopRequestedRef.current = true

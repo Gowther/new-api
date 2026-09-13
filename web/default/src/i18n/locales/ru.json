@@ -4669,6 +4669,7 @@
     "Test selected models": "Проверить выбранные модели",
     "Test with another model": "Тест с другой моделью",
     "Testing all enabled channels started. Please refresh to see results.": "Тестирование всех включенных каналов начато. Пожалуйста, обновите страницу, чтобы увидеть результаты.",
+    "Testing channel {{name}}...": "Проверка канала {{name}}...",
     "Testing...": "Тестирование...",
     "Text": "Текст",
     "Text description of the desired image": "Текстовое описание желаемого изображения",

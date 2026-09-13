@@ -127,6 +127,8 @@ export const useChannelsData = () => {
   const [modelTablePage, setModelTablePage] = useState(1);
   const [selectedEndpointType, setSelectedEndpointType] = useState('');
   const [isStreamTest, setIsStreamTest] = useState(false);
+  // 行上「测试」按钮正在测试的渠道 id，用于按钮 loading 反馈
+  const [directTestingId, setDirectTestingId] = useState(null);
   const [globalPassThroughEnabled, setGlobalPassThroughEnabled] =
     useState(false);
   const [routingOverride, setRoutingOverride] = useState([]);
@@ -1178,11 +1180,13 @@ export const useChannelsData = () => {
 
     // 检查是否应该停止批量测试
     if (shouldStopBatchTestingRef.current && isBatchTesting) {
-      return Promise.resolve();
+      return null;
     }
 
     // 添加到正在测试的模型集合
     setTestingModels((prev) => new Set([...prev, model]));
+
+    let result = null;
 
     try {
       const params = new URLSearchParams({ model: String(model) });
@@ -1198,10 +1202,16 @@ export const useChannelsData = () => {
 
       // 检查是否在请求期间被停止
       if (shouldStopBatchTestingRef.current && isBatchTesting) {
-        return Promise.resolve();
+        return null;
       }
 
       const { success, message, time, error_code } = res.data;
+      result = {
+        success,
+        message,
+        time: time || 0,
+        errorCode: error_code || null,
+      };
 
       // 更新测试结果
       setModelTestResults((prev) => ({
@@ -1244,14 +1254,17 @@ export const useChannelsData = () => {
     } catch (error) {
       // 处理网络错误
       const testKey = `${record.id}-${model}`;
+      result = {
+        success: false,
+        message: error.message || t('网络错误'),
+        time: 0,
+        errorCode: null,
+      };
       setModelTestResults((prev) => ({
         ...prev,
         [testKey]: {
-          success: false,
-          message: error.message || t('网络错误'),
-          time: 0,
+          ...result,
           timestamp: Date.now(),
-          errorCode: null,
         },
       }));
       showError(error.message || t('测试失败'));
@@ -1262,6 +1275,34 @@ export const useChannelsData = () => {
         newSet.delete(model);
         return newSet;
       });
+    }
+
+    return result;
+  };
+
+  // 行上「测试」按钮：按后端自动选择规则解析默认测试模型（test_model，其次模型列表第一个）
+  // 显式传参，失败时自动打开模型测试弹窗保留错误详情
+  const directTestChannel = async (record) => {
+    const models = String(record.models || '')
+      .split(',')
+      .map((m) => m.trim())
+      .filter(Boolean);
+    const model = String(record.test_model || '').trim() || models[0] || '';
+
+    if (!model) {
+      return testChannel(record, '');
+    }
+
+    setDirectTestingId(record.id);
+    try {
+      const result = await testChannel(record, model);
+      if (result && !result.success) {
+        setCurrentTestChannel(record);
+        setShowModelTestModal(true);
+      }
+      return result;
+    } finally {
+      setDirectTestingId(null);
     }
   };
 
@@ -1510,6 +1551,7 @@ export const useChannelsData = () => {
     setSelectedEndpointType,
     isStreamTest,
     setIsStreamTest,
+    directTestingId,
     allSelectingRef,
 
     // Multi-key management states
@@ -1557,6 +1599,7 @@ export const useChannelsData = () => {
     fixChannelsAbilities,
     checkOllamaVersion,
     testChannel,
+    directTestChannel,
     batchTestModels,
     handleCloseModal,
     getFormValues,

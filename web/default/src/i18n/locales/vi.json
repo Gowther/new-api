@@ -4669,6 +4669,7 @@
     "Test selected models": "Kiểm tra các mô hình đã chọn",
     "Test with another model": "Kiểm tra bằng mô hình khác",
     "Testing all enabled channels started. Please refresh to see results.": "Bắt đầu kiểm tra tất cả các kênh đã kích hoạt. Vui lòng làm mới để xem kết quả.",
+    "Testing channel {{name}}...": "Đang kiểm tra kênh {{name}}...",
     "Testing...": "Đang kiểm tra...",
     "Text": "Văn bản",
     "Text description of the desired image": "Mô tả văn bản cho ảnh mong muốn",

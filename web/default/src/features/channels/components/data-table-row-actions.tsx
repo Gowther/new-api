@@ -92,6 +92,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const {
     setOpen,
     setCurrentRow,
+    setDirectTestFailure,
     upstream,
     routingOverrides,
     routingOverrideLoading,
@@ -139,11 +140,37 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const handleDirectTest = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation()
     setIsTesting(true)
+    // Resolve the model the backend would pick for an untargeted test
+    // (test_model, then the first model) so failures can be shown on that
+    // model's row inside the test dialog.
+    const testModel =
+      channel.test_model?.trim() ||
+      channel.models.split(',')[0]?.trim() ||
+      ''
+    const loadingToastId = toast.loading(
+      t('Testing channel {{name}}...', { name: channel.name })
+    )
     try {
-      await handleTestChannel(channel.id, { channelName: channel.name }, () => {
-        queryClient.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
-      })
+      await handleTestChannel(
+        channel.id,
+        { channelName: channel.name, testModel: testModel || undefined },
+        (success, _responseTime, error, errorCode) => {
+          queryClient.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
+          if (!success && testModel) {
+            setDirectTestFailure({
+              channelId: channel.id,
+              model: testModel,
+              error: error || t('Test failed'),
+              errorCode,
+              completedAt: Date.now(),
+            })
+            setCurrentRow(channel)
+            setOpen('test-channel')
+          }
+        }
+      )
     } finally {
+      toast.dismiss(loadingToastId)
       setIsTesting(false)
     }
   }

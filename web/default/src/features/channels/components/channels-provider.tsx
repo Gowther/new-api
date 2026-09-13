@@ -56,11 +56,22 @@ type DialogType =
 
 type UpstreamUpdateState = ReturnType<typeof useChannelUpstreamUpdates>
 
+/** A failed direct (row button) channel test, to be shown in the test dialog. */
+export type ChannelDirectTestFailure = {
+  channelId: number
+  model: string
+  error: string
+  errorCode?: string
+  completedAt: number
+}
+
 type ChannelsContextType = {
   open: DialogType
   setOpen: (open: DialogType) => void
   currentRow: Channel | null
   setCurrentRow: (row: Channel | null) => void
+  directTestFailure: ChannelDirectTestFailure | null
+  setDirectTestFailure: (failure: ChannelDirectTestFailure | null) => void
   currentTag: string | null
   setCurrentTag: (tag: string | null) => void
   enableTagMode: boolean
@@ -91,6 +102,8 @@ const ChannelsContext = createContext<ChannelsContextType | undefined>(
 export function ChannelsProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState<DialogType>(null)
   const [currentRow, setCurrentRow] = useState<Channel | null>(null)
+  const [directTestFailure, setDirectTestFailure] =
+    useState<ChannelDirectTestFailure | null>(null)
   const [currentTag, setCurrentTag] = useState<string | null>(null)
   const [enableTagMode, setEnableTagMode] = useState(() => {
     return localStorage.getItem('enable-tag-mode') === 'true'
@@ -129,6 +142,8 @@ export function ChannelsProvider({ children }: { children: React.ReactNode }) {
       setOpen,
       currentRow,
       setCurrentRow,
+      directTestFailure,
+      setDirectTestFailure,
       currentTag,
       setCurrentTag,
       enableTagMode,
@@ -146,6 +161,7 @@ export function ChannelsProvider({ children }: { children: React.ReactNode }) {
     [
       open,
       currentRow,
+      directTestFailure,
       currentTag,
       enableTagMode,
       idSort,

@@ -150,7 +150,7 @@ export function PriceReferenceEditor({
       .map((name) => ({ value: name, label: name }))
   }, [modelPrice, modelRatio, billingMode, billingExpr])
 
-  const aliasOptions = useMemo(() => {
+  const aliasCandidates = useMemo(() => {
     const names = new Set<string>()
     for (const model of unsetModels) {
       if (model.trim() !== '') {
@@ -166,6 +166,19 @@ export function PriceReferenceEditor({
       .sort((a, b) => a.localeCompare(b))
       .map((name) => ({ value: name, label: name }))
   }, [unsetModels, rows])
+
+  const buildRowAliasOptions = useCallback(
+    (row: PriceReferenceBinding) => {
+      const usedByOthers = new Set(
+        rows
+          .filter((other) => other.id !== row.id)
+          .map((other) => other.alias.trim())
+          .filter((alias) => alias !== '')
+      )
+      return aliasCandidates.filter((option) => !usedByOthers.has(option.value))
+    },
+    [aliasCandidates, rows]
+  )
 
   const isDirty = useMemo(
     () => serializeBindings(rows) !== savedValue,
@@ -197,6 +210,12 @@ export function PriceReferenceEditor({
       if (alias === '' || source === '') {
         toast.error(
           t('Each binding needs both an alias model and a follow model')
+        )
+        return
+      }
+      if (alias === source) {
+        toast.error(
+          t('The alias model and the follow model cannot be the same')
         )
         return
       }
@@ -253,7 +272,7 @@ export function PriceReferenceEditor({
               className='grid grid-cols-1 items-center gap-3 md:grid-cols-[1fr_1fr_2.25rem]'
             >
               <ComboboxInput
-                options={aliasOptions}
+                options={buildRowAliasOptions(row)}
                 value={row.alias}
                 onValueChange={(value) => updateRow(index, { alias: value })}
                 placeholder={t('Alias model')}

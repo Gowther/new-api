@@ -141,7 +141,7 @@ export default function PriceReferenceSettings({
       .map((name) => ({ label: name, value: name }));
   }, [options]);
 
-  const aliasOptions = useMemo(() => {
+  const aliasCandidates = useMemo(() => {
     const names = new Set(unsetModels);
     rows.forEach((row) => {
       if ((row.alias || '').trim() !== '') {
@@ -152,6 +152,16 @@ export default function PriceReferenceSettings({
       .sort((a, b) => a.localeCompare(b))
       .map((name) => ({ label: name, value: name }));
   }, [unsetModels, rows]);
+
+  const buildRowAliasOptions = (row) => {
+    const usedByOthers = new Set(
+      rows
+        .filter((other) => other !== row)
+        .map((other) => (other.alias || '').trim())
+        .filter((alias) => alias !== ''),
+    );
+    return aliasCandidates.filter((option) => !usedByOthers.has(option.value));
+  };
 
   const dirty = useMemo(
     () => serialize(rows) !== savedValue,
@@ -179,6 +189,10 @@ export default function PriceReferenceSettings({
       const source = (row.source || '').trim();
       if (alias === '' || source === '') {
         showError(t('每条绑定都需要填写别名模型和跟随模型'));
+        return;
+      }
+      if (alias === source) {
+        showError(t('别名模型不能与跟随模型相同'));
         return;
       }
       if (aliases.has(alias)) {
@@ -252,7 +266,7 @@ export default function PriceReferenceSettings({
                 filter
                 allowCreate
                 showClear
-                optionList={aliasOptions}
+                optionList={buildRowAliasOptions(row)}
                 value={row.alias || undefined}
                 onChange={(value) => updateRow(index, { alias: value || '' })}
               />

@@ -4684,6 +4684,7 @@
     "The administrator has not configured a privacy policy yet.": "The administrator has not configured a privacy policy yet.",
     "The administrator has not configured a user agreement yet.": "The administrator has not configured a user agreement yet.",
     "The administrator has not configured any about content yet. You can set it in the settings page, supporting HTML or URL.": "The administrator has not configured any about content yet. You can set it in the settings page, supporting HTML or URL.",
+    "The alias model and the follow model cannot be the same": "The alias model and the follow model cannot be the same",
     "The API key used for the requests": "The API key used for the requests",
     "The binding will complete automatically after authorization": "The binding will complete automatically after authorization",
     "The bound Product powers wallet top-ups: when a user enters any amount, new-api runs the checkout against this single Pancake product and overrides the price per session — no need to pre-create $1 / $5 / $10 SKUs.": "The bound Product powers wallet top-ups: when a user enters any amount, new-api runs the checkout against this single Pancake product and overrides the price per session — no need to pre-create $1 / $5 / $10 SKUs.",

@@ -12,6 +12,8 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
@@ -263,4 +265,19 @@ func (recorder *migrationSQLRecorder) schemaMutations() []string {
 		}
 	}
 	return mutations
+}
+
+// chooseDB 以直接构造的方式包装 mysql/postgres Dialector；这里用同一构造
+// 验证包装类型可用且驱动名正确——类型断言或字段错配会在该测试提前暴露，
+// 而不是在真实数据库连接时 panic。
+func TestMigrationDialectorConstructionMatchesChooseDB(t *testing.T) {
+	pgDialector := postgresMigrationDialector{postgres.Dialector{Config: &postgres.Config{
+		DSN:                  "postgres://user:pass@localhost:5432/db",
+		PreferSimpleProtocol: true,
+	}}}
+	require.Equal(t, "postgres", pgDialector.Name())
+	require.True(t, pgDialector.Config.PreferSimpleProtocol)
+
+	mysqlDialector := mysqlMigrationDialector{mysql.Dialector{Config: &mysql.Config{DSN: "user:pass@tcp(localhost:3306)/db"}}}
+	require.Equal(t, "mysql", mysqlDialector.Name())
 }

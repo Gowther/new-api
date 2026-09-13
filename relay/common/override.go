@@ -43,7 +43,8 @@ var paramOverrideSensitivePathPrefixes = []string{
 }
 
 type paramOverrideAuditRecorder struct {
-	lines []string
+	lines  []string
+	counts map[string]int
 }
 
 type ConditionOperation struct {
@@ -194,7 +195,7 @@ func ApplyParamOverrideWithRelayInfo(jsonData []byte, info *RelayInfo) ([]byte, 
 	syncRuntimeHeaderOverrideFromContext(info, overrideCtx)
 	if info != nil {
 		if recorder != nil {
-			info.ParamOverrideAudit = recorder.lines
+			info.ParamOverrideAudit = recorder.renderLines()
 		} else {
 			info.ParamOverrideAudit = nil
 		}
@@ -248,10 +249,35 @@ func (r *paramOverrideAuditRecorder) recordOperation(mode, path, from, to string
 	if line == "" {
 		return
 	}
-	if lo.Contains(r.lines, line) {
+	// 同一行审计重复命中时计数，而不是各自记账：通配路径展开后逐目标
+	// 应用是同一条规则（如 messages.*.role），全部罗列会把日志体积撑成
+	// O(消息数)，渲染时折叠为 "规则 ×N"。
+	if r.counts == nil {
+		r.counts = make(map[string]int)
+	}
+	if _, exists := r.counts[line]; exists {
+		r.counts[line]++
 		return
 	}
+	r.counts[line] = 1
 	r.lines = append(r.lines, line)
+}
+
+// renderLines 按首次出现顺序输出审计行；命中次数大于 1 的行折叠为
+// "行 ×N"，把逐目标展开的重复压缩回规则粒度。
+func (r *paramOverrideAuditRecorder) renderLines() []string {
+	if r == nil {
+		return nil
+	}
+	rendered := make([]string, 0, len(r.lines))
+	for _, line := range r.lines {
+		if count := r.counts[line]; count > 1 {
+			rendered = append(rendered, fmt.Sprintf("%s ×%d", line, count))
+		} else {
+			rendered = append(rendered, line)
+		}
+	}
+	return rendered
 }
 
 func shouldAuditParamPath(path string) bool {
@@ -760,7 +786,7 @@ func applyOperations(jsonData []byte, operations []ParamOperation, conditionCont
 				if err != nil {
 					break
 				}
-				auditRecorder.recordOperation("delete", path, "", "", nil)
+				auditRecorder.recordOperation("delete", opPath, "", "", nil)
 			}
 		case "set":
 			for _, path := range opPaths {
@@ -771,7 +797,7 @@ func applyOperations(jsonData []byte, operations []ParamOperation, conditionCont
 				if err != nil {
 					break
 				}
-				auditRecorder.recordOperation("set", path, "", "", op.Value)
+				auditRecorder.recordOperation("set", opPath, "", "", op.Value)
 			}
 		case "move":
 			opFrom := processNegativeIndex(result, op.From)
@@ -796,7 +822,7 @@ func applyOperations(jsonData []byte, operations []ParamOperation, conditionCont
 				if err != nil {
 					break
 				}
-				auditRecorder.recordOperation("prepend", path, "", "", op.Value)
+				auditRecorder.recordOperation("prepend", opPath, "", "", op.Value)
 			}
 		case "append":
 			for _, path := range opPaths {
@@ -804,7 +830,7 @@ func applyOperations(jsonData []byte, operations []ParamOperation, conditionCont
 				if err != nil {
 					break
 				}
-				auditRecorder.recordOperation("append", path, "", "", op.Value)
+				auditRecorder.recordOperation("append", opPath, "", "", op.Value)
 			}
 		case "trim_prefix":
 			for _, path := range opPaths {
@@ -812,7 +838,7 @@ func applyOperations(jsonData []byte, operations []ParamOperation, conditionCont
 				if err != nil {
 					break
 				}
-				auditRecorder.recordOperation("trim_prefix", path, "", "", op.Value)
+				auditRecorder.recordOperation("trim_prefix", opPath, "", "", op.Value)
 			}
 		case "trim_suffix":
 			for _, path := range opPaths {
@@ -820,7 +846,7 @@ func applyOperations(jsonData []byte, operations []ParamOperation, conditionCont
 				if err != nil {
 					break
 				}
-				auditRecorder.recordOperation("trim_suffix", path, "", "", op.Value)
+				auditRecorder.recordOperation("trim_suffix", opPath, "", "", op.Value)
 			}
 		case "ensure_prefix":
 			for _, path := range opPaths {
@@ -828,7 +854,7 @@ func applyOperations(jsonData []byte, operations []ParamOperation, conditionCont
 				if err != nil {
 					break
 				}
-				auditRecorder.recordOperation("ensure_prefix", path, "", "", op.Value)
+				auditRecorder.recordOperation("ensure_prefix", opPath, "", "", op.Value)
 			}
 		case "ensure_suffix":
 			for _, path := range opPaths {
@@ -836,7 +862,7 @@ func applyOperations(jsonData []byte, operations []ParamOperation, conditionCont
 				if err != nil {
 					break
 				}
-				auditRecorder.recordOperation("ensure_suffix", path, "", "", op.Value)
+				auditRecorder.recordOperation("ensure_suffix", opPath, "", "", op.Value)
 			}
 		case "trim_space":
 			for _, path := range opPaths {
@@ -844,7 +870,7 @@ func applyOperations(jsonData []byte, operations []ParamOperation, conditionCont
 				if err != nil {
 					break
 				}
-				auditRecorder.recordOperation("trim_space", path, "", "", nil)
+				auditRecorder.recordOperation("trim_space", opPath, "", "", nil)
 			}
 		case "to_lower":
 			for _, path := range opPaths {
@@ -852,7 +878,7 @@ func applyOperations(jsonData []byte, operations []ParamOperation, conditionCont
 				if err != nil {
 					break
 				}
-				auditRecorder.recordOperation("to_lower", path, "", "", nil)
+				auditRecorder.recordOperation("to_lower", opPath, "", "", nil)
 			}
 		case "to_upper":
 			for _, path := range opPaths {
@@ -860,7 +886,7 @@ func applyOperations(jsonData []byte, operations []ParamOperation, conditionCont
 				if err != nil {
 					break
 				}
-				auditRecorder.recordOperation("to_upper", path, "", "", nil)
+				auditRecorder.recordOperation("to_upper", opPath, "", "", nil)
 			}
 		case "replace":
 			for _, path := range opPaths {
@@ -868,7 +894,7 @@ func applyOperations(jsonData []byte, operations []ParamOperation, conditionCont
 				if err != nil {
 					break
 				}
-				auditRecorder.recordOperation("replace", path, op.From, op.To, nil)
+				auditRecorder.recordOperation("replace", opPath, op.From, op.To, nil)
 			}
 		case "regex_replace":
 			for _, path := range opPaths {
@@ -876,7 +902,7 @@ func applyOperations(jsonData []byte, operations []ParamOperation, conditionCont
 				if err != nil {
 					break
 				}
-				auditRecorder.recordOperation("regex_replace", path, op.From, op.To, nil)
+				auditRecorder.recordOperation("regex_replace", opPath, op.From, op.To, nil)
 			}
 		case "return_error":
 			auditRecorder.recordOperation("return_error", op.Path, "", "", op.Value)

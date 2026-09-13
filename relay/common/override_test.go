@@ -2412,3 +2412,57 @@ func assertJSONEqual(t *testing.T, want, got string) {
 		t.Fatalf("json not equal\nwant: %s\ngot:  %s", want, got)
 	}
 }
+
+func TestApplyParamOverrideWithRelayInfoCollapsesWildcardAuditByRuleCount(t *testing.T) {
+	originalDebugEnabled := common2.DebugEnabled
+	common2.DebugEnabled = true
+	t.Cleanup(func() {
+		common2.DebugEnabled = originalDebugEnabled
+	})
+
+	info := &RelayInfo{
+		ChannelMeta: &ChannelMeta{
+			ParamOverride: map[string]interface{}{
+				"operations": []interface{}{
+					map[string]interface{}{
+						"mode": "regex_replace",
+						"path": "messages.*.role",
+						"from": "^developer$",
+						"to":   "system",
+					},
+					map[string]interface{}{
+						"mode":  "set",
+						"path":  "temperature",
+						"value": 0.1,
+					},
+				},
+			},
+		},
+	}
+
+	out, err := ApplyParamOverrideWithRelayInfo([]byte(`{
+		"temperature":0.7,
+		"messages":[
+			{"role":"developer","content":"a"},
+			{"role":"developer","content":"b"},
+			{"role":"developer","content":"c"}
+		]
+	}`), info)
+	if err != nil {
+		t.Fatalf("ApplyParamOverrideWithRelayInfo returned error: %v", err)
+	}
+	assertJSONEqual(t, `{
+		"temperature":0.1,
+		"messages":[
+			{"role":"system","content":"a"},
+			{"role":"system","content":"b"},
+			{"role":"system","content":"c"}
+		]
+	}`, string(out))
+
+	// 通配规则逐目标应用折叠为一条 “规则 ×N”；具体路径操作不带折叠后缀
+	require.Equal(t, []string{
+		"regex_replace messages.*.role from ^developer$ to system ×3",
+		"set temperature = 0.1",
+	}, info.ParamOverrideAudit)
+}

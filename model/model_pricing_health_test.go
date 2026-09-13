@@ -1,7 +1,6 @@
 package model
 
 import (
-	"sort"
 	"strings"
 	"testing"
 
@@ -163,6 +162,35 @@ func TestDeleteDisabledChannelDeletesAbilities(t *testing.T) {
 	assert.Equal(t, int64(1), enabledAbilityCount)
 }
 
+// createChannelCoveringPricedModels 创建一个覆盖所有已有定价条目模型名的渠道，
+// 使失效定价检测只可能报告 extraModels 相关的条目。
+func createChannelCoveringPricedModels(t *testing.T, db *gorm.DB, name string, extraModels ...string) {
+	t.Helper()
+	coveredModelSet := make(map[string]struct{})
+	for _, pricingMap := range getModelPricingMaps() {
+		for modelName := range pricingMap.Values {
+			modelName = strings.TrimSpace(modelName)
+			if modelName == "" || strings.Contains(modelName, "*") {
+				continue
+			}
+			coveredModelSet[modelName] = struct{}{}
+		}
+	}
+	modelNames := make([]string, 0, len(coveredModelSet)+len(extraModels))
+	for modelName := range coveredModelSet {
+		modelNames = append(modelNames, modelName)
+	}
+	modelNames = append(modelNames, extraModels...)
+
+	require.NoError(t, db.Create(&Channel{
+		Name:   name,
+		Key:    "test-key",
+		Status: common.ChannelStatusEnabled,
+		Models: strings.Join(modelNames, ","),
+		Group:  "default",
+	}).Error)
+}
+
 func TestCleanupStaleModelPricingRemovesSavedOfficialMapping(t *testing.T) {
 	db := setupModelPricingHealthTestDB(t)
 	const (
@@ -189,28 +217,7 @@ func TestCleanupStaleModelPricingRemovesSavedOfficialMapping(t *testing.T) {
 		common.OptionMapRWMutex.Unlock()
 	})
 
-	coveredModelSet := make(map[string]struct{})
-	for _, pricingMap := range getModelPricingMaps() {
-		for modelName := range pricingMap.Values {
-			modelName = strings.TrimSpace(modelName)
-			if modelName == "" || strings.Contains(modelName, "*") {
-				continue
-			}
-			coveredModelSet[modelName] = struct{}{}
-		}
-	}
-	coveredModels := make([]string, 0, len(coveredModelSet))
-	for modelName := range coveredModelSet {
-		coveredModels = append(coveredModels, modelName)
-	}
-	sort.Strings(coveredModels)
-	require.NoError(t, db.Create(&Channel{
-		Name:   "existing pricing coverage",
-		Key:    "test-key",
-		Status: common.ChannelStatusEnabled,
-		Models: strings.Join(coveredModels, ","),
-		Group:  "default",
-	}).Error)
+	createChannelCoveringPricedModels(t, db, "existing pricing coverage")
 
 	mappings := make(map[string]any)
 	if strings.TrimSpace(originalMappings) != "" {
@@ -249,4 +256,56 @@ func TestCleanupStaleModelPricingRemovesSavedOfficialMapping(t *testing.T) {
 	require.NoError(t, common.UnmarshalJsonStr(persisted.Value, &persistedMappings))
 	assert.NotContains(t, persistedMappings, staleModel)
 	assert.Contains(t, persistedMappings, wildcardModel)
+}
+
+func TestStalePricingCoversPriceReferenceBindings(t *testing.T) {
+	db := setupModelPricingHealthTestDB(t)
+	const (
+		liveAlias  = "pricing-health-live-alias"
+		staleAlias = "pricing-health-stale-alias"
+	)
+
+	common.OptionMapRWMutex.Lock()
+	optionMapWasNil := common.OptionMap == nil
+	if optionMapWasNil {
+		common.OptionMap = make(map[string]string)
+	}
+	common.OptionMapRWMutex.Unlock()
+	t.Cleanup(func() {
+		common.OptionMapRWMutex.Lock()
+		if optionMapWasNil {
+			common.OptionMap = nil
+		}
+		common.OptionMapRWMutex.Unlock()
+	})
+
+	prevReference := ratio_setting.ModelPriceReference2JSONString()
+	t.Cleanup(func() {
+		require.NoError(t, ratio_setting.UpdateModelPriceReferenceByJSONString(prevReference))
+	})
+
+	createChannelCoveringPricedModels(t, db, "pricing health bindings channel", liveAlias)
+
+	require.NoError(t, ratio_setting.UpdateModelPriceReferenceByJSONString(
+		`{"`+staleAlias+`": "pricing-health-gone-source", "`+liveAlias+`": "pricing-health-live-source"}`))
+
+	report, err := GetStaleModelPricingSettings()
+	require.NoError(t, err)
+	var staleBinding *StaleModelPricingItem
+	for i := range report.Items {
+		if report.Items[i].Model == staleAlias {
+			staleBinding = &report.Items[i]
+		}
+	}
+	require.NotNil(t, staleBinding, "alias that no longer exists in any channel should be reported as stale")
+	assert.Contains(t, staleBinding.Fields, "ModelPriceReference")
+	for _, item := range report.Items {
+		assert.NotEqual(t, liveAlias, item.Model, "aliases still on a channel must not be reported stale")
+	}
+
+	_, err = CleanupStaleModelPricingSettings()
+	require.NoError(t, err)
+	bindings := ratio_setting.GetModelPriceReferenceCopy()
+	assert.NotContains(t, bindings, staleAlias, "stale binding should be removed by cleanup")
+	assert.Contains(t, bindings, liveAlias, "live binding must survive cleanup")
 }

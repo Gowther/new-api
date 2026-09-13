@@ -22,6 +22,12 @@ func UpdateModelPriceReferenceByJSONString(jsonStr string) error {
 	return types.LoadFromJsonString(modelPriceReferenceMap, jsonStr)
 }
 
+// GetModelPriceReferenceCopy 返回绑定映射的副本（别名 → 源模型），
+// 供失效定价检测等消费方遍历别名 key。
+func GetModelPriceReferenceCopy() map[string]string {
+	return modelPriceReferenceMap.ReadAll()
+}
+
 // HasPricedReference 判断模型的价格跟随链上是否存在已定价的源模型。
 // hasPricing 由调用方提供（例如检查 model_price/model_ratio 是否配置了该模型），
 // 用于悬空绑定的识别：绑定了但链上没有任何已定价源模型时返回 false。

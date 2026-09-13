@@ -378,6 +378,13 @@ func getModelPricingMaps() []modelPricingMap {
 			Values:    stringMapToAny(billing_setting.GetBillingExprCopy()),
 		},
 		{
+			// 价格跟随绑定：只检测别名 key。源模型不在渠道但别名还在时，
+			// 绑定解析不受渠道影响、仍然有效，不能当作失效清理。
+			OptionKey: "ModelPriceReference",
+			Fields:    []string{"ModelPriceReference"},
+			Values:    stringMapToAny(ratio_setting.GetModelPriceReferenceCopy()),
+		},
+		{
 			OptionKey: OfficialPriceModelMappingsOptionKey,
 			Fields:    []string{OfficialPriceModelMappingsOptionKey},
 			Values:    officialPriceMappings,

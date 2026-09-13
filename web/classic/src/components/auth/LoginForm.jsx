@@ -88,6 +88,8 @@ const LoginForm = () => {
   const [turnstileEnabled, setTurnstileEnabled] = useState(false);
   const [turnstileSiteKey, setTurnstileSiteKey] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');
+  // 提交后自增，强制重挂 Turnstile widget 以获取新 token（一次性）
+  const [turnstileWidgetKey, setTurnstileWidgetKey] = useState(0);
   const [showWeChatLoginModal, setShowWeChatLoginModal] = useState(false);
   const [showEmailLogin, setShowEmailLogin] = useState(false);
   const [wechatLoading, setWechatLoading] = useState(false);
@@ -226,10 +228,16 @@ const LoginForm = () => {
     }
     setSubmitted(true);
     setLoginLoading(true);
+    const submittedTurnstileToken = turnstileToken;
+    if (turnstileEnabled) {
+      // Turnstile token 是一次性的：提交前立即清空并重挂 widget
+      setTurnstileToken('');
+      setTurnstileWidgetKey((current) => current + 1);
+    }
     try {
       if (username && password) {
         const res = await API.post(
-          `/api/user/login?turnstile=${turnstileToken}`,
+          `/api/user/login?turnstile=${submittedTurnstileToken}`,
           {
             username,
             password,
@@ -968,9 +976,13 @@ const LoginForm = () => {
         {turnstileEnabled && (
           <div className='flex justify-center mt-6'>
             <Turnstile
+              key={turnstileWidgetKey}
               sitekey={turnstileSiteKey}
               onVerify={(token) => {
                 setTurnstileToken(token);
+              }}
+              onExpire={() => {
+                setTurnstileToken('');
               }}
             />
           </div>

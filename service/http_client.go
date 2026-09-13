@@ -6,7 +6,6 @@ import (
 	"math"
 	"net"
 	"net/http"
-	"net/url"
 	"sync"
 	"time"
 
@@ -159,9 +158,14 @@ func NewProxyHttpClient(proxyURL string) (*http.Client, error) {
 	}
 	proxyClientLock.Unlock()
 
-	parsedURL, err := url.Parse(proxyURL)
+	// 运行时归一化：统一 scheme 小写、剥离遗留的 path/query/fragment、
+	// 为缺端口的 socks5 补 1080，同时校验 scheme 白名单与端口范围。
+	parsedURL, _, err := common.ParseProxyURLRuntime(proxyURL)
 	if err != nil {
 		return nil, err
+	}
+	if parsedURL == nil {
+		return http.DefaultClient, nil
 	}
 
 	switch parsedURL.Scheme {

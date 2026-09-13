@@ -127,6 +127,20 @@ func CriticalRateLimit() func(c *gin.Context) {
 	return defNext
 }
 
+// UserCriticalRateLimit 在全局 CriticalRateLimit 之外再按认证用户 ID 限流，
+// 用于 access token 生成、 AFF 转账这类按账号滥用的敏感路由。
+// 必须挂在 UserAuth 之后。
+func UserCriticalRateLimit(scope string) func(c *gin.Context) {
+	if !common.CriticalRateLimitEnable {
+		return defNext
+	}
+	return userRateLimitFactory(
+		common.CriticalRateLimitNum,
+		common.CriticalRateLimitDuration,
+		"UC:"+scope,
+	)
+}
+
 func DownloadRateLimit() func(c *gin.Context) {
 	return rateLimitFactory(common.DownloadRateLimitNum, common.DownloadRateLimitDuration, "DW")
 }

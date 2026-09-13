@@ -648,11 +648,18 @@ export function useChannelsColumns(
             <div className='flex items-center gap-2'>
               <div className='flex flex-col gap-1'>
                 <div className='flex items-center gap-1.5'>
+                <Link
+                  to='/usage-logs/$section'
+                  params={{ section: 'common' }}
+                  search={{ channel: String(channel.id) }}
+                  className='focus-visible:ring-ring inline-flex rounded-sm underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:outline-none'
+                >
                   <TruncatedText
                     text={sensitiveVisible ? name : SENSITIVE_MASK}
                     className='font-medium'
                     maxWidth='max-w-[180px]'
                   />
+                </Link>
                   {isPassThrough && (
                     <TooltipProvider delay={100}>
                       <Tooltip>

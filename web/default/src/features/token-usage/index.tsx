@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import { VChart } from '@visactor/react-vchart'
 import {
   BarChart3,
@@ -509,7 +510,18 @@ function TokenRankList({
                       className='size-2.5 shrink-0 rounded-full'
                       style={{ backgroundColor: color }}
                     />
-                    <span className='truncate'>{keyLabel}</span>
+                    {item.token_name ? (
+                      <Link
+                        to='/usage-logs/$section'
+                        params={{ section: 'common' }}
+                        search={{ token: item.token_name }}
+                        className='text-primary truncate underline-offset-4 hover:underline'
+                      >
+                        {keyLabel}
+                      </Link>
+                    ) : (
+                      <span className='truncate'>{keyLabel}</span>
+                    )}
                   </div>
                   <div className='text-foreground/70 text-xs font-medium'>
                     {formatPercent(share)} {t('Share')}
@@ -594,7 +606,20 @@ function UsageDetailsTable({ rows }: { rows: TokenUsageDetailItem[] }) {
               key={`${row.created_at}-${row.token_id}-${row.model_name}`}
             >
               <TableCell>{formatHourRange(row.created_at)}</TableCell>
-              <TableCell>{row.token_name || `#${row.token_id}`}</TableCell>
+              <TableCell>
+                {row.token_name ? (
+                  <Link
+                    to='/usage-logs/$section'
+                    params={{ section: 'common' }}
+                    search={{ token: row.token_name }}
+                    className='text-primary underline-offset-4 hover:underline'
+                  >
+                    {row.token_name}
+                  </Link>
+                ) : (
+                  `#${row.token_id}`
+                )}
+              </TableCell>
               <TableCell>{row.model_name || '-'}</TableCell>
               <TableCell className='text-right'>
                 {formatInteger(row.count)}

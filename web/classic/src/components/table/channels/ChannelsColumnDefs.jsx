@@ -379,17 +379,29 @@ export const getChannelsColumns = ({
           upstreamUpdateMeta.enabled &&
           (pendingAddCount > 0 || pendingRemoveCount > 0);
         // 名称限宽截断：超长渠道名会把表格撑出容器，权重列会被固定操作列盖住；
-        // 全名悬浮可见（备注 tooltip / title）
+        // 全名悬浮可见（备注 tooltip / title）；名称与 ID 列一样可点击跳转使用日志
+        const isTagAggregate = record.children !== undefined;
+        const wrapNameLink = (node) =>
+          isTagAggregate ? (
+            node
+          ) : (
+            <Link
+              to={`/console/log?channel=${encodeURIComponent(String(record.id))}`}
+              className='text-blue-500 underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2'
+            >
+              {node}
+            </Link>
+          );
         const nameNode =
           record.remark && record.remark.trim() !== '' ? (
             <ChannelRemarkTooltip remark={record.remark}>
               <span className='-my-1 inline-flex min-h-7 max-w-[30rem] cursor-help items-center py-1'>
-                <span className='truncate'>{text}</span>
+                <span className='truncate'>{wrapNameLink(text)}</span>
               </span>
             </ChannelRemarkTooltip>
           ) : (
             <span className='block max-w-[30rem] truncate' title={text}>
-              {text}
+              {wrapNameLink(text)}
             </span>
           );
 

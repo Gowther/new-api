@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { VChart } from '@visactor/react-vchart';
 import { BarChart3, Clock, Key, RefreshCw, Sparkles } from 'lucide-react';
 import { Button, Card, Empty, Select, Spin, Table } from '@douyinfe/semi-ui';
+import { Link } from 'react-router-dom';
 import { API, renderQuota, showError } from '../../helpers';
 import { CARD_PROPS, CHART_CONFIG } from '../../constants/dashboard.constants';
 import { useActualTheme } from '../../context/Theme';
@@ -455,7 +456,16 @@ function TokenRankList({ items, colorByKey, t }) {
                       className='h-2.5 w-2.5 shrink-0 rounded-full'
                       style={{ backgroundColor: color }}
                     />
-                    <span className='truncate'>{keyLabel}</span>
+                    {item.token_name ? (
+                      <Link
+                        to={`/console/log?token_name=${encodeURIComponent(item.token_name)}`}
+                        className='text-blue-500 truncate underline-offset-2 hover:underline'
+                      >
+                        {keyLabel}
+                      </Link>
+                    ) : (
+                      <span className='truncate'>{keyLabel}</span>
+                    )}
                   </div>
                   <div className='text-xs font-medium text-gray-600 dark:text-gray-300'>
                     {formatPercent(share)} {t('占比')}
@@ -870,7 +880,17 @@ const TokenUsage = () => {
       {
         title: t('令牌名称'),
         dataIndex: 'token_name',
-        render: (value, record) => value || `#${record.token_id}`,
+        render: (value, record) =>
+          value ? (
+            <Link
+              to={`/console/log?token_name=${encodeURIComponent(value)}`}
+              className='text-blue-500 underline-offset-2 hover:underline'
+            >
+              {value}
+            </Link>
+          ) : (
+            `#${record.token_id}`
+          ),
       },
       {
         title: t('模型'),

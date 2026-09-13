@@ -17,6 +17,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from './api'
+import {
+  getOAuthSessionStorage,
+  markOAuthBindPopup,
+} from '@/features/auth/lib/oauth-callback-mode'
 
 // ============================================================================
 // OAuth URL Builders
@@ -97,6 +101,33 @@ export async function getOAuthState(): Promise<string | null> {
 }
 
 /**
+ * 绑定/登录复用弹窗的统一发起：先开一个同源 about:blank 占位弹窗，在其
+ * sessionStorage 里盖章（provider+state），再导向授权页。回调页据此区分
+ * 绑定流与普通登录——仅凭 window.opener 无法判断，外部链接打开的登录
+ * 标签页同样携带 opener，会被误判为绑定流并卡死在绑定页面。
+ */
+export function openOAuthBindPopup(
+  url: string,
+  provider: string,
+  state: string
+): void {
+  const popup = window.open('about:blank')
+  if (!popup) {
+    // 弹窗被浏览器拦截：回退为直接打开
+    window.open(url)
+    return
+  }
+  try {
+    markOAuthBindPopup(getOAuthSessionStorage(popup), provider, state)
+  } catch (error) {
+    // sessionStorage 被隐私设置封锁时绑定回调退回登录方向（可恢复），
+    // 这里照常推进授权页
+    void error
+  }
+  popup.location.replace(url)
+}
+
+/**
  * Handle GitHub OAuth binding/login
  */
 export async function handleGitHubOAuth(clientId: string): Promise<void> {
@@ -104,7 +135,7 @@ export async function handleGitHubOAuth(clientId: string): Promise<void> {
   if (!state) return
 
   const url = buildGitHubOAuthUrl(clientId, state)
-  window.open(url, '_blank')
+  openOAuthBindPopup(url, 'github', state)
 }
 
 /**
@@ -115,7 +146,7 @@ export async function handleDiscordOAuth(clientId: string): Promise<void> {
   if (!state) return
 
   const url = buildDiscordOAuthUrl(clientId, state)
-  window.open(url, '_blank')
+  openOAuthBindPopup(url, 'discord', state)
 }
 
 /**
@@ -129,7 +160,7 @@ export async function handleOIDCOAuth(
   if (!state) return
 
   const url = buildOIDCOAuthUrl(authUrl, clientId, state)
-  window.open(url, '_blank')
+  openOAuthBindPopup(url, 'oidc', state)
 }
 
 /**
@@ -140,5 +171,5 @@ export async function handleLinuxDOOAuth(clientId: string): Promise<void> {
   if (!state) return
 
   const url = buildLinuxDOOAuthUrl(clientId, state)
-  window.open(url, '_blank')
+  openOAuthBindPopup(url, 'linuxdo', state)
 }

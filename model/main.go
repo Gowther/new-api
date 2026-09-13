@@ -155,10 +155,10 @@ func chooseDB(envName string, isLog bool) (*gorm.DB, common.DatabaseType, error)
 			common.SysLog("using PostgreSQL as database")
 			// 同时关闭 pgx 隐式与 GORM 显式预处理语句：命名 prepared statement 是会话状态，
 			// 与事务池代理（PgBouncer/Neon/Supabase）不兼容，会触发 FATAL 08P01/42P05。
-			db, err := gorm.Open(postgres.New(postgres.Config{
+			db, err := gorm.Open(postgresMigrationDialector{postgres.New(postgres.Config{
 				DSN:                  dsn,
 				PreferSimpleProtocol: true, // disables implicit prepared statement usage
-			}), &gorm.Config{
+			}).(postgres.Dialector)}, &gorm.Config{
 				PrepareStmt: false,
 			})
 			return db, common.DatabaseTypePostgreSQL, err
@@ -180,7 +180,7 @@ func chooseDB(envName string, isLog bool) (*gorm.DB, common.DatabaseType, error)
 				dsn += "?parseTime=true"
 			}
 		}
-		db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
+		db, err := gorm.Open(mysqlMigrationDialector{mysql.Open(dsn).(mysql.Dialector)}, &gorm.Config{
 			PrepareStmt: true, // precompile SQL
 		})
 		return db, common.DatabaseTypeMySQL, err

@@ -331,3 +331,30 @@ func TestGeminiTextGenerationHandlerUsesEstimatedPromptTokensWhenUsagePromptMiss
 	require.Equal(t, 100, usage.CompletionTokens)
 	require.Equal(t, 110, usage.TotalTokens)
 }
+
+func TestBuildUsageFromGeminiMetadataNormalizesModalityVariants(t *testing.T) {
+	usage := buildUsageFromGeminiMetadata(dto.GeminiUsageMetadata{
+		PromptTokenCount: 100,
+		PromptTokensDetails: []dto.GeminiPromptTokensDetails{
+			{Modality: "audio", TokenCount: 40},
+			{Modality: "TEXT", TokenCount: 60},
+		},
+		CandidatesTokensDetails: []dto.GeminiPromptTokensDetails{
+			{Modality: " IMAGE ", TokenCount: 30},
+		},
+		TotalTokenCount: 130,
+	}, 0)
+
+	require.Equal(t, 40, usage.PromptTokensDetails.AudioTokens)
+	require.Equal(t, 60, usage.PromptTokensDetails.TextTokens)
+	require.Equal(t, 30, usage.CompletionTokenDetails.ImageTokens)
+}
+
+func TestBuildUsageFromGeminiMetadataClampsNegativeCompletion(t *testing.T) {
+	usage := buildUsageFromGeminiMetadata(dto.GeminiUsageMetadata{
+		PromptTokenCount: 50,
+		TotalTokenCount:  30,
+	}, 0)
+
+	require.Equal(t, 0, usage.CompletionTokens)
+}

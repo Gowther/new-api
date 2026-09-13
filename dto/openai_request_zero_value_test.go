@@ -1,9 +1,11 @@
 package dto
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
@@ -84,6 +86,13 @@ func TestGeneralOpenAIRequestGetSystemRoleName(t *testing.T) {
 		{name: "o1 mini stays system", model: "o1-mini", want: "system"},
 		{name: "o1 preview stays system", model: "o1-preview", want: "system"},
 		{name: "gpt 5 uses developer", model: "gpt-5", want: "developer"},
+		{name: "gpt 5.6 uses developer", model: "gpt-5.6-luna", want: "developer"},
+		{name: "gpt 6 uses developer", model: "gpt-6-astra", want: "developer"},
+		{name: "gpt 6 snapshot uses developer", model: "gpt-6-astra-2026-09-03", want: "developer"},
+		{name: "unknown gpt 6 variant stays system", model: "gpt-6-astra-pro", want: "system"},
+		{name: "invalid gpt 6 snapshot stays system", model: "gpt-6-astra-2026-99-03", want: "system"},
+		{name: "unknown generation stays system", model: "gpt-7", want: "system"},
+		{name: "gpt 4.1 stays system", model: "gpt-4.1-nano", want: "system"},
 		{name: "omni is not o series", model: "omni-moderation-latest", want: "system"},
 	}
 
@@ -91,7 +100,108 @@ func TestGeneralOpenAIRequestGetSystemRoleName(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req := GeneralOpenAIRequest{Model: tt.model}
 
-			require.Equal(t, tt.want, req.GetSystemRoleName())
+			assert.Equal(t, tt.want, req.GetSystemRoleName())
 		})
 	}
+}
+
+func TestIsOpenAIGPT5Model(t *testing.T) {
+	tests := []struct {
+		model string
+		want  bool
+	}{
+		{model: "gpt-5", want: true},
+		{model: "gpt-5-mini", want: true},
+		{model: "gpt-5-chat-latest", want: true},
+		{model: "gpt-5.6-luna", want: true},
+		{model: "gpt-5.4-nano", want: true},
+		{model: "gpt-5.2-2025-12-11", want: true},
+		{model: "gpt-6-astra", want: false},
+		{model: "gpt-50", want: false},
+		{model: "gpt-5custom", want: false},
+		{model: "gpt-4.1", want: false},
+		{model: "gpt-4o", want: false},
+		{model: "gpt-oss-120b", want: false},
+		{model: "gpt-image-2", want: false},
+		{model: "o3-mini", want: false},
+		{model: "", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			assert.Equal(t, tt.want, IsOpenAIGPT5Model(tt.model))
+		})
+	}
+}
+
+func TestGetOpenAIChatCapabilities(t *testing.T) {
+	tests := []struct {
+		name        string
+		model       string
+		effort      string
+		maxTokens   bool
+		developer   bool
+		temperature bool
+	}{
+		{name: "unrecognized model keeps everything", model: "gpt-7", maxTokens: false, developer: false, temperature: true},
+		{name: "gpt-4o keeps everything", model: "gpt-4o", maxTokens: false, developer: false, temperature: true},
+		{name: "o model", model: "o3", maxTokens: true, developer: true, temperature: false},
+		{name: "o1-mini no developer role", model: "o1-mini", maxTokens: true, developer: false, temperature: false},
+		{name: "gpt-5 default effort drops sampling", model: "gpt-5", maxTokens: true, developer: true, temperature: false},
+		{name: "gpt-5 with reasoning drops sampling", model: "gpt-5", effort: "medium", maxTokens: true, developer: true, temperature: false},
+		{name: "gpt-5.1 without effort keeps sampling", model: "gpt-5.1", maxTokens: true, developer: true, temperature: true},
+		{name: "gpt-5.1 snapshot without effort keeps sampling", model: "gpt-5.1-2025-11-13", maxTokens: true, developer: true, temperature: true},
+		{name: "gpt-5.1 with reasoning drops sampling", model: "gpt-5.1", effort: "low", maxTokens: true, developer: true, temperature: false},
+		{name: "gpt-5.6 never keeps sampling", model: "gpt-5.6-luna", maxTokens: true, developer: true, temperature: false},
+		{name: "gpt-6-astra never keeps sampling", model: "gpt-6-astra", maxTokens: true, developer: true, temperature: false},
+		{name: "gpt-6-astra snapshot never keeps sampling", model: "gpt-6-astra-2026-09-03", maxTokens: true, developer: true, temperature: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			capabilities := GetOpenAIChatCapabilities(tt.model, tt.effort)
+			assert.Equal(t, tt.maxTokens, capabilities.UseMaxCompletionTokens)
+			assert.Equal(t, tt.developer, capabilities.UseDeveloperRole)
+			assert.Equal(t, tt.temperature, capabilities.SupportsTemperature)
+		})
+	}
+}
+
+func TestRequestMarshalJSONToolLoadingOmitsContentKey(t *testing.T) {
+	tools := json.RawMessage(`[{"type":"function","function":{"name":"get_current_time"}}]`)
+
+	// 工具加载消息：content 键必须整体缺席，tools 原样透传
+	encoded, err := common.Marshal(&GeneralOpenAIRequest{
+		Model:    "kimi-k3",
+		Messages: []Message{{Role: "system", Tools: tools}, {Role: "assistant"}},
+	})
+	require.NoError(t, err)
+	toolLoadingContent := gjson.Get(string(encoded), "messages.0.content")
+	assert.False(t, toolLoadingContent.Exists())
+	assert.JSONEq(t, string(tools), gjson.Get(string(encoded), "messages.0.tools").Raw)
+
+	// 普通消息保持原有行为："content": null 仍然输出
+	content := gjson.Get(string(encoded), "messages.1.content")
+	assert.True(t, content.Exists())
+	assert.Equal(t, "null", content.Raw)
+
+	// 无工具加载消息时不走逐消息编码，输出与默认序列化一致
+	encoded, err = common.Marshal(&GeneralOpenAIRequest{
+		Model:    "gpt-4o",
+		Messages: []Message{{Role: "assistant"}},
+	})
+	require.NoError(t, err)
+	content = gjson.Get(string(encoded), "messages.0.content")
+	assert.True(t, content.Exists())
+	assert.Equal(t, "null", content.Raw)
+	assert.NotContains(t, string(encoded), "tools")
+
+	// 带 content 的工具加载消息不受影响
+	encoded, err = common.Marshal(&GeneralOpenAIRequest{
+		Model:    "kimi-k3",
+		Messages: []Message{{Role: "system", Content: "load tools", Tools: tools}},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "load tools", gjson.Get(string(encoded), "messages.0.content").String())
+	assert.JSONEq(t, string(tools), gjson.Get(string(encoded), "messages.0.tools").Raw)
 }

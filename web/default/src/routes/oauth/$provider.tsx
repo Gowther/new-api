@@ -28,6 +28,10 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { OAuthCallbackScreen } from '@/features/auth/components/oauth-callback-screen'
+import {
+  getOAuthSessionStorage,
+  resolveOAuthCallbackMode,
+} from '@/features/auth/lib/oauth-callback-mode'
 import { OAUTH_BIND_STORAGE_KEY } from '@/features/auth/constants'
 import { api, getSelf } from '@/lib/api'
 import { useAuthStore, type AuthUser } from '@/stores/auth-store'
@@ -46,16 +50,23 @@ function OAuthCallback() {
     state?: string
     redirect?: string
   }
-  const [mode, setMode] = useState<'login' | 'bind'>(() => {
+  // 绑定流的判定必须基于正向证据：由己方弹窗在 sessionStorage 里盖的
+  // provider+state 章 + 活跃 opener。仅凭 window.opener 会把从外部链接
+  // （target="_blank"、Slack、邮件客户端等）打开的登录标签页误判为绑定。
+  const resolveMode = (): 'login' | 'bind' => {
     if (typeof window === 'undefined') return 'login'
-    return window.opener ? 'bind' : 'login'
-  })
+    return resolveOAuthCallbackMode(provider, search?.state ?? '', {
+      opener: window.opener,
+      storage: getOAuthSessionStorage(window),
+    })
+  }
+  const [mode, setMode] = useState<'login' | 'bind'>(resolveMode)
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setMode(window.opener ? 'bind' : 'login')
-  }, [])
+    setMode(resolveMode())
+    // 依赖 search.state：授权方回跳后 state 才就位
+  }, [provider, search?.state])
 
   useEffect(() => {
     ;(async () => {
@@ -82,8 +93,7 @@ function OAuthCallback() {
         safeNavigate('/sign-in')
         return
       }
-      const isBindingFlow =
-        typeof window !== 'undefined' ? Boolean(window.opener) : mode === 'bind'
+      const isBindingFlow = resolveMode() === 'bind'
       if (isBindingFlow && mode !== 'bind') {
         setMode('bind')
       } else if (!isBindingFlow && mode !== 'login') {

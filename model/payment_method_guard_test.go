@@ -225,7 +225,8 @@ func TestRechargeEpayKeepsRedisAndDatabaseCreditInSync(t *testing.T) {
 	t.Cleanup(func() { common.QuotaPerUnit = oldQuotaPerUnit })
 
 	user := insertUserForPaymentGuardTest(t, 502, 7)
-	require.NoError(t, populateUserCache(*user))
+	_, err := populateUserCache(*user)
+	require.NoError(t, err)
 	order := createEpayTestOrder(t, user.Id, "EPAYTESTREDISSYNC", PaymentProviderEpay, common.TopUpStatusPending)
 
 	alreadyDone, err := RechargeEpay(order.TradeNo, "alipay", "127.0.0.1")

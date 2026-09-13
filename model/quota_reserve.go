@@ -66,3 +66,23 @@ func cacheApplyUserQuotaDelta(userID int, delta int64) (cacheQuotaResult, error)
 		[]string{getUserCacheKey(userID)}, delta, userID, userCacheSchemaVersion).Int()
 	return quotaResultFromLua(result, err)
 }
+
+// tokenQuotaDeltaScript 守卫式令牌配额增量：只在完整哈希（Id 匹配且配额字段
+// 存在）上操作，哈希缺失或 Id 不匹配返回 miss，由下次读取从数据库水合，
+// 绝不创建只有配额字段的残缺哈希。
+const tokenQuotaDeltaScript = `
+if tonumber(redis.call('HGET', KEYS[1], 'Id') or '0') ~= tonumber(ARGV[2])
+  or redis.call('HEXISTS', KEYS[1], 'RemainQuota') == 0
+  or redis.call('HEXISTS', KEYS[1], 'UsedQuota') == 0 then
+  return -1
+end
+redis.call('HINCRBY', KEYS[1], 'RemainQuota', tonumber(ARGV[1]))
+redis.call('HINCRBY', KEYS[1], 'UsedQuota', -tonumber(ARGV[1]))
+redis.call('HSET', KEYS[1], 'AccessedTime', ARGV[3])
+return 1`
+
+func cacheApplyTokenQuotaDelta(id int, key string, delta int64) (cacheQuotaResult, error) {
+	result, err := common.RDB.Eval(context.Background(), tokenQuotaDeltaScript,
+		[]string{getTokenCacheKey(key)}, delta, id, common.GetTimestamp()).Int()
+	return quotaResultFromLua(result, err)
+}

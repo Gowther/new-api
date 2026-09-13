@@ -283,3 +283,60 @@ func TestResetUserPasswordByEmailRequiresSingleActiveMatch(t *testing.T) {
 	err = ResetUserPasswordByEmail("missing@example.com", "NewPassword123")
 	require.True(t, errors.Is(err, ErrEmailNotFound))
 }
+
+func createUserBindTestUser(t *testing.T) User {
+	t.Helper()
+	user := User{
+		Username: "bind-test-user",
+		Password: "unused-password-hash",
+		Role:     common.RoleCommonUser,
+		Status:   common.UserStatusEnabled,
+		Group:    "default",
+		AffCode:  "bind-test-aff-code",
+	}
+	require.NoError(t, DB.Create(&user).Error)
+	return user
+}
+
+func TestUpdateUserBindColumnOnlyTouchesTheBindingColumn(t *testing.T) {
+	setupUserUpdateTestState(t)
+
+	user := createUserBindTestUser(t)
+	require.NoError(t, DB.Model(&User{}).Where("id = ?", user.Id).Updates(map[string]interface{}{
+		"role":   common.RoleAdminUser,
+		"status": common.UserStatusEnabled,
+		"group":  "vip",
+	}).Error)
+
+	require.NoError(t, UpdateUserBindColumn(user.Id, "github_id", "gh-12345"))
+
+	reloaded, err := GetUserById(user.Id, true)
+	require.NoError(t, err)
+	assert.Equal(t, "gh-12345", reloaded.GitHubId)
+	assert.Equal(t, common.RoleAdminUser, reloaded.Role)
+	assert.Equal(t, common.UserStatusEnabled, reloaded.Status)
+	assert.Equal(t, "vip", reloaded.Group)
+}
+
+func TestUpdateUserBindColumnPreservesRestrictiveChange(t *testing.T) {
+	setupUserUpdateTestState(t)
+
+	user := createUserBindTestUser(t)
+	require.NoError(t, DB.Model(&User{}).Where("id = ?", user.Id).
+		Update("status", common.UserStatusDisabled).Error)
+	require.NoError(t, UpdateUserBindColumn(user.Id, "wechat_id", "wx-open-id"))
+
+	reloaded, err := GetUserById(user.Id, true)
+	require.NoError(t, err)
+	assert.Equal(t, "wx-open-id", reloaded.WeChatId)
+	assert.Equal(t, common.UserStatusDisabled, reloaded.Status)
+}
+
+func TestUpdateUserBindColumnRejectsUnknownColumn(t *testing.T) {
+	setupUserUpdateTestState(t)
+
+	user := createUserBindTestUser(t)
+	require.Error(t, UpdateUserBindColumn(user.Id, "role", "1"))
+	require.Error(t, UpdateUserBindColumn(user.Id, "status", "1"))
+	require.Error(t, UpdateUserBindColumn(user.Id, "quota", "1"))
+}

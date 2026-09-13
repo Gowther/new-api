@@ -54,23 +54,16 @@ func TelegramBind(c *gin.Context) {
 
 	session := sessions.Default(c)
 	id := session.Get("id")
-	user := model.User{Id: id.(int)}
-	if err := user.FillUserById(); err != nil {
-		c.JSON(200, gin.H{
-			"message": err.Error(),
-			"success": false,
-		})
-		return
-	}
-	if user.Id == 0 {
+	userId := id.(int)
+	if userId == 0 {
 		c.JSON(http.StatusOK, gin.H{
-			"success": false,
 			"message": "用户已注销",
+			"success": false,
 		})
 		return
 	}
-	user.TelegramId = telegramId
-	if err := user.Update(false); err != nil {
+	// 只更新绑定列，避免完整用户快照覆盖并发的封禁、降权或分组变更。
+	if err := model.UpdateUserBindColumn(userId, "telegram_id", telegramId); err != nil {
 		c.JSON(200, gin.H{
 			"message": err.Error(),
 			"success": false,

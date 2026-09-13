@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -50,10 +51,23 @@ func getUserCacheKey(userId int) string {
 	return fmt.Sprintf("user:%d", userId)
 }
 
-// invalidateUserCache clears user cache
+// userCacheFenceSeconds 与令牌侧同理：必须覆盖一次变更的写库时间加在途读者
+// 的回源间隙，过期后读者的冷初始化才会重新发布新状态。
+const userCacheFenceSeconds = 10
+
+func getUserCacheFenceKey(userId int) string {
+	return fmt.Sprintf("user:fence:%d", userId)
+}
+
+// invalidateUserCache 在用户变更写库前清理缓存：先立 fence 再删除哈希，
+// 持有变更前快照的在途读者不能重新发布旧状态（包括旧 Quota）。
 func invalidateUserCache(userId int) error {
 	if !common.RedisEnabled {
 		return nil
+	}
+	ctx := context.Background()
+	if err := common.RDB.Set(ctx, getUserCacheFenceKey(userId), 1, userCacheFenceSeconds*time.Second).Err(); err != nil {
+		return err
 	}
 	return common.RedisDelKey(getUserCacheKey(userId))
 }
@@ -64,16 +78,39 @@ func InvalidateUserCache(userId int) error {
 	return invalidateUserCache(userId)
 }
 
-func populateUserCache(user User) error {
+// populateUserCache 冷初始化用户缓存：有 fence 时不发布；哈希已存在时只刷新
+// TTL、绝不覆盖——其 Quota 可能已领先于该快照（原子预扣先改 Redis 后落库），
+// 快照覆盖会回滚已扣余额。
+// 返回值：0=被 fence 拦截，1=完成初始化，2=哈希已存在，仅刷新 TTL。
+func populateUserCache(user User) (int, error) {
 	if !common.RedisEnabled {
-		return nil
+		return 0, nil
 	}
-
-	return common.RedisHSetObj(
-		getUserCacheKey(user.Id),
-		user.ToBaseUser(),
-		time.Duration(common.RedisKeyCacheSeconds())*time.Second,
-	)
+	base := user.ToBaseUser()
+	const script = `
+if redis.call('EXISTS', KEYS[2]) == 1 then
+  return 0
+end
+if redis.call('EXISTS', KEYS[1]) == 1 then
+  redis.call('EXPIRE', KEYS[1], ARGV[9])
+  return 2
+end
+redis.call('HSET', KEYS[1],
+  'Id', ARGV[1], 'Group', ARGV[2], 'Email', ARGV[3], 'Quota', ARGV[4],
+  'Status', ARGV[5], 'Username', ARGV[6], 'Role', ARGV[7], 'Setting', ARGV[8])
+redis.call('EXPIRE', KEYS[1], ARGV[9])
+return 1`
+	ttl := common.RedisKeyCacheSeconds()
+	if ttl <= 0 {
+		ttl = 60
+	}
+	return common.RDB.Eval(context.Background(), script, []string{
+		getUserCacheKey(user.Id), getUserCacheFenceKey(user.Id),
+	},
+		base.Id, base.Group, base.Email, base.Quota,
+		base.Status, base.Username, base.Role, base.Setting,
+		ttl,
+	).Int()
 }
 
 // updateUserCache refreshes non-quota user cache fields.
@@ -106,8 +143,8 @@ func GetUserCache(userId int) (userCache *UserBase, err error) {
 		// Update Redis cache asynchronously on successful DB read
 		if shouldUpdateRedis(fromDB, err) && user != nil {
 			gopool.Go(func() {
-				if err := populateUserCache(*user); err != nil {
-					common.SysLog("failed to update user status cache: " + err.Error())
+				if _, err := populateUserCache(*user); err != nil {
+					common.SysLog("failed to init user cache: " + err.Error())
 				}
 			})
 		}
@@ -150,6 +187,9 @@ func cacheGetUserBase(userId int) (*UserBase, error) {
 	err := common.RedisHGetObj(getUserCacheKey(userId), &userCache)
 	if err != nil {
 		return nil, err
+	}
+	if userCache.Id <= 0 {
+		return nil, fmt.Errorf("user cache is incomplete")
 	}
 	return &userCache, nil
 }

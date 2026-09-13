@@ -176,8 +176,13 @@ func formatUserLogs(logs []*Log, startIdx int) {
 			delete(otherMap, "admin_info")
 			// Remove operation-audit details (operator/route info), admin-only.
 			delete(otherMap, "audit_info")
-			// delete(otherMap, "reject_reason")
-			// delete(otherMap, "stream_status")
+			// Remove legacy privileged fields that predate the admin_info split:
+			// channel metadata (lets users enumerate backend channels) and
+			// admin-set reject reasons. New writes go through admin_info instead.
+			delete(otherMap, "channel_id")
+			delete(otherMap, "channel_name")
+			delete(otherMap, "channel_type")
+			delete(otherMap, "reject_reason")
 		}
 		logs[i].Other = common.MapToJsonStr(otherMap)
 	}
@@ -972,13 +977,22 @@ func buildErrorLogSummaryItem(log *Log) *ErrorLogSummaryItem {
 		fingerprint,
 	}, "\x1f")
 
+	// 渠道名现在写在 admin_info 下；旧日志仍读顶层字段作为回退。
+	channelName := ""
+	if adminInfo, ok := other["admin_info"].(map[string]interface{}); ok {
+		channelName = errorSummaryString(adminInfo["channel_name"])
+	}
+	if channelName == "" {
+		channelName = errorSummaryString(other["channel_name"])
+	}
+
 	return &ErrorLogSummaryItem{
 		Key:                     key,
 		Fingerprint:             fingerprint,
 		ModelName:               log.ModelName,
 		Group:                   log.Group,
 		ChannelId:               log.ChannelId,
-		ChannelName:             errorSummaryString(other["channel_name"]),
+		ChannelName:             channelName,
 		ErrorType:               errorType,
 		ErrorCode:               errorCode,
 		StatusCode:              statusCode,

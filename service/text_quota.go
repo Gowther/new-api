@@ -422,7 +422,14 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		other = GenerateTextOtherInfo(ctx, relayInfo, summary.ModelRatio, summary.GroupRatio, summary.CompletionRatio, summary.CacheTokens, summary.CacheRatio, summary.ModelPrice, relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio)
 	}
 	if adminRejectReason != "" {
-		other["reject_reason"] = adminRejectReason
+		// 拦截原因是管理员配置的内容，挂在 admin_info 下，
+		// formatUserLogs 会整体剥离 admin_info，普通用户不可见。
+		adminInfo, ok := other["admin_info"].(map[string]interface{})
+		if !ok || adminInfo == nil {
+			adminInfo = map[string]interface{}{}
+			other["admin_info"] = adminInfo
+		}
+		adminInfo["reject_reason"] = adminRejectReason
 	}
 	if summary.ImageTokens != 0 {
 		other["image"] = true

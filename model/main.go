@@ -287,6 +287,10 @@ func migrateDB() error {
 	if err := migrateTokenModelLimitsToText(); err != nil {
 		return err
 	}
+	// 老部署的 options 表可能缺失 key 列上的主键/唯一键，先修复再 AutoMigrate
+	if err := migrateOptionPrimaryKey(DB); err != nil {
+		common.SysError("failed to migrate options primary key: " + err.Error())
+	}
 
 	err := DB.AutoMigrate(
 		&Channel{},

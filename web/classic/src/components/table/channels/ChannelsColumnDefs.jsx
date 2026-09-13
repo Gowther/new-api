@@ -50,6 +50,7 @@ import {
   IconAlertTriangle,
   IconLock,
   IconUndo,
+  IconSpin,
 } from '@douyinfe/semi-icons';
 import { FaRandom } from 'react-icons/fa';
 import { ChannelRemarkTooltip } from '../../common/ChannelRemarkTooltip';
@@ -809,13 +810,26 @@ export const getChannelsColumns = ({
                 className='overflow-hidden'
                 aria-label={t('测试单个渠道操作项目组')}
               >
+                {/* 覆盖式 spinner：不改变按钮宽度，避免操作列被撑行 */}
                 <Button
                   size='small'
                   type='tertiary'
-                  loading={directTestingId === record.id}
+                  className='relative'
+                  disabled={directTestingId === record.id}
                   onClick={() => directTestChannel(record)}
                 >
-                  {t('测试')}
+                  <span
+                    className={
+                      directTestingId === record.id ? 'invisible' : undefined
+                    }
+                  >
+                    {t('测试')}
+                  </span>
+                  {directTestingId === record.id && (
+                    <span className='absolute inset-0 flex items-center justify-center'>
+                      <IconSpin spin />
+                    </span>
+                  )}
                 </Button>
                 <Button
                   size='small'

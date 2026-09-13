@@ -86,7 +86,10 @@ import {
   updateChannel,
   updateChannelStatus,
 } from '@/features/channels/api'
-import { ChannelsProvider } from '@/features/channels/components/channels-provider'
+import {
+  ChannelsProvider,
+  type ChannelDirectTestFailure,
+} from '@/features/channels/components/channels-provider'
 import { ChannelTestDialog } from '@/features/channels/components/dialogs/channel-test-dialog'
 import { CopyChannelDialog } from '@/features/channels/components/dialogs/copy-channel-dialog'
 import { ChannelMutateDrawer } from '@/features/channels/components/drawers/channel-mutate-drawer'
@@ -654,6 +657,8 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
   const [deletingChannel, setDeletingChannel] = useState<Channel | null>(null)
   const [copyingChannel, setCopyingChannel] = useState<Channel | null>(null)
   const [testingChannel, setTestingChannel] = useState<Channel | null>(null)
+  const [directTestFailure, setDirectTestFailure] =
+    useState<ChannelDirectTestFailure | null>(null)
   const [directTestingChannelId, setDirectTestingChannelId] = useState<
     number | null
   >(null)
@@ -1495,11 +1500,13 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
   // Picking another model would silently re-scope an open dialog, so close it.
   useEffect(() => {
     setTestingChannel(null)
+    setDirectTestFailure(null)
   }, [selectedModelName])
 
   const handleTestDialogOpenChange = (open: boolean) => {
     if (open) return
     setTestingChannel(null)
+    setDirectTestFailure(null)
     // The dialog writes response_time / test_time into the channel caches.
     void queryClient.invalidateQueries({
       queryKey: modelRoutingQueryKeys.channels(),
@@ -1512,17 +1519,33 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
   const handleDirectTestChannel = async (channel: Channel) => {
     if (!selectedModelName) return
     setDirectTestingChannelId(channel.id)
+    const loadingToastId = toast.loading(
+      t('Testing channel {{name}}...', { name: channel.name })
+    )
     try {
       await handleTestChannel(
         channel.id,
         { testModel: selectedModelName, channelName: channel.name },
-        () => {
+        (success, _responseTime, error, errorCode) => {
           void queryClient.invalidateQueries({
             queryKey: modelRoutingQueryKeys.channels(),
           })
+          if (!success) {
+            // Open the dialog scoped to the routed model with the failure
+            // seeded, so the error stays readable like a dialog-run test.
+            setDirectTestFailure({
+              channelId: channel.id,
+              model: selectedModelName,
+              error: error || t('Test failed'),
+              errorCode,
+              completedAt: Date.now(),
+            })
+            setTestingChannel(channel)
+          }
         }
       )
     } finally {
+      toast.dismiss(loadingToastId)
       setDirectTestingChannelId(null)
     }
   }
@@ -2594,6 +2617,7 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
           currentRow={testingChannel}
           restrictToModels={selectedModelName ? [selectedModelName] : []}
           onOpenChange={handleTestDialogOpenChange}
+          directTestFailure={directTestFailure}
         />
       </ChannelsProvider>
       <ConfirmDialog

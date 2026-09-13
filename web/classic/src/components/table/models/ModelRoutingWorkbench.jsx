@@ -53,6 +53,7 @@ import {
   IconRefresh,
   IconSave,
   IconSearch,
+  IconSpin,
   IconTreeTriangleDown,
   IconUndo,
 } from '@douyinfe/semi-icons';
@@ -1539,15 +1540,25 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   }, [selectedModelName]);
 
   // 行内直测和渠道管理页的主按钮行为一致：直接测当前选中的路由模型，
-  // 弹窗只是换模型测试的次要入口。
+  // 失败时把结果记入模型测试弹窗并自动打开，弹窗只是换模型测试的次要入口。
   const directTestChannel = async (channel) => {
     if (!selectedModelName) return;
     setDirectTestingChannelId(channel.id);
+    const recordFailure = (failure) => {
+      setModelTestResults((prev) => ({
+        ...prev,
+        [`${channel.id}-${selectedModelName}`]: {
+          ...failure,
+          timestamp: Date.now(),
+        },
+      }));
+      setTestingChannel(channel);
+    };
     try {
       const res = await API.get(
         `/api/channel/test/${channel.id}?model=${encodeURIComponent(selectedModelName)}`,
       );
-      const { success, message, time } = res.data || {};
+      const { success, message, time, error_code } = res.data || {};
       if (success) {
         showSuccess(t('测试成功'));
         setChannels((prev) =>
@@ -1564,9 +1575,21 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
         );
       } else {
         showError(message || t('测试失败'));
+        recordFailure({
+          success,
+          message,
+          time: time || 0,
+          errorCode: error_code || null,
+        });
       }
     } catch (error) {
       showError(error.message || t('测试失败'));
+      recordFailure({
+        success: false,
+        message: error.message || t('网络错误'),
+        time: 0,
+        errorCode: null,
+      });
     } finally {
       setDirectTestingChannelId(null);
     }
@@ -1856,14 +1879,30 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
               className='overflow-hidden'
               aria-label={t('测试单个渠道操作项目组')}
             >
+              {/* 覆盖式 spinner：不改变按钮宽度，避免操作列被挤折行 */}
               <Button
                 size='small'
                 type='tertiary'
-                loading={directTestingChannelId === record.id}
-                disabled={!selectedModelName}
+                className='relative'
+                disabled={
+                  !selectedModelName || directTestingChannelId === record.id
+                }
                 onClick={() => directTestChannel(record)}
               >
-                {t('测试')}
+                <span
+                  className={
+                    directTestingChannelId === record.id
+                      ? 'invisible'
+                      : undefined
+                  }
+                >
+                  {t('测试')}
+                </span>
+                {directTestingChannelId === record.id && (
+                  <span className='absolute inset-0 flex items-center justify-center'>
+                    <IconSpin spin />
+                  </span>
+                )}
               </Button>
               <Button
                 size='small'

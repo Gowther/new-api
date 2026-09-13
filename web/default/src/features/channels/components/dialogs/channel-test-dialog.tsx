@@ -111,6 +111,9 @@ type ChannelTestDialogProps = {
   /** Restricts the table to these models instead of the channel's full list.
    *  The model routing workbench passes the one model being routed. */
   restrictToModels?: string[]
+  /** Overrides the provider's pending direct-test failure, for callers that
+   *  cannot write the channels provider (e.g. the routing workbench). */
+  directTestFailure?: ChannelDirectTestFailure | null
 }
 
 type ChannelTestDialogContentProps = ChannelTestDialogProps & {
@@ -315,13 +318,24 @@ export function ChannelTestDialog({
   onOpenChange,
   currentRow: currentRowProp,
   restrictToModels,
+  directTestFailure: directTestFailureProp,
 }: ChannelTestDialogProps) {
   const {
     currentRow: contextRow,
-    directTestFailure,
+    directTestFailure: contextDirectTestFailure,
     setDirectTestFailure,
   } = useChannels()
   const currentRow = currentRowProp ?? contextRow
+  const hasPropFailure = directTestFailureProp !== undefined
+  const directTestFailure = hasPropFailure
+    ? directTestFailureProp
+    : contextDirectTestFailure
+  const consumeDirectTestFailure = useCallback(() => {
+    // Prop-fed failures are owned and cleared by the caller (dialog close).
+    if (!hasPropFailure) {
+      setDirectTestFailure(null)
+    }
+  }, [hasPropFailure, setDirectTestFailure])
 
   if (!currentRow) {
     return null
@@ -335,7 +349,7 @@ export function ChannelTestDialog({
       currentRow={currentRow}
       restrictToModels={restrictToModels}
       directTestFailure={directTestFailure}
-      onConsumeDirectTestFailure={() => setDirectTestFailure(null)}
+      onConsumeDirectTestFailure={consumeDirectTestFailure}
     />
   )
 }

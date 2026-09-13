@@ -33,3 +33,32 @@ func TestFormatUserLogsStripsQuotaSaturation(t *testing.T) {
 	// Non-admin billing fields remain visible.
 	require.Contains(t, parsed, "model_price")
 }
+
+// TestFormatUserLogsStripsLegacyChannelMetadata verifies that legacy
+// top-level other fields (channel metadata and admin-set reject reasons)
+// are stripped from user-visible logs — they let users enumerate backend
+// channels. New writes carry them under other.admin_info instead.
+func TestFormatUserLogsStripsLegacyChannelMetadata(t *testing.T) {
+	other := common.MapToJsonStr(map[string]interface{}{
+		"model_ratio":   0.002,
+		"channel_id":    42,
+		"channel_name":  "secret-channel",
+		"channel_type":  1,
+		"reject_reason": "admin-set reason",
+		"admin_info": map[string]interface{}{
+			"channel_id":    42,
+			"channel_name":  "secret-channel",
+			"reject_reason": "admin-set reason",
+		},
+	})
+	logs := []*Log{{Other: other}}
+
+	formatUserLogs(logs, 0)
+
+	parsed, err := common.StrToMap(logs[0].Other)
+	require.NoError(t, err)
+	for _, key := range []string{"channel_id", "channel_name", "channel_type", "reject_reason", "admin_info"} {
+		require.NotContains(t, parsed, key)
+	}
+	require.Contains(t, parsed, "model_ratio")
+}

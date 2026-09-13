@@ -308,6 +308,12 @@ func (p *GenericOAuthProvider) GetProviderPrefix() string {
 	return p.config.Slug + "_"
 }
 
+// ProviderUserIDColumn returns the users-table column storing this provider's user ID.
+// Generic providers persist bindings in the user_oauth_bindings table instead.
+func (p *GenericOAuthProvider) ProviderUserIDColumn() string {
+	return ""
+}
+
 // GetProviderId returns the provider ID for binding purposes
 func (p *GenericOAuthProvider) GetProviderId() int {
 	return p.config.Id

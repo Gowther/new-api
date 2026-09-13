@@ -385,7 +385,8 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		modelName := c.GetString("original_model")
 		tokenId := c.GetInt("token_id")
 		userGroup := c.GetString("group")
-		channelId := c.GetInt("channel_id")
+		// 使用快照中的渠道信息：context 中的值在多 key/重试场景下可能已经改变
+		channelId := channelError.ChannelId
 		other := make(map[string]interface{})
 		if c.Request != nil && c.Request.URL != nil {
 			other["request_path"] = c.Request.URL.Path
@@ -393,10 +394,12 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		other["error_type"] = err.GetErrorType()
 		other["error_code"] = err.GetErrorCode()
 		other["status_code"] = err.StatusCode
-		other["channel_id"] = channelId
-		other["channel_name"] = c.GetString("channel_name")
-		other["channel_type"] = c.GetInt("channel_type")
 		adminInfo := make(map[string]interface{})
+		// 渠道元数据只在 admin_info 下保留：顶层字段对普通用户可见，
+		// 会暴露后端渠道编号/名称/类型（渠道枚举）。
+		adminInfo["channel_id"] = channelError.ChannelId
+		adminInfo["channel_name"] = channelError.ChannelName
+		adminInfo["channel_type"] = channelError.ChannelType
 		adminInfo["use_channel"] = c.GetStringSlice("use_channel")
 		isMultiKey := common.GetContextKeyBool(c, constant.ContextKeyChannelIsMultiKey)
 		if isMultiKey {

@@ -192,3 +192,8 @@ type TrustLevelError struct {
 func (e *TrustLevelError) Error() string {
 	return "trust level too low"
 }
+
+// ProviderUserIDColumn returns the users-table column storing this provider's user ID.
+func (p *LinuxDOProvider) ProviderUserIDColumn() string {
+	return "linux_do_id"
+}

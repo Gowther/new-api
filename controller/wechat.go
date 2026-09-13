@@ -160,17 +160,9 @@ func WeChatBind(c *gin.Context) {
 	}
 	session := sessions.Default(c)
 	id := session.Get("id")
-	user := model.User{
-		Id: id.(int),
-	}
-	err = user.FillUserById()
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	user.WeChatId = wechatId
-	err = user.Update(false)
-	if err != nil {
+	userId := id.(int)
+	// 只更新绑定列，避免完整用户快照覆盖并发的封禁、降权或分组变更。
+	if err := model.UpdateUserBindColumn(userId, "wechat_id", wechatId); err != nil {
 		common.ApiError(c, err)
 		return
 	}

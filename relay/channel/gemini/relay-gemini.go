@@ -1011,6 +1011,12 @@ func getResponseToolCall(item *dto.GeminiPart) *dto.ToolCallResponse {
 	}
 }
 
+// normalizeGeminiModality 归一 modality 键：上游可能返回 "audio"/" AUDIO " 等
+// 大小写或空白变体，严格比较会让独立的音频/图像计费被静默丢弃。
+func normalizeGeminiModality(modality string) string {
+	return strings.ToUpper(strings.TrimSpace(modality))
+}
+
 func buildUsageFromGeminiMetadata(metadata dto.GeminiUsageMetadata, fallbackPromptTokens int) dto.Usage {
 	promptTokens := metadata.PromptTokenCount + metadata.ToolUsePromptTokenCount
 	if promptTokens <= 0 && fallbackPromptTokens > 0 {
@@ -1026,21 +1032,23 @@ func buildUsageFromGeminiMetadata(metadata dto.GeminiUsageMetadata, fallbackProm
 	usage.PromptTokensDetails.CachedTokens = metadata.CachedContentTokenCount
 
 	for _, detail := range metadata.PromptTokensDetails {
-		if detail.Modality == "AUDIO" {
+		switch normalizeGeminiModality(detail.Modality) {
+		case "AUDIO":
 			usage.PromptTokensDetails.AudioTokens += detail.TokenCount
-		} else if detail.Modality == "TEXT" {
+		case "TEXT":
 			usage.PromptTokensDetails.TextTokens += detail.TokenCount
 		}
 	}
 	for _, detail := range metadata.ToolUsePromptTokensDetails {
-		if detail.Modality == "AUDIO" {
+		switch normalizeGeminiModality(detail.Modality) {
+		case "AUDIO":
 			usage.PromptTokensDetails.AudioTokens += detail.TokenCount
-		} else if detail.Modality == "TEXT" {
+		case "TEXT":
 			usage.PromptTokensDetails.TextTokens += detail.TokenCount
 		}
 	}
 	for _, detail := range metadata.CandidatesTokensDetails {
-		switch detail.Modality {
+		switch normalizeGeminiModality(detail.Modality) {
 		case "IMAGE":
 			usage.CompletionTokenDetails.ImageTokens += detail.TokenCount
 		case "AUDIO":
@@ -1052,6 +1060,9 @@ func buildUsageFromGeminiMetadata(metadata dto.GeminiUsageMetadata, fallbackProm
 
 	if usage.TotalTokens > 0 && usage.CompletionTokens <= 0 {
 		usage.CompletionTokens = usage.TotalTokens - usage.PromptTokens
+		if usage.CompletionTokens < 0 {
+			usage.CompletionTokens = 0
+		}
 	}
 
 	if usage.PromptTokens > 0 && usage.PromptTokensDetails.TextTokens == 0 && usage.PromptTokensDetails.AudioTokens == 0 {

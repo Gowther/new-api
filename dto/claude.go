@@ -585,6 +585,18 @@ func (u *ClaudeUsage) GetCacheCreation1hTokens() int {
 	return u.CacheCreation.Ephemeral1hInputTokens
 }
 
+// FlattenCacheCreationSplit 返回 5m/1h 缓存写入拆分的平铺值：快照携带
+// cache_creation 子对象时以子对象为准（含显式清零），否则回退旧式平铺字段。
+func (u *ClaudeUsage) FlattenCacheCreationSplit() (int, int) {
+	if u == nil {
+		return 0, 0
+	}
+	if u.CacheCreation != nil {
+		return u.CacheCreation.Ephemeral5mInputTokens, u.CacheCreation.Ephemeral1hInputTokens
+	}
+	return u.ClaudeCacheCreation5mTokens, u.ClaudeCacheCreation1hTokens
+}
+
 func (u *ClaudeUsage) GetCacheCreationTotalTokens() int {
 	if u == nil {
 		return 0

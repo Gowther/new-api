@@ -740,8 +740,7 @@ func FormatClaudeResponseInfo(claudeResponse *dto.ClaudeResponse, oaiResponse *d
 			claudeInfo.Usage.UsageSemantic = "anthropic"
 			claudeInfo.Usage.PromptTokensDetails.CachedTokens = claudeResponse.Message.Usage.CacheReadInputTokens
 			claudeInfo.Usage.PromptTokensDetails.CachedCreationTokens = claudeResponse.Message.Usage.CacheCreationInputTokens
-			claudeInfo.Usage.ClaudeCacheCreation5mTokens = claudeResponse.Message.Usage.GetCacheCreation5mTokens()
-			claudeInfo.Usage.ClaudeCacheCreation1hTokens = claudeResponse.Message.Usage.GetCacheCreation1hTokens()
+			claudeInfo.Usage.ClaudeCacheCreation5mTokens, claudeInfo.Usage.ClaudeCacheCreation1hTokens = claudeResponse.Message.Usage.FlattenCacheCreationSplit()
 			claudeInfo.Usage.CompletionTokens = claudeResponse.Message.Usage.OutputTokens
 		}
 	} else if claudeResponse.Type == "content_block_delta" {
@@ -767,11 +766,18 @@ func FormatClaudeResponseInfo(claudeResponse *dto.ClaudeResponse, oaiResponse *d
 			if claudeResponse.Usage.CacheCreationInputTokens > 0 {
 				claudeInfo.Usage.PromptTokensDetails.CachedCreationTokens = claudeResponse.Usage.CacheCreationInputTokens
 			}
-			if cacheCreation5m := claudeResponse.Usage.GetCacheCreation5mTokens(); cacheCreation5m > 0 {
-				claudeInfo.Usage.ClaudeCacheCreation5mTokens = cacheCreation5m
-			}
-			if cacheCreation1h := claudeResponse.Usage.GetCacheCreation1hTokens(); cacheCreation1h > 0 {
-				claudeInfo.Usage.ClaudeCacheCreation1hTokens = cacheCreation1h
+			if claudeResponse.Usage.CacheCreation != nil {
+				// 子对象出现即整体同步平铺字段（含显式清零），否则 message_start
+				// 留下的旧 1h 高水位会在级联部署下持续按 1h 价多计费
+				claudeInfo.Usage.ClaudeCacheCreation5mTokens = claudeResponse.Usage.CacheCreation.Ephemeral5mInputTokens
+				claudeInfo.Usage.ClaudeCacheCreation1hTokens = claudeResponse.Usage.CacheCreation.Ephemeral1hInputTokens
+			} else {
+				if cacheCreation5m := claudeResponse.Usage.ClaudeCacheCreation5mTokens; cacheCreation5m > 0 {
+					claudeInfo.Usage.ClaudeCacheCreation5mTokens = cacheCreation5m
+				}
+				if cacheCreation1h := claudeResponse.Usage.ClaudeCacheCreation1hTokens; cacheCreation1h > 0 {
+					claudeInfo.Usage.ClaudeCacheCreation1hTokens = cacheCreation1h
+				}
 			}
 			if claudeResponse.Usage.OutputTokens > 0 {
 				claudeInfo.Usage.CompletionTokens = claudeResponse.Usage.OutputTokens
@@ -921,8 +927,7 @@ func HandleClaudeResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 		claudeInfo.Usage.UsageSemantic = "anthropic"
 		claudeInfo.Usage.PromptTokensDetails.CachedTokens = claudeResponse.Usage.CacheReadInputTokens
 		claudeInfo.Usage.PromptTokensDetails.CachedCreationTokens = claudeResponse.Usage.CacheCreationInputTokens
-		claudeInfo.Usage.ClaudeCacheCreation5mTokens = claudeResponse.Usage.GetCacheCreation5mTokens()
-		claudeInfo.Usage.ClaudeCacheCreation1hTokens = claudeResponse.Usage.GetCacheCreation1hTokens()
+		claudeInfo.Usage.ClaudeCacheCreation5mTokens, claudeInfo.Usage.ClaudeCacheCreation1hTokens = claudeResponse.Usage.FlattenCacheCreationSplit()
 	}
 	var responseData []byte
 	switch info.RelayFormat {

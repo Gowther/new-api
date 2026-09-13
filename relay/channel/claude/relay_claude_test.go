@@ -444,3 +444,61 @@ func TestRequestOpenAI2ClaudeMessage_ValidToolAndStopStillConvert(t *testing.T) 
 	require.NotNil(t, claudeRequest)
 	assert.Equal(t, []string{"done", "end"}, claudeRequest.StopSequences)
 }
+
+func TestFormatClaudeResponseInfoCacheCreationSubObjectSyncIncludesZeroing(t *testing.T) {
+	claudeInfo := &ClaudeResponseInfo{Usage: &dto.Usage{}}
+
+	start := &dto.ClaudeResponse{
+		Type: "message_start",
+		Message: &dto.ClaudeMediaMessage{
+			Usage: &dto.ClaudeUsage{
+				CacheCreation: &dto.ClaudeCacheCreationUsage{
+					Ephemeral5mInputTokens: 200,
+					Ephemeral1hInputTokens: 1000,
+				},
+			},
+		},
+	}
+	require.True(t, FormatClaudeResponseInfo(start, nil, claudeInfo))
+	require.Equal(t, 200, claudeInfo.Usage.ClaudeCacheCreation5mTokens)
+	require.Equal(t, 1000, claudeInfo.Usage.ClaudeCacheCreation1hTokens)
+
+	// 级联部署下 message_delta 携带修正后的子对象：1h 显式清零必须覆盖
+	// message_start 留下的旧值，否则旧高水位会持续按 1h 价多计费。
+	delta := &dto.ClaudeResponse{
+		Type: "message_delta",
+		Usage: &dto.ClaudeUsage{
+			InputTokens:   10,
+			OutputTokens:  5,
+			CacheCreation: &dto.ClaudeCacheCreationUsage{Ephemeral5mInputTokens: 300},
+		},
+	}
+	require.True(t, FormatClaudeResponseInfo(delta, nil, claudeInfo))
+	assert.Equal(t, 300, claudeInfo.Usage.ClaudeCacheCreation5mTokens)
+	assert.Equal(t, 0, claudeInfo.Usage.ClaudeCacheCreation1hTokens)
+}
+
+func TestFormatClaudeResponseInfoCacheCreationFlatFallbackWithoutSubObject(t *testing.T) {
+	claudeInfo := &ClaudeResponseInfo{Usage: &dto.Usage{}}
+
+	start := &dto.ClaudeResponse{
+		Type: "message_start",
+		Message: &dto.ClaudeMediaMessage{
+			Usage: &dto.ClaudeUsage{InputTokens: 10},
+		},
+	}
+	require.True(t, FormatClaudeResponseInfo(start, nil, claudeInfo))
+
+	// 快照未携带子对象时，旧式平铺字段仍作为回退来源。
+	delta := &dto.ClaudeResponse{
+		Type: "message_delta",
+		Usage: &dto.ClaudeUsage{
+			InputTokens:                 10,
+			OutputTokens:                5,
+			ClaudeCacheCreation5mTokens: 150,
+		},
+	}
+	require.True(t, FormatClaudeResponseInfo(delta, nil, claudeInfo))
+	assert.Equal(t, 150, claudeInfo.Usage.ClaudeCacheCreation5mTokens)
+	assert.Equal(t, 0, claudeInfo.Usage.ClaudeCacheCreation1hTokens)
+}

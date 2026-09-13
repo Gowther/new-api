@@ -386,6 +386,8 @@ func TestBackfillTokenUsageDataFromLogsRebuildsRecentWindow(t *testing.T) {
 	require.Equal(t, 3, result.Logs)
 	require.Equal(t, 2, result.Rows)
 
+	// 重置零值结构：First 会把已填充的主键附加为查询条件，重建后行获得了新 id
+	row = TokenUsageData{}
 	require.NoError(t, DB.Where("user_id = ? and token_id = ? and model_name = ? and created_at = ?", 1, 11, "gpt-test", previousHour).First(&row).Error)
 	require.Equal(t, int64(2), row.Count)
 	require.Equal(t, int64(250), row.Quota)

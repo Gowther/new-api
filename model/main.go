@@ -153,11 +153,13 @@ func chooseDB(envName string, isLog bool) (*gorm.DB, common.DatabaseType, error)
 		if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
 			// Use PostgreSQL
 			common.SysLog("using PostgreSQL as database")
+			// 同时关闭 pgx 隐式与 GORM 显式预处理语句：命名 prepared statement 是会话状态，
+			// 与事务池代理（PgBouncer/Neon/Supabase）不兼容，会触发 FATAL 08P01/42P05。
 			db, err := gorm.Open(postgres.New(postgres.Config{
 				DSN:                  dsn,
 				PreferSimpleProtocol: true, // disables implicit prepared statement usage
 			}), &gorm.Config{
-				PrepareStmt: true, // precompile SQL
+				PrepareStmt: false,
 			})
 			return db, common.DatabaseTypePostgreSQL, err
 		}

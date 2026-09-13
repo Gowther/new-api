@@ -158,9 +158,7 @@ func chooseDB(envName string, isLog bool) (*gorm.DB, common.DatabaseType, error)
 			db, err := gorm.Open(postgresMigrationDialector{postgres.New(postgres.Config{
 				DSN:                  dsn,
 				PreferSimpleProtocol: true, // disables implicit prepared statement usage
-			}).(postgres.Dialector)}, &gorm.Config{
-				PrepareStmt: false,
-			})
+			}).(postgres.Dialector)}, newGormConfig(false))
 			return db, common.DatabaseTypePostgreSQL, err
 		}
 		if strings.HasPrefix(dsn, "local") {
@@ -180,16 +178,12 @@ func chooseDB(envName string, isLog bool) (*gorm.DB, common.DatabaseType, error)
 				dsn += "?parseTime=true"
 			}
 		}
-		db, err := gorm.Open(mysqlMigrationDialector{mysql.Open(dsn).(mysql.Dialector)}, &gorm.Config{
-			PrepareStmt: true, // precompile SQL
-		})
+		db, err := gorm.Open(mysqlMigrationDialector{mysql.Open(dsn).(mysql.Dialector)}, newGormConfig(true))
 		return db, common.DatabaseTypeMySQL, err
 	}
 	// Use SQLite
 	common.SysLog("SQL_DSN not set, using SQLite as database")
-	db, err := gorm.Open(sqlite.Open(common.SQLitePath), &gorm.Config{
-		PrepareStmt: true, // precompile SQL
-	})
+	db, err := gorm.Open(sqlite.Open(common.SQLitePath), newGormConfig(true))
 	return db, common.DatabaseTypeSQLite, err
 }
 

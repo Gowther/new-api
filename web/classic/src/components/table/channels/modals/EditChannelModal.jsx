@@ -879,10 +879,11 @@ const EditChannelModal = (props) => {
 
   const applyClipboardConfig = (config) => {
     if (!config) return;
-    // name/remark 是可选字段，缺省时不要用空串覆盖用户已经填好的内容
+    // name/remark/header_override 是可选字段，缺省时不要用空串覆盖用户已经填好的内容
     const patch = { key: config.key, base_url: config.url };
     if (config.name) patch.name = config.name;
     if (config.remark) patch.remark = config.remark;
+    if (config.header_override) patch.header_override = config.header_override;
     setInputs((prev) => ({ ...prev, ...patch }));
     if (formApiRef.current) {
       Object.entries(patch).forEach(([field, value]) => {

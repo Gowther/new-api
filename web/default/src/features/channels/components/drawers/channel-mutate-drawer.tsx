@@ -777,6 +777,9 @@ export function ChannelMutateDrawer({
       if (config.remark) {
         form.setValue('remark', config.remark, { shouldDirty: true })
       }
+      if (config.header_override) {
+        form.setValue('header_override', config.header_override, { shouldDirty: true })
+      }
       setClipboardConfig(null)
       toast.success(t('Connection info filled in'))
     },

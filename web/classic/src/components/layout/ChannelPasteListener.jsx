@@ -150,6 +150,7 @@ const ChannelPasteListener = () => {
     const values = { key: pasted.key, base_url: pasted.url };
     if (pasted.name) values.name = pasted.name;
     if (pasted.remark) values.remark = pasted.remark;
+    if (pasted.header_override) values.header_override = pasted.header_override;
     return values;
   }, [pasted]);
 

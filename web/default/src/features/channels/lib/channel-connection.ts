@@ -30,12 +30,14 @@ export type ChannelConnectionConfig = {
   url: string
   name?: string
   remark?: string
+  /** 随剪贴板一起填进「请求头覆盖」的 JSON 对象串，与表单里的 header_override 同形 */
+  header_override?: string
 }
 
 export function encodeChannelConnectionString(
   key: string,
   url: string,
-  extra: { name?: string; remark?: string } = {}
+  extra: { name?: string; remark?: string; header_override?: string } = {}
 ): string {
   const payload: Record<string, string> = {
     _type: CHANNEL_CONN_CLIPBOARD_TYPE,
@@ -44,15 +46,31 @@ export function encodeChannelConnectionString(
   }
   if (extra.name) payload.name = extra.name
   if (extra.remark) payload.remark = extra.remark
+  if (extra.header_override) payload.header_override = extra.header_override
   return JSON.stringify(payload)
+}
+
+/**
+ * 表单里的 header_override 是「JSON 对象串」。剪贴板来的值形状不对就不带过去，
+ * 免得自动填入之后提交才被表单校验拦下。
+ */
+function isJsonObjectString(text: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(text)
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+  } catch {
+    return false
+  }
 }
 
 /**
  * Reads channel connection info out of clipboard text.
  *
  * `url` may be absent or empty — sharing only a key and letting the channel
- * type's own official address apply is a normal case. `name` and `remark` are
- * optional additions, so payloads carrying just key/url still parse.
+ * type's own official address apply is a normal case. `name`, `remark` and
+ * `header_override` are optional additions, so payloads carrying just key/url
+ * still parse. `header_override` is kept only when it is a JSON object string,
+ * matching what the channel form accepts.
  */
 /**
  * Reads the clipboard only when doing so cannot interrupt the user.
@@ -141,6 +159,13 @@ export function parseChannelConnectionString(
   }
   if (typeof payload.remark === 'string' && payload.remark.trim()) {
     config.remark = payload.remark.slice(0, CHANNEL_CONN_REMARK_MAX)
+  }
+  if (
+    typeof payload.header_override === 'string' &&
+    payload.header_override.trim() &&
+    isJsonObjectString(payload.header_override)
+  ) {
+    config.header_override = payload.header_override.trim()
   }
   return config
 }

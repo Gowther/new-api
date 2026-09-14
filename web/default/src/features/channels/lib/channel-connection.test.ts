@@ -86,6 +86,35 @@ describe('channel connection clipboard payload', () => {
     assert.deepEqual(parsed, { key: 'sk-abc', url: '' })
   })
 
+  test('round-trips a header_override payload', () => {
+    const headerOverride = '{"x-opencode-session":"dsh-opencode-go-session"}'
+    const encoded = encodeChannelConnectionString('sk-abc', 'https://a.com', {
+      header_override: headerOverride,
+    })
+
+    assert.deepEqual(parseChannelConnectionString(encoded), {
+      key: 'sk-abc',
+      url: 'https://a.com',
+      header_override: headerOverride,
+    })
+  })
+
+  test('keeps only well-formed header_override values', () => {
+    const parse = (headerOverride: unknown) =>
+      parseChannelConnectionString(conn({ key: 'sk-abc', url: '', header_override: headerOverride }))
+
+    assert.deepEqual(parse('{"a":"b"}'), {
+      key: 'sk-abc',
+      url: '',
+      header_override: '{"a":"b"}',
+    })
+    // 非对象、坏 JSON、非字符串、空串一律丢弃，字段不进表单
+    assert.deepEqual(parse('["a"]'), { key: 'sk-abc', url: '' })
+    assert.deepEqual(parse('{oops'), { key: 'sk-abc', url: '' })
+    assert.deepEqual(parse({ a: 'b' }), { key: 'sk-abc', url: '' })
+    assert.deepEqual(parse('   '), { key: 'sk-abc', url: '' })
+  })
+
   test('clamps name and remark to the channel column widths', () => {
     const parsed = parseChannelConnectionString(
       conn({

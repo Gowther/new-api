@@ -183,7 +183,11 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       // timeMode must be written too: bare timestamps alone would make
       // resolveLogTimeRange infer 'fixed' on the next tick. A pinned 'fixed'
       // range is skipped so a user-specified span is never overwritten.
+      // to/params are required: the route-scoped navigate without them
+      // resolves to the current location and silently commits a no-op.
       await navigate({
+        to: '/usage-logs/$section',
+        params: { section: logCategory },
         replace: true,
         search: (previous) => ({
           ...previous,
@@ -203,7 +207,8 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
         { cancelRefetch: false }
       ),
     ])
-  }, [navigate, queryClient, searchParams])
+    dbg('invalidated')
+  }, [logCategory, navigate, queryClient, searchParams])
 
   useUsageLogsAutoRefresh(autoRefreshSeconds, refreshLogs, autoRefreshingRef)
 

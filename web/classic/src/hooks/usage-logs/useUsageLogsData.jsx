@@ -1226,6 +1226,19 @@ export const useLogsData = () => {
       autoRefreshInFlightRef.current = true;
       try {
         const filters = getFormValues(appliedFiltersRef.current);
+        // 今日/最近模式每次刷新按当前时刻重算窗口，把新范围同步回日期
+        // 选择器，显示的结束时间才会随自动刷新推进；用户自定义的 fixed
+        // 范围保持不变。
+        if (
+          filters.timeMode !== 'fixed' &&
+          filters.start_timestamp &&
+          filters.end_timestamp
+        ) {
+          formApi?.setValue('dateRange', [
+            timestamp2string(filters.start_timestamp),
+            timestamp2string(filters.end_timestamp),
+          ]);
+        }
         await Promise.all([
           loadLogs(activePage, pageSize, null, true, filters),
           handleEyeClick(true, filters),

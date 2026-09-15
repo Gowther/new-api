@@ -27,6 +27,7 @@ import {
   getCurrencyConfig,
   getModelCategories,
   selectFilter,
+  focusSelectDropdownSearch,
 } from '../../../../helpers';
 import {
   quotaToDisplayAmount,
@@ -622,7 +623,7 @@ const EditTokenModal = (props) => {
                       filter={selectFilter}
                       autoClearSearchValue={false}
                       searchPosition='dropdown'
-                      autoFocus
+                      onDropdownVisibleChange={focusSelectDropdownSearch}
                       showClear
                       style={{ width: '100%' }}
                     />

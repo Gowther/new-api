@@ -51,6 +51,7 @@ import { getChannelModels } from '../../../../helpers';
 import { useTranslation } from 'react-i18next';
 import JSONEditor from '../../../common/ui/JSONEditor';
 import { reconcileModelsForMapping } from '../../../../helpers/modelMapping';
+import { focusSelectDropdownSearch } from '../../../../helpers/selectDropdownFocus';
 
 const { Text, Title } = Typography;
 
@@ -483,7 +484,7 @@ const EditTagModal = (props) => {
                     allowCreate
                     autoClearSearchValue={false}
                     searchPosition='dropdown'
-                    autoFocus
+                    onDropdownVisibleChange={focusSelectDropdownSearch}
                     optionList={modelOptions}
                     onSearch={(value) => setModelSearchValue(value)}
                     innerBottomSlot={

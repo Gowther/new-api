@@ -17,18 +17,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-export * from './history';
-export * from './auth';
-export * from './utils';
-export * from './base64';
-export * from './api';
-export * from './render';
-export * from './log';
-export * from './data';
-export * from './token';
-export * from './boolean';
-export * from './dashboard';
-export * from './passkey';
-export * from './statusCodeRules';
-export * from './frontendTheme';
-export * from './selectDropdownFocus';
+// 聚焦当前展开的 Semi Select 下拉内的搜索框。
+// Semi 的 autoFocus 属性在 searchPosition='dropdown' 时有缺陷：openMenu 回调
+// 触发时下拉面板（Portal）尚未挂载，focusDropdownInput 会因 ref 为空而丢失，
+// 导致搜索框仍需手动点击。因此在下一帧从最新的 Portal 中查找搜索框再聚焦。
+export const focusSelectDropdownSearch = (visible) => {
+  if (!visible) return;
+  requestAnimationFrame(() => {
+    const portals = document.querySelectorAll('.semi-portal');
+    const portal = portals[portals.length - 1];
+    const input = portal
+      ? portal.querySelector('.semi-select-dropdown-search-wrapper input')
+      : null;
+    if (input) input.focus();
+  });
+};

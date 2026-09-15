@@ -86,6 +86,7 @@ import { renderRoutingOverrideConflicts } from '../routingOverrideConflicts';
 import { useSecureVerification } from '../../../../hooks/common/useSecureVerification';
 import { parseChannelConnectionString } from '../../../../helpers/token';
 import { reconcileModelsForMapping } from '../../../../helpers/modelMapping';
+import { focusSelectDropdownSearch } from '../../../../helpers/selectDropdownFocus';
 import { createApiCalls } from '../../../../services/secureVerification';
 import {
   collectInvalidStatusCodeEntries,
@@ -4736,7 +4737,7 @@ const EditChannelModal = (props) => {
                         allowCreate
                         autoClearSearchValue={false}
                         searchPosition='dropdown'
-                        autoFocus
+                        onDropdownVisibleChange={focusSelectDropdownSearch}
                         optionList={modelOptions}
                         onSearch={(value) => setModelSearchValue(value)}
                         innerBottomSlot={

@@ -98,7 +98,7 @@ func applyDeepSeekV4OpenAIThinkingSuffix(info *relaycommon.RelayInfo, request *d
 	if info != nil && info.ChannelMeta != nil && info.UpstreamModelName != "" {
 		modelName = info.UpstreamModelName
 	}
-	baseModel, thinkingType, effort, ok := reasoning.ParseDeepSeekV4ThinkingSuffix(modelName)
+	baseModel, thinkingType, effort, ok := reasoning.ParseDeepSeekThinkingSuffix(modelName)
 	if !ok {
 		return nil
 	}
@@ -125,7 +125,7 @@ func applyDeepSeekV4ClaudeThinkingSuffix(info *relaycommon.RelayInfo, request *d
 	if info != nil && info.ChannelMeta != nil && info.UpstreamModelName != "" {
 		modelName = info.UpstreamModelName
 	}
-	baseModel, thinkingType, effort, ok := reasoning.ParseDeepSeekV4ThinkingSuffix(modelName)
+	baseModel, thinkingType, effort, ok := reasoning.ParseDeepSeekThinkingSuffix(modelName)
 	if !ok {
 		return nil
 	}
@@ -170,7 +170,7 @@ func applyDeepSeekV4ResponsesThinkingSuffix(info *relaycommon.RelayInfo, request
 	if info != nil && info.ChannelMeta != nil && info.UpstreamModelName != "" {
 		modelName = info.UpstreamModelName
 	}
-	baseModel, thinkingType, effort, ok := reasoning.ParseDeepSeekV4ThinkingSuffix(modelName)
+	baseModel, thinkingType, effort, ok := reasoning.ParseDeepSeekThinkingSuffix(modelName)
 	if ok {
 		if thinkingType == "disabled" {
 			effort = "none"

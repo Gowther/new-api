@@ -866,7 +866,7 @@ export function ChannelMutateDrawer({
   const currentHeaderOverride = form.watch('header_override')
   // TEMP-DEBUG: 临时跟踪 header_override 的每次变化，定位清空来源，确认后删除
   useEffect(() => {
-    console.log('[watch header_override]', String(currentHeaderOverride))
+    console.error('[watch header_override]', String(currentHeaderOverride))
   }, [currentHeaderOverride])
   const currentForceFormat = form.watch('force_format')
   const currentThinkingToContent = form.watch('thinking_to_content')
@@ -1385,7 +1385,7 @@ export function ChannelMutateDrawer({
       }
       form.reset(createDefaults)
       // TEMP-DEBUG: 临时排查自动弹窗预填 header_override 丢失，确认后删除
-      console.log(
+      console.error(
         '[paste-init]',
         'hdr=' + String(initialValues?.header_override ?? '<absent>'),
         'afterReset=' + String(form.getValues('header_override'))

@@ -29,6 +29,7 @@ import { useActualTheme } from '../../context/Theme';
 
 const RANGE_OPTIONS = [
   { labelKey: '今天', mode: 'today', granularity: 'hour' },
+  { labelKey: '昨天', mode: 'yesterday', granularity: 'hour' },
   { labelKey: '最近 24 小时', mode: 'relative', days: 1, granularity: 'hour' },
   { labelKey: '最近 7 天', mode: 'relative', days: 7, granularity: 'day' },
   { labelKey: '最近 30 天', mode: 'relative', days: 30, granularity: 'day' },
@@ -253,6 +254,14 @@ function startOfTodayTimestamp() {
   );
 }
 
+function startOfYesterdayTimestamp() {
+  const now = new Date();
+  return Math.floor(
+    new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).getTime() /
+      1000,
+  );
+}
+
 function getDefaultCustomRange() {
   const endTimestamp = nextHourTimestamp(Math.floor(Date.now() / 1000));
   return {
@@ -286,6 +295,14 @@ function buildParams(rangeValue, customRange) {
     return {
       start_timestamp: startOfTodayTimestamp(),
       end_timestamp: end,
+      granularity: range.granularity,
+      detail_limit: 200,
+    };
+  }
+  if (range.mode === 'yesterday') {
+    return {
+      start_timestamp: startOfYesterdayTimestamp(),
+      end_timestamp: startOfTodayTimestamp() - 1,
       granularity: range.granularity,
       detail_limit: 200,
     };

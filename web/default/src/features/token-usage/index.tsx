@@ -63,6 +63,11 @@ type RangeOption =
     }
   | {
       labelKey: string
+      mode: 'yesterday'
+      granularity: 'hour'
+    }
+  | {
+      labelKey: string
       mode: 'relative'
       days: number
       granularity: 'hour' | 'day'
@@ -77,6 +82,7 @@ const CUSTOM_RANGE_VALUE = 'custom'
 
 const RANGE_OPTIONS: RangeOption[] = [
   { labelKey: 'Today', mode: 'today', granularity: 'hour' },
+  { labelKey: 'Yesterday', mode: 'yesterday', granularity: 'hour' },
   { labelKey: 'Last 24 hours', mode: 'relative', days: 1, granularity: 'hour' },
   { labelKey: 'Last 7 days', mode: 'relative', days: 7, granularity: 'day' },
   { labelKey: 'Last 30 days', mode: 'relative', days: 30, granularity: 'day' },
@@ -301,6 +307,15 @@ function buildParams(
     return {
       start_timestamp: dayjs().startOf('day').unix(),
       end_timestamp: end,
+      granularity: range.granularity,
+      detail_limit: 200,
+    }
+  }
+  if (range.mode === 'yesterday') {
+    const day = dayjs().subtract(1, 'day')
+    return {
+      start_timestamp: day.startOf('day').unix(),
+      end_timestamp: day.endOf('day').unix(),
       granularity: range.granularity,
       detail_limit: 200,
     }

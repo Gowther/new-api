@@ -193,6 +193,9 @@ export function ChannelPasteListener() {
       base_url: pasted.url,
       ...(pasted.name ? { name: pasted.name } : {}),
       ...(pasted.remark ? { remark: pasted.remark } : {}),
+      ...(pasted.header_override
+        ? { header_override: pasted.header_override }
+        : {}),
     }
   }, [pasted])
 

@@ -92,6 +92,11 @@ export function ChannelPasteListener() {
 
   const offer = useCallback(
     (text: string, config: ChannelConnectionConfig) => {
+      // TEMP-DEBUG: 临时排查自动弹窗预填 header_override 丢失，确认后删除
+      console.log(
+        '[paste-offer]',
+        'hdr=' + String(config.header_override ?? '<absent>')
+      )
       offeredRef.current = text
       setPasted(config)
       setOpen(true)

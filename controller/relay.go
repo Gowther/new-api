@@ -231,7 +231,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		newAPIError = service.NormalizeViolationFeeError(newAPIError)
 		relayInfo.LastError = newAPIError
 
-		processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError)
+		processChannelError(c, channelErrorSnapshot(c, channel), newAPIError)
 
 		if !shouldRetry(c, newAPIError, common.RetryTimes-retryParam.GetRetry()) {
 			break
@@ -300,10 +300,9 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 	// would relay to channel 0 with an empty base url and key. Select for them.
 	preselectedChannelId := c.GetInt("channel_id")
 	if info.ChannelMeta == nil && preselectedChannelId != 0 {
-		autoBan := c.GetBool("auto_ban")
-		autoBanInt := 1
-		if !autoBan {
-			autoBanInt = 0
+		autoBanMode, ok := common.GetContextKeyType[int](c, constant.ContextKeyChannelAutoBan)
+		if !ok {
+			autoBanMode = model.ChannelAutoBanFollowGlobal
 		}
 		priority, _ := common.GetContextKeyType[int64](c, constant.ContextKeyChannelPriority)
 		retryParam.SetPreviousChannelPriority(priority)
@@ -312,7 +311,7 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 			Type:     c.GetInt("channel_type"),
 			Name:     c.GetString("channel_name"),
 			Priority: &priority,
-			AutoBan:  &autoBanInt,
+			AutoBan:  &autoBanMode,
 		}, nil
 	}
 	channel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(retryParam)
@@ -368,11 +367,29 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 	return operation_setting.ShouldRetryByStatusCode(code)
 }
 
+// channelErrorSnapshot builds the channel error snapshot used for disabling and
+// error logging. Auto-ban mode and rules are read from the request context so
+// multi-key/retry rounds always use the currently selected channel's settings.
+func channelErrorSnapshot(c *gin.Context, channel *model.Channel) types.ChannelError {
+	autoBanMode, ok := common.GetContextKeyType[int](c, constant.ContextKeyChannelAutoBan)
+	if !ok {
+		autoBanMode = channel.GetAutoBanMode()
+	}
+	var autoBanRules *types.ChannelAutoBanRules
+	if otherSettings, ok := common.GetContextKeyType[dto.ChannelOtherSettings](c, constant.ContextKeyChannelOtherSetting); ok {
+		autoBanRules = otherSettings.AutoBanRules
+	} else {
+		autoBanRules = channel.GetAutoBanRules()
+	}
+	return *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey,
+		common.GetContextKeyString(c, constant.ContextKeyChannelKey), autoBanMode, autoBanRules)
+}
+
 func processChannelError(c *gin.Context, channelError types.ChannelError, err *types.NewAPIError) {
 	logger.LogError(c, fmt.Sprintf("channel error (channel #%d, status code: %d): %s", channelError.ChannelId, err.StatusCode, common.LocalLogPreview(err.Error())))
 	// 不要使用context获取渠道信息，异步处理时可能会出现渠道信息不一致的情况
 	// do not use context to get channel info, there may be inconsistent channel info when processing asynchronously
-	if service.ShouldDisableChannel(err) && channelError.AutoBan {
+	if service.ShouldDisableChannelWithRules(err, channelError.AutoBanMode, channelError.AutoBanRules) {
 		gopool.Go(func() {
 			service.DisableChannel(channelError, err.ErrorWithStatusCode())
 		})
@@ -571,9 +588,7 @@ func RelayTask(c *gin.Context) {
 		}
 
 		if !taskErr.LocalError {
-			processChannelError(c,
-				*types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey,
-					common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()),
+			processChannelError(c, channelErrorSnapshot(c, channel),
 				types.NewOpenAIError(taskErr.Error, types.ErrorCodeBadResponseStatusCode, taskErr.StatusCode))
 		}
 

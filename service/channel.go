@@ -19,8 +19,8 @@ func formatNotifyType(channelId int, status int) string {
 func DisableChannel(channelError types.ChannelError, reason string) {
 	common.SysLog(fmt.Sprintf("通道「%s」（#%d）发生错误，准备禁用，原因：%s", channelError.ChannelName, channelError.ChannelId, common.LocalLogPreview(reason)))
 
-	// 检查是否启用自动禁用功能
-	if !channelError.AutoBan {
+	// 检查渠道是否允许自动禁用（0 = 强制关闭）
+	if channelError.AutoBanMode == model.ChannelAutoBanForceOff {
 		common.SysLog(fmt.Sprintf("通道「%s」（#%d）未启用自动禁用功能，跳过禁用操作", channelError.ChannelName, channelError.ChannelId))
 		return
 	}
@@ -42,11 +42,15 @@ func EnableChannel(channelId int, usingKey string, channelName string) {
 	}
 }
 
-func ShouldDisableChannel(err *types.NewAPIError) bool {
-	if !common.AutomaticDisableChannelEnabled {
-		return false
-	}
-	if err == nil {
+// ShouldDisableChannelWithRules decides whether a channel error should disable
+// the channel. autoBanMode: 0 = force off, 1 = follow the global
+// AutomaticDisableChannelEnabled switch, 2 = force on. When rules is non-nil it
+// completely replaces the global status-code list and keyword list; nil falls
+// back to the global rules.
+func ShouldDisableChannelWithRules(err *types.NewAPIError, autoBanMode int, rules *types.ChannelAutoBanRules) bool {
+	enabled := autoBanMode == model.ChannelAutoBanForceOn ||
+		(autoBanMode != model.ChannelAutoBanForceOff && common.AutomaticDisableChannelEnabled)
+	if !enabled || err == nil {
 		return false
 	}
 	if types.IsChannelError(err) {
@@ -54,6 +58,25 @@ func ShouldDisableChannel(err *types.NewAPIError) bool {
 	}
 	if types.IsSkipRetryError(err) {
 		return false
+	}
+	if rules != nil {
+		if ranges, rangeErr := operation_setting.ParseHTTPStatusCodeRanges(rules.StatusCodes); rangeErr == nil {
+			if operation_setting.MatchStatusCodeRanges(ranges, err.StatusCode) {
+				return true
+			}
+		} else {
+			common.SysError(fmt.Sprintf("invalid channel auto-ban status code rules, fallback to keywords only: %s", rangeErr.Error()))
+		}
+		lowerMessage := strings.ToLower(err.Error())
+		keywords := make([]string, 0, len(rules.Keywords))
+		for _, k := range rules.Keywords {
+			k = strings.ToLower(strings.TrimSpace(k))
+			if k != "" {
+				keywords = append(keywords, k)
+			}
+		}
+		search, _ := AcSearch(lowerMessage, keywords, true)
+		return search
 	}
 	if operation_setting.ShouldDisableByStatusCode(err.StatusCode) {
 		return true

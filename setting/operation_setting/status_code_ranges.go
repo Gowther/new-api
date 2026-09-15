@@ -54,6 +54,12 @@ func ShouldDisableByStatusCode(code int) bool {
 	return shouldMatchStatusCodeRanges(AutomaticDisableStatusCodeRanges, code)
 }
 
+// MatchStatusCodeRanges reports whether code falls into any of the given ranges,
+// used for channel-level status-code rules that replace the global list.
+func MatchStatusCodeRanges(ranges []StatusCodeRange, code int) bool {
+	return shouldMatchStatusCodeRanges(ranges, code)
+}
+
 func AutomaticRetryStatusCodesToString() string {
 	return statusCodeRangesToString(AutomaticRetryStatusCodeRanges)
 }

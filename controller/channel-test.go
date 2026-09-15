@@ -987,7 +987,7 @@ func performChannelTests(ctx context.Context, channels []*model.Channel, testUse
 		newAPIError := result.newAPIError
 		// request error disables the channel
 		if newAPIError != nil {
-			shouldBanChannel = service.ShouldDisableChannel(result.newAPIError)
+			shouldBanChannel = service.ShouldDisableChannelWithRules(result.newAPIError, channel.GetAutoBanMode(), channel.GetAutoBanRules())
 		}
 
 		// 当错误检查通过，才检查响应时间
@@ -1006,8 +1006,8 @@ func performChannelTests(ctx context.Context, channels []*model.Channel, testUse
 		}
 
 		// disable channel
-		if options.AllowDisable && isChannelEnabled && shouldBanChannel && channel.GetAutoBan() {
-			processChannelError(result.context, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(result.context, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError)
+		if options.AllowDisable && isChannelEnabled && shouldBanChannel {
+			processChannelError(result.context, channelErrorSnapshot(result.context, channel), newAPIError)
 			summary.Disabled++
 		}
 

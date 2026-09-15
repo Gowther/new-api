@@ -398,6 +398,9 @@ const EditChannelModal = (props) => {
     status_code_mapping: '',
     models: [],
     auto_ban: 1,
+    auto_ban_rules_enabled: false,
+    auto_ban_status_codes: '',
+    auto_ban_keywords: '',
     test_model: '',
     groups: ['default'],
     priority: 0,
@@ -438,7 +441,8 @@ const EditChannelModal = (props) => {
   const [batch, setBatch] = useState(false);
   const [multiToSingle, setMultiToSingle] = useState(false);
   const [multiKeyMode, setMultiKeyMode] = useState('random');
-  const [autoBan, setAutoBan] = useState(true);
+  const [autoBanMode, setAutoBanMode] = useState(1);
+  const [autoBanRulesEnabled, setAutoBanRulesEnabled] = useState(false);
   const [inputs, setInputs] = useState(originInputs);
   const officialClientPassthroughEnabled =
     isOfficialClientPassthroughEnabled(inputs);
@@ -913,6 +917,34 @@ const EditChannelModal = (props) => {
   };
 
   const isIonetLocked = isIonetChannel && isEdit;
+
+  const handleImportGlobalAutoBanRules = async () => {
+    try {
+      const res = await API.get('/api/option/');
+      const { success, message, data } = res.data;
+      if (!success) {
+        showError(message || t('导入全局规则失败'));
+        return;
+      }
+      const optionMap = {};
+      (data || []).forEach((item) => {
+        optionMap[item.key] = item.value;
+      });
+      if (formApiRef.current) {
+        formApiRef.current.setValue(
+          'auto_ban_status_codes',
+          optionMap.AutomaticDisableStatusCodes || '401',
+        );
+        formApiRef.current.setValue(
+          'auto_ban_keywords',
+          String(optionMap.AutomaticDisableKeywords || ''),
+        );
+      }
+      showSuccess(t('已导入全局禁用规则'));
+    } catch (error) {
+      showError(t('导入全局规则失败'));
+    }
+  };
 
   const handleInputChange = (name, value) => {
     let nextValue = value;
@@ -1400,6 +1432,26 @@ const EditChannelModal = (props) => {
           )
             ? parsedSettings.upstream_model_update_ignored_models.join(',')
             : '';
+          // 读取渠道级自动禁用规则
+          data.auto_ban_rules_enabled = false;
+          data.auto_ban_status_codes = '';
+          data.auto_ban_keywords = '';
+          if (
+            parsedSettings.auto_ban_rules &&
+            typeof parsedSettings.auto_ban_rules === 'object' &&
+            !Array.isArray(parsedSettings.auto_ban_rules)
+          ) {
+            data.auto_ban_rules_enabled = true;
+            data.auto_ban_status_codes =
+              typeof parsedSettings.auto_ban_rules.status_codes === 'string'
+                ? parsedSettings.auto_ban_rules.status_codes
+                : '';
+            data.auto_ban_keywords = Array.isArray(
+              parsedSettings.auto_ban_rules.keywords,
+            )
+              ? parsedSettings.auto_ban_rules.keywords.join('\n')
+              : '';
+          }
         } catch (error) {
           console.error('解析其他设置失败:', error);
           data.azure_responses_version = '';
@@ -1422,11 +1474,17 @@ const EditChannelModal = (props) => {
           data.upstream_model_update_last_detected_models = [];
           data.upstream_model_update_ignored_models = '';
           data.advanced_custom = '';
+          data.auto_ban_rules_enabled = false;
+          data.auto_ban_status_codes = '';
+          data.auto_ban_keywords = '';
         }
       } else {
         // 兼容历史数据：老渠道没有 settings 时，默认按 json 展示
         data.vertex_key_type = 'json';
         data.aws_key_type = 'ak_sk';
+        data.auto_ban_rules_enabled = false;
+        data.auto_ban_status_codes = '';
+        data.auto_ban_keywords = '';
         data.is_enterprise_account = false;
         data.allow_service_tier = false;
         data.disable_store = false;
@@ -1459,10 +1517,13 @@ const EditChannelModal = (props) => {
         formApiRef.current.setValues(data);
       }
       if (data.auto_ban === 0) {
-        setAutoBan(false);
+        setAutoBanMode(0);
+      } else if (data.auto_ban === 2) {
+        setAutoBanMode(2);
       } else {
-        setAutoBan(true);
+        setAutoBanMode(1);
       }
+      setAutoBanRulesEnabled(data.auto_ban_rules_enabled || false);
       // 同步企业账户状态
       setIsEnterpriseAccount(data.is_enterprise_account || false);
       setBasicModels(getChannelModels(data.type));
@@ -2547,6 +2608,19 @@ const EditChannelModal = (props) => {
     } else if ('auto_test_channel_interval_minutes' in settings) {
       delete settings.auto_test_channel_interval_minutes;
     }
+
+    // 渠道级自动禁用规则：开启时替换全局状态码/关键词列表
+    if (localInputs.auto_ban_rules_enabled === true) {
+      settings.auto_ban_rules = {
+        status_codes: String(localInputs.auto_ban_status_codes || '').trim(),
+        keywords: String(localInputs.auto_ban_keywords || '')
+          .split('\n')
+          .map((keyword) => keyword.trim())
+          .filter(Boolean),
+      };
+    } else if ('auto_ban_rules' in settings) {
+      delete settings.auto_ban_rules;
+    }
     settings.upstream_model_update_check_enabled =
       localInputs.upstream_model_update_check_enabled === true;
     settings.upstream_model_update_auto_sync_enabled =
@@ -2606,9 +2680,14 @@ const EditChannelModal = (props) => {
     delete localInputs.upstream_model_update_last_detected_models;
     delete localInputs.upstream_model_update_ignored_models;
     delete localInputs.advanced_custom;
+    // 清理自动禁用规则的临时字段
+    delete localInputs.auto_ban_rules_enabled;
+    delete localInputs.auto_ban_status_codes;
+    delete localInputs.auto_ban_keywords;
 
     let res;
-    localInputs.auto_ban = localInputs.auto_ban ? 1 : 0;
+    const autoBanValue = Number(localInputs.auto_ban);
+    localInputs.auto_ban = [0, 1, 2].includes(autoBanValue) ? autoBanValue : 1;
     localInputs.models = localInputs.models.join(',');
     localInputs.group = (localInputs.groups || []).join(',');
 
@@ -5102,17 +5181,65 @@ const EditChannelModal = (props) => {
                       />
 
                       {/* Auto Ban - Core Config */}
-                      <Form.Switch
+                      <Form.RadioGroup
                         field='auto_ban'
                         label={t('是否自动禁用')}
+                        type='button'
+                        initValue={autoBanMode}
+                        onChange={(value) => setAutoBanMode(Number(value))}
+                        extraText={t(
+                          '跟随全局时由运营设置中的开关决定；也可仅为该渠道强制开启或关闭',
+                        )}
+                      >
+                        <Form.Radio value={1}>{t('跟随全局')}</Form.Radio>
+                        <Form.Radio value={2}>{t('强制开启')}</Form.Radio>
+                        <Form.Radio value={0}>{t('强制关闭')}</Form.Radio>
+                      </Form.RadioGroup>
+
+                      <Form.Switch
+                        field='auto_ban_rules_enabled'
+                        label={t('自定义禁用规则')}
                         checkedText={t('开')}
                         uncheckedText={t('关')}
-                        onChange={(value) => setAutoBan(value)}
+                        onChange={(value) => setAutoBanRulesEnabled(value)}
                         extraText={t(
-                          '仅当自动禁用开启时有效，关闭后不会自动禁用该渠道',
+                          '开启后用下方状态码和关键词替换全局禁用规则，仅对此渠道生效；关闭则跟随全局',
                         )}
-                        initValue={autoBan}
+                        initValue={autoBanRulesEnabled}
                       />
+
+                      {autoBanRulesEnabled && (
+                        <>
+                          <Form.Input
+                            field='auto_ban_status_codes'
+                            label={t('禁用状态码')}
+                            placeholder='401,429,500-502'
+                            extraText={t(
+                              '触发该渠道自动禁用的HTTP状态码，支持逗号分隔的代码或范围，如 401,429,500-502',
+                            )}
+                            showClear
+                          />
+
+                          <Form.TextArea
+                            field='auto_ban_keywords'
+                            label={t('禁用关键词')}
+                            placeholder={
+                              'Your credit balance is too low\nYou exceeded your current quota'
+                            }
+                            rows={5}
+                            extraText={t(
+                              '上游错误信息包含任一关键词时禁用该渠道，每行一个关键词',
+                            )}
+                          />
+
+                          <Button
+                            size='small'
+                            onClick={handleImportGlobalAutoBanRules}
+                          >
+                            {t('导入全局规则')}
+                          </Button>
+                        </>
+                      )}
 
                       {/* Test Model - Core Config */}
                       <Form.Select

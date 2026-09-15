@@ -239,8 +239,9 @@ export const MULTI_KEY_CONFIRM_MESSAGES = {
 // ============================================================================
 
 export const AUTO_BAN_OPTIONS = [
-  { value: 1, label: 'Enabled' },
-  { value: 0, label: 'Disabled' },
+  { value: 1, label: 'Follow global setting' },
+  { value: 2, label: 'Force on' },
+  { value: 0, label: 'Force off' },
 ] as const
 
 // ============================================================================
@@ -376,7 +377,14 @@ export const FIELD_DESCRIPTIONS = {
   PRIORITY: 'Higher priority channels are selected first',
   WEIGHT: 'Used for load balancing. Higher weight = more requests',
   TEST_MODEL: 'Model to use when testing channel connectivity',
-  AUTO_BAN: 'Automatically disable channel on repeated failures',
+  AUTO_BAN:
+    'Automatically disable the channel on failures. "Follow global" uses the switch in operation settings, or force it on/off for this channel only.',
+  AUTO_BAN_RULES:
+    'Replace the global disable rules for this channel with the status codes and keywords below. Leave off to follow the global lists.',
+  AUTO_BAN_STATUS_CODES:
+    'HTTP status codes that disable this channel, comma-separated codes or ranges like 401,429,500-502',
+  AUTO_BAN_KEYWORDS:
+    'Disable this channel when the upstream error contains any of these keywords, one per line',
   STATUS_CODE_MAPPING: 'Map response status codes (JSON format)',
   TAG: 'Group channels by tag for batch operations',
   REMARK: 'Internal notes (not shown to users)',

@@ -451,11 +451,30 @@ func (channel *Channel) SetTag(tag string) {
 	channel.Tag = &tag
 }
 
-func (channel *Channel) GetAutoBan() bool {
+// Channel auto-ban mode: 0 = force off, 1 = follow the global
+// AutomaticDisableChannelEnabled switch (default), 2 = force on.
+const (
+	ChannelAutoBanForceOff     = 0
+	ChannelAutoBanFollowGlobal = 1
+	ChannelAutoBanForceOn      = 2
+)
+
+func (channel *Channel) GetAutoBanMode() int {
 	if channel.AutoBan == nil {
-		return false
+		return ChannelAutoBanFollowGlobal
 	}
-	return *channel.AutoBan == 1
+	switch *channel.AutoBan {
+	case ChannelAutoBanForceOff, ChannelAutoBanForceOn:
+		return *channel.AutoBan
+	default:
+		return ChannelAutoBanFollowGlobal
+	}
+}
+
+// GetAutoBanRules returns the channel-level automatic-disable rules, or nil when
+// the channel follows the global status-code and keyword settings.
+func (channel *Channel) GetAutoBanRules() *types.ChannelAutoBanRules {
+	return channel.GetOtherSettings().AutoBanRules
 }
 
 func (channel *Channel) Save() error {
@@ -1308,6 +1327,18 @@ func (channel *Channel) ValidateSettings() error {
 	if channelOtherSettings.AdvancedCustom != nil {
 		if err := channelOtherSettings.AdvancedCustom.Validate(); err != nil {
 			return err
+		}
+	}
+	if channel.AutoBan != nil {
+		switch *channel.AutoBan {
+		case ChannelAutoBanForceOff, ChannelAutoBanFollowGlobal, ChannelAutoBanForceOn:
+		default:
+			return fmt.Errorf("invalid auto_ban value %d, must be 0 (off), 1 (follow global) or 2 (force on)", *channel.AutoBan)
+		}
+	}
+	if channelOtherSettings.AutoBanRules != nil {
+		if _, err := operation_setting.ParseHTTPStatusCodeRanges(channelOtherSettings.AutoBanRules.StatusCodes); err != nil {
+			return fmt.Errorf("invalid auto_ban_rules status codes: %w", err)
 		}
 	}
 	if _, err := common.ParseProxyURLStrict(channelParams.Proxy); err != nil {

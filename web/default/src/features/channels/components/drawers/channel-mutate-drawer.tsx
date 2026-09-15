@@ -111,6 +111,10 @@ import {
   SecureVerificationDialog,
   useSecureVerification,
 } from '@/features/auth/secure-verification'
+import {
+  getOptionValue,
+  useSystemOptions,
+} from '@/features/system-settings/hooks/use-system-options'
 import { modelRoutingQueryKeys } from '@/features/models/lib/query-keys'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { useHiddenClickUnlock } from '@/hooks/use-hidden-click-unlock'
@@ -140,6 +144,7 @@ import {
 } from '../../api'
 import {
   ADD_MODE_OPTIONS,
+  AUTO_BAN_OPTIONS,
   CHANNEL_STATUS_LABELS,
   CHANNEL_TYPE_OPTIONS,
   CHANNEL_TYPE_WARNINGS,
@@ -282,6 +287,7 @@ const CHANNEL_EDITOR_MAIN_SECTION_IDS = [
 ]
 const ADVANCED_SETTINGS_SECTION_IDS = {
   routingStrategy: 'channel-section-advanced-routing-strategy',
+  autoBanRules: 'channel-section-advanced-auto-ban-rules',
   overrideRules: 'channel-section-advanced-override-rules',
   extraSettings: 'channel-section-advanced-extra-settings',
   automaticTesting: 'channel-section-advanced-automatic-testing',
@@ -369,6 +375,7 @@ function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
     values.system_prompt_override ||
     values.automatic_channel_test_disabled ||
     Number(values.auto_test_channel_interval_minutes || 0) > 0 ||
+    values.auto_ban_rules_enabled ||
     values.claude_beta_query ||
     values.upstream_model_update_check_enabled ||
     values.upstream_model_update_auto_sync_enabled ||
@@ -852,6 +859,8 @@ export function ChannelMutateDrawer({
   const currentWeight = form.watch('weight')
   const currentTestModel = form.watch('test_model')
   const currentAutoBan = form.watch('auto_ban')
+  const currentAutoBanRulesEnabled = form.watch('auto_ban_rules_enabled')
+  const { data: systemOptionsData } = useSystemOptions()
   const currentStatusCodeMapping = form.watch('status_code_mapping')
   const currentParamOverride = form.watch('param_override')
   const currentHeaderOverride = form.watch('header_override')
@@ -908,6 +917,23 @@ export function ChannelMutateDrawer({
     form.setValue('automatic_channel_test_disabled', enabled, {
       shouldDirty: true,
     })
+  }
+
+  const handleImportGlobalAutoBanRules = (): void => {
+    const globalOptions = getOptionValue(systemOptionsData?.data, {
+      AutomaticDisableStatusCodes: '401',
+      AutomaticDisableKeywords: '',
+    })
+    form.setValue(
+      'auto_ban_status_codes',
+      globalOptions.AutomaticDisableStatusCodes,
+      { shouldDirty: true, shouldValidate: true }
+    )
+    form.setValue(
+      'auto_ban_keywords',
+      globalOptions.AutomaticDisableKeywords,
+      { shouldDirty: true, shouldValidate: true }
+    )
   }
   const {
     unlocked: doubaoApiEditUnlocked,
@@ -1083,7 +1109,8 @@ export function ChannelMutateDrawer({
     currentPriority ||
     currentWeight ||
     currentTestModel?.trim() ||
-    (currentAutoBan ?? 1) !== 1
+    (currentAutoBan ?? 1) !== 1 ||
+    currentAutoBanRulesEnabled
   )
   const overrideRulesConfigured = Boolean(
     hasConfiguredOverrideValue(currentStatusCodeMapping) ||
@@ -4193,24 +4220,137 @@ export function ChannelMutateDrawer({
                               control={form.control}
                               name='auto_ban'
                               render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>{t('Auto Ban')}</FormLabel>
+                                  <FormControl>
+                                    <Select
+                                      value={String(field.value ?? 1)}
+                                      onValueChange={(value) =>
+                                        field.onChange(Number(value))
+                                      }
+                                    >
+                                      <SelectTrigger className='w-full'>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {AUTO_BAN_OPTIONS.map((option) => (
+                                          <SelectItem
+                                            key={option.value}
+                                            value={String(option.value)}
+                                          >
+                                            {t(option.label)}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </FormControl>
+                                  <FormDescription>
+                                    {t(FIELD_DESCRIPTIONS.AUTO_BAN)}
+                                  </FormDescription>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+
+                          <div
+                            id={ADVANCED_SETTINGS_SECTION_IDS.autoBanRules}
+                            className={configuredAdvancedSectionClassName(
+                              'flex scroll-mt-4 flex-col gap-4 border-t pt-4',
+                              currentAutoBanRulesEnabled === true
+                            )}
+                          >
+                            <FormField
+                              control={form.control}
+                              name='auto_ban_rules_enabled'
+                              render={({ field }) => (
                                 <FormItem className='flex items-center justify-between'>
                                   <div className='space-y-0.5'>
-                                    <FormLabel>{t('Auto Ban')}</FormLabel>
+                                    <FormLabel>
+                                      {t('Custom disable rules')}
+                                    </FormLabel>
                                     <FormDescription>
-                                      {t(FIELD_DESCRIPTIONS.AUTO_BAN)}
+                                      {t(FIELD_DESCRIPTIONS.AUTO_BAN_RULES)}
                                     </FormDescription>
                                   </div>
                                   <FormControl>
                                     <Switch
-                                      checked={field.value === 1}
+                                      checked={field.value === true}
                                       onCheckedChange={(checked) =>
-                                        field.onChange(checked ? 1 : 0)
+                                        field.onChange(checked)
                                       }
                                     />
                                   </FormControl>
                                 </FormItem>
                               )}
                             />
+
+                            {currentAutoBanRulesEnabled && (
+                              <>
+                                <FormField
+                                  control={form.control}
+                                  name='auto_ban_status_codes'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <div className='flex items-center justify-between'>
+                                        <FormLabel>
+                                          {t('Disable status codes')}
+                                        </FormLabel>
+                                        <Button
+                                          type='button'
+                                          variant='outline'
+                                          size='sm'
+                                          onClick={
+                                            handleImportGlobalAutoBanRules
+                                          }
+                                        >
+                                          {t('Import global rules')}
+                                        </Button>
+                                      </div>
+                                      <FormControl>
+                                        <Input
+                                          placeholder='401,429,500-502'
+                                          {...field}
+                                          value={field.value || ''}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        {t(
+                                          FIELD_DESCRIPTIONS.AUTO_BAN_STATUS_CODES
+                                        )}
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name='auto_ban_keywords'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>
+                                        {t('Disable keywords')}
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Textarea
+                                          rows={5}
+                                          placeholder={'Your credit balance is too low\nYou exceeded your current quota'}
+                                          {...field}
+                                          value={field.value || ''}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        {t(
+                                          FIELD_DESCRIPTIONS.AUTO_BAN_KEYWORDS
+                                        )}
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              </>
+                            )}
                           </div>
 
                           <div

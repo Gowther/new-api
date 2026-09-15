@@ -66,6 +66,26 @@ function isOptionalModelMapping(value: string | undefined): boolean {
   }
 }
 
+function isOptionalStatusCodeRangeList(value: string | undefined): boolean {
+  const trimmed = (value || '').trim()
+  if (!trimmed) return true
+  return trimmed.split(',').every((segment) => {
+    const token = segment.trim()
+    if (!token) return true
+    const match = /^(\d{3})(?:-(\d{3}))?$/.exec(token)
+    if (!match) return false
+    const start = Number(match[1])
+    const end = match[2] ? Number(match[2]) : start
+    return (
+      start >= 100 &&
+      start <= 599 &&
+      end >= 100 &&
+      end <= 599 &&
+      start <= end
+    )
+  })
+}
+
 function isOptionalStatusCodeMapping(value: string | undefined): boolean {
   try {
     const parsed = parseOptionalJson(value)
@@ -149,6 +169,15 @@ export const channelFormSchema = z
     weight: z.number().optional(),
     test_model: z.string().optional(),
     auto_ban: z.number().optional(),
+    auto_ban_rules_enabled: z.boolean().optional(),
+    auto_ban_status_codes: z
+      .string()
+      .optional()
+      .refine(
+        isOptionalStatusCodeRangeList,
+        'Status codes must be comma-separated HTTP codes or ranges like 401,429,500-502'
+      ),
+    auto_ban_keywords: z.string().optional(),
     status: z.number(),
     status_code_mapping: z
       .string()
@@ -318,6 +347,9 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   weight: 0,
   test_model: '',
   auto_ban: 1,
+  auto_ban_rules_enabled: false,
+  auto_ban_status_codes: '',
+  auto_ban_keywords: '',
   status: CHANNEL_STATUS.ENABLED,
   status_code_mapping: '',
   tag: '',
@@ -415,6 +447,9 @@ export function transformChannelToFormDefaults(
   let upstreamModelUpdateCheckEnabled = false
   let upstreamModelUpdateAutoSyncEnabled = false
   let upstreamModelUpdateIgnoredModels = ''
+  let autoBanRulesEnabled = false
+  let autoBanStatusCodes = ''
+  let autoBanKeywords = ''
   let advancedCustom = ''
 
   if (channel.settings) {
@@ -449,6 +484,20 @@ export function transformChannelToFormDefaults(
         : ''
       if (parsed.advanced_custom) {
         advancedCustom = stringifyAdvancedCustomConfig(parsed.advanced_custom)
+      }
+      if (
+        parsed.auto_ban_rules &&
+        typeof parsed.auto_ban_rules === 'object' &&
+        !Array.isArray(parsed.auto_ban_rules)
+      ) {
+        autoBanRulesEnabled = true
+        autoBanStatusCodes =
+          typeof parsed.auto_ban_rules.status_codes === 'string'
+            ? parsed.auto_ban_rules.status_codes
+            : ''
+        autoBanKeywords = Array.isArray(parsed.auto_ban_rules.keywords)
+          ? parsed.auto_ban_rules.keywords.join('\n')
+          : ''
       }
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -502,6 +551,9 @@ export function transformChannelToFormDefaults(
     upstream_model_update_check_enabled: upstreamModelUpdateCheckEnabled,
     upstream_model_update_auto_sync_enabled: upstreamModelUpdateAutoSyncEnabled,
     upstream_model_update_ignored_models: upstreamModelUpdateIgnoredModels,
+    auto_ban_rules_enabled: autoBanRulesEnabled,
+    auto_ban_status_codes: autoBanStatusCodes,
+    auto_ban_keywords: autoBanKeywords,
     advanced_custom: advancedCustom,
   }
 }
@@ -618,6 +670,19 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     settingsObj.auto_test_channel_interval_minutes = autoTestIntervalMinutes
   } else if ('auto_test_channel_interval_minutes' in settingsObj) {
     delete settingsObj.auto_test_channel_interval_minutes
+  }
+
+  // Channel-level automatic disable rules (replace the global rules when set)
+  if (formData.auto_ban_rules_enabled === true) {
+    settingsObj.auto_ban_rules = {
+      status_codes: (formData.auto_ban_status_codes || '').trim(),
+      keywords: String(formData.auto_ban_keywords || '')
+        .split('\n')
+        .map((keyword) => keyword.trim())
+        .filter(Boolean),
+    }
+  } else if ('auto_ban_rules' in settingsObj) {
+    delete settingsObj.auto_ban_rules
   }
 
   // Upstream model update settings (for model-fetchable channel types)

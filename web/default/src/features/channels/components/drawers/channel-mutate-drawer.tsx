@@ -1380,7 +1380,17 @@ export function ChannelMutateDrawer({
         ...initialValues,
       }
       form.reset(createDefaults)
-      setAdvancedSettingsOpen(false)
+      // 剪贴板带来的请求头覆盖用 setValue 再钉一遍：和抽屉「粘贴配置」按钮走
+      // 同一套机制，不依赖 reset 在未展开区域字段上的落值时序。
+      if (initialValues?.header_override) {
+        form.setValue('header_override', initialValues.header_override, {
+          shouldDirty: true,
+        })
+      }
+      // 剪贴板带了请求头覆盖就顺手展开高级设置，打开就能看到它
+      setAdvancedSettingsOpen(
+        hasConfiguredOverrideValue(createDefaults.header_override)
+      )
       initialModelsRef.current = parseModelsString(createDefaults.models || '')
       initialModelMappingRef.current = createDefaults.model_mapping || ''
       initialStatusCodeMappingRef.current =

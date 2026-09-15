@@ -4657,6 +4657,7 @@ const EditChannelModal = (props) => {
                         allowCreate
                         autoClearSearchValue={false}
                         searchPosition='dropdown'
+                        autoFocus
                         optionList={modelOptions}
                         onSearch={(value) => setModelSearchValue(value)}
                         innerBottomSlot={

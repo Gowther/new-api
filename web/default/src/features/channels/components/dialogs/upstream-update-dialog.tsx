@@ -97,8 +97,8 @@ export function UpstreamUpdateDialog(props: UpstreamUpdateDialogProps) {
   const handleConfirm = () => {
     const hasAdd = props.addModels.length > 0
     const hasRemove = props.removeModels.length > 0
-    const selectedAddArr = Array.from(selectedAdd)
-    const selectedRemoveArr = Array.from(selectedRemove)
+    const selectedAddArr = [...selectedAdd]
+    const selectedRemoveArr = [...selectedRemove]
     const anyAdd = selectedAddArr.length > 0
     const anyRemove = selectedRemoveArr.length > 0
 
@@ -168,6 +168,7 @@ export function UpstreamUpdateDialog(props: UpstreamUpdateDialogProps) {
             <div className='relative'>
               <Search className='text-muted-foreground absolute top-2.5 left-2.5 h-4 w-4' />
               <Input
+                autoFocus
                 placeholder={t('Search models...')}
                 className='pl-8'
                 value={searchAdd}
@@ -219,6 +220,7 @@ export function UpstreamUpdateDialog(props: UpstreamUpdateDialogProps) {
             <div className='relative'>
               <Search className='text-muted-foreground absolute top-2.5 left-2.5 h-4 w-4' />
               <Input
+                autoFocus
                 placeholder={t('Search models...')}
                 className='pl-8'
                 value={searchRemove}
@@ -282,8 +284,8 @@ export function UpstreamUpdateDialog(props: UpstreamUpdateDialogProps) {
         handleConfirm={() => {
           setPartialConfirmOpen(false)
           props.onConfirm({
-            addModels: Array.from(selectedAdd),
-            removeModels: Array.from(selectedRemove),
+            addModels: [...selectedAdd],
+            removeModels: [...selectedRemove],
           })
         }}
       />

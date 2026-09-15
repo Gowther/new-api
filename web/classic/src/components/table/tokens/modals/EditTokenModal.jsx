@@ -622,6 +622,7 @@ const EditTokenModal = (props) => {
                       filter={selectFilter}
                       autoClearSearchValue={false}
                       searchPosition='dropdown'
+                      autoFocus
                       showClear
                       style={{ width: '100%' }}
                     />

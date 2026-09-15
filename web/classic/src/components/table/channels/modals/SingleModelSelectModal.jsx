@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import {
@@ -60,6 +60,14 @@ const SingleModelSelectModal = ({
       setSelectedModel(normalizeModelName(selected));
     }
   }, [visible, selected]);
+
+  // 弹窗打开后聚焦搜索框，可直接输入搜索模型
+  const searchInputRef = useRef(null);
+  useEffect(() => {
+    if (visible) {
+      searchInputRef.current?.focus();
+    }
+  }, [visible]);
 
   const filteredModels = useMemo(() => {
     const lower = keyword.trim().toLowerCase();
@@ -130,6 +138,7 @@ const SingleModelSelectModal = ({
       centered
     >
       <Input
+        ref={searchInputRef}
         prefix={<IconSearch size={14} />}
         placeholder={t('搜索模型')}
         value={keyword}

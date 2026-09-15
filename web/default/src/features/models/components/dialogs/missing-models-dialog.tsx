@@ -161,6 +161,7 @@ export function MissingModelsDialog({
           <div className='relative w-48'>
             <Search className='text-muted-foreground pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2' />
             <Input
+              autoFocus
               value={searchTerm}
               onChange={(event) => {
                 setSearchTerm(event.target.value)

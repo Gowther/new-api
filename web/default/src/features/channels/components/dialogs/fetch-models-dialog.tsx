@@ -392,6 +392,7 @@ export function FetchModelsDialog({
         <div className='relative'>
           <Search className='text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2' />
           <Input
+            autoFocus
             placeholder={t('Search models...')}
             value={searchKeyword}
             onChange={(e) => setSearchKeyword(e.target.value)}

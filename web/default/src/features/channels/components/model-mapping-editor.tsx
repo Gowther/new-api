@@ -182,6 +182,40 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
           return false
         }
         setRows((previousRows) => {
+          if (props.allowMultiTarget) {
+            const remainingRows = [...previousRows]
+            // A candidate list expands to one row per candidate, all sharing
+            // the source; duplicate-source rows merge back when emitted.
+            return entries.flatMap(([from, to]) => {
+              const targets = Array.isArray(to)
+                ? to.map((part) => String(part).trim()).filter(Boolean)
+                : [String(to)]
+              if (targets.length === 0) targets.push('')
+              return targets.map((toString) => {
+                let existingIndex = remainingRows.findIndex(
+                  (row) => row.from === from && row.to === toString
+                )
+                if (existingIndex === -1) {
+                  existingIndex = remainingRows.findIndex(
+                    (row) => row.from === from
+                  )
+                }
+                if (existingIndex === -1) {
+                  return {
+                    id: createRowId(),
+                    from,
+                    to: toString,
+                  }
+                }
+                const [existing] = remainingRows.splice(existingIndex, 1)
+                return {
+                  id: existing.id,
+                  from,
+                  to: toString,
+                }
+              })
+            })
+          }
           const remainingRows = [...previousRows]
           return entries.map(([from, to], index) => {
             const toString = Array.isArray(to)
@@ -232,12 +266,30 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
     if (updatedRows.length === 0) {
       return ''
     }
-    const obj: Record<string, string | string[]> = {}
+    if (props.allowMultiTarget) {
+      // Rows sharing a source are one candidate list, not a conflict.
+      const merged = new Map<string, string[]>()
+      updatedRows.forEach((row) => {
+        const source = row.from.trim()
+        if (!source) return
+        const parts = splitTemplateTargetText(row.to)
+        const candidates = merged.get(source) ?? []
+        const list = Array.isArray(parts) ? parts : [parts]
+        list.forEach((part) => {
+          if (part && !candidates.includes(part)) candidates.push(part)
+        })
+        merged.set(source, candidates)
+      })
+      const obj: Record<string, string | string[]> = {}
+      for (const [source, candidates] of merged) {
+        obj[source] = candidates.length > 1 ? candidates : (candidates[0] ?? '')
+      }
+      return JSON.stringify(obj, null, 2)
+    }
+    const obj: Record<string, string> = {}
     updatedRows.forEach((row) => {
       if (row.from.trim()) {
-        obj[row.from.trim()] = props.allowMultiTarget
-          ? splitTemplateTargetText(row.to)
-          : row.to.trim()
+        obj[row.from.trim()] = row.to.trim()
       }
     })
     return JSON.stringify(obj, null, 2)
@@ -245,12 +297,16 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
 
   const syncRows = (updatedRows: MappingRow[]) => {
     setRows(updatedRows)
-    const duplicates = getDuplicateSources(updatedRows)
-    if (duplicates.length > 0) {
-      setJsonError(t('Duplicate source model mappings are not allowed'))
-      setJsonValue(DUPLICATE_MAPPING_SENTINEL)
-      props.onChange(DUPLICATE_MAPPING_SENTINEL)
-      return
+    if (!props.allowMultiTarget) {
+      // Channel mappings are strict one-to-one; the template editor merges
+      // same-source rows into one candidate list instead of rejecting them.
+      const duplicates = getDuplicateSources(updatedRows)
+      if (duplicates.length > 0) {
+        setJsonError(t('Duplicate source model mappings are not allowed'))
+        setJsonValue(DUPLICATE_MAPPING_SENTINEL)
+        props.onChange(DUPLICATE_MAPPING_SENTINEL)
+        return
+      }
     }
 
     const json = convertRowsToJson(updatedRows)
@@ -406,7 +462,7 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
     if (nextMode !== 'visual' && nextMode !== 'json') return
     if (nextMode === 'json') {
       const duplicates = getDuplicateSources(rows)
-      if (duplicates.length === 0) {
+      if (duplicates.length === 0 || props.allowMultiTarget) {
         const json = convertRowsToJson(rows)
         setJsonValue(json)
         props.onChange(json)
@@ -496,7 +552,7 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
           </Alert>
         )}
 
-        {duplicateSources.length > 0 && (
+        {!props.allowMultiTarget && duplicateSources.length > 0 && (
           <Alert>
             <AlertDescription>
               {t('Duplicate source model(s): {{models}}', {

@@ -29,12 +29,18 @@ import {
 
 const { Text } = Typography;
 
-const mappingToRows = (mapping) =>
-  Object.entries(mapping || {}).map(([from, to], index) => ({
-    id: `tpl-row-${index}`,
-    from,
-    to: Array.isArray(to) ? to.join(', ') : String(to ?? ''),
-  }));
+const mappingToRows = (mapping) => {
+  const rows = [];
+  Object.entries(mapping || {}).forEach(([from, to]) => {
+    // A candidate list expands to one row per candidate, all sharing the
+    // source; duplicate-source rows merge back on save.
+    const targets = Array.isArray(to) ? to : [String(to ?? '')];
+    targets.forEach((target) => {
+      rows.push({ id: `tpl-row-${rows.length}`, from, to: target });
+    });
+  });
+  return rows;
+};
 
 /**
  * Manages the locally stored model redirect templates: rename, edit the mapping
@@ -100,23 +106,24 @@ const ModelMappingTemplateModal = ({
       return;
     }
 
-    const mapping = {};
-    const duplicates = [];
+    // Rows sharing a source are one candidate list, not a conflict: each row's
+    // comma-separated target contributes its names in row order, deduped.
+    const candidatesBySource = new Map();
     for (const row of rows) {
       const from = row.from.trim();
       if (!from) continue;
-      if (Object.prototype.hasOwnProperty.call(mapping, from)) {
-        duplicates.push(from);
-        continue;
+      const parts = splitTemplateTargetText(row.to);
+      const list = Array.isArray(parts) ? parts : [parts];
+      const merged = candidatesBySource.get(from) ?? [];
+      for (const part of list) {
+        if (part && !merged.includes(part)) merged.push(part);
       }
-      // A comma-separated target is the candidate list a multi-target template
-      // entry needs; a single name stays a plain string.
-      mapping[from] = splitTemplateTargetText(row.to);
+      candidatesBySource.set(from, merged);
     }
 
-    if (duplicates.length > 0) {
-      setError(`${t('重复的源模型')}: ${duplicates.join(', ')}`);
-      return;
+    const mapping = {};
+    for (const [from, candidates] of candidatesBySource) {
+      mapping[from] = candidates.length > 1 ? candidates : candidates[0] || '';
     }
     if (Object.keys(mapping).length === 0) {
       setError(t('请先添加至少一条映射'));

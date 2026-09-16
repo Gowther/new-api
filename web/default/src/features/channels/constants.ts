@@ -244,6 +244,12 @@ export const AUTO_BAN_OPTIONS = [
   { value: 0, label: 'Force off' },
 ] as const
 
+export const AUTO_TEST_OPTIONS = [
+  { value: 1, label: 'Follow global setting' },
+  { value: 2, label: 'Force on' },
+  { value: 0, label: 'Force off' },
+] as const
+
 // ============================================================================
 // Error / Success Messages (i18n keys: use t(ERROR_MESSAGES.xxx) when displaying)
 // ============================================================================
@@ -379,6 +385,8 @@ export const FIELD_DESCRIPTIONS = {
   TEST_MODEL: 'Model to use when testing channel connectivity',
   AUTO_BAN:
     'Automatically disable the channel on failures. "Follow global" uses the switch in operation settings, or force it on/off for this channel only.',
+  AUTO_TEST:
+    'Whether scheduled tests probe this channel. "Force on" probes it and re-enables it on success even when every global switch is off; "Force off" never probes it; "Follow global" defers to the operation settings.',
   AUTO_BAN_RULES:
     'Replace the global disable rules for this channel with the status codes and keywords below. Leave off to follow the global lists.',
   AUTO_BAN_STATUS_CODES:

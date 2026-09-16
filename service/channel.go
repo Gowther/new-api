@@ -87,8 +87,13 @@ func ShouldDisableChannelWithRules(err *types.NewAPIError, autoBanMode int, rule
 	return search
 }
 
-func ShouldEnableChannel(newAPIError *types.NewAPIError, status int) bool {
-	if !common.AutomaticEnableChannelEnabled {
+// ShouldEnableChannel decides whether a successful probe may re-enable an
+// auto-disabled channel. autoTestMode: 0 = force off (the channel is never
+// probed, so it also never auto-recovers), 1 = follow the global
+// AutomaticEnableChannelEnabled switch, 2 = force on (a successful probe
+// re-enables the channel even when every global switch is off).
+func ShouldEnableChannel(newAPIError *types.NewAPIError, status int, autoTestMode int) bool {
+	if autoTestMode == model.ChannelAutoTestForceOff {
 		return false
 	}
 	if newAPIError != nil {
@@ -97,5 +102,8 @@ func ShouldEnableChannel(newAPIError *types.NewAPIError, status int) bool {
 	if status != common.ChannelStatusAutoDisabled {
 		return false
 	}
-	return true
+	if autoTestMode == model.ChannelAutoTestForceOn {
+		return true
+	}
+	return common.AutomaticEnableChannelEnabled
 }

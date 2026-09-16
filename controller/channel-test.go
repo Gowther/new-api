@@ -1012,7 +1012,7 @@ func performChannelTests(ctx context.Context, channels []*model.Channel, testUse
 		}
 
 		// enable channel
-		if result.localErr == nil && !isChannelEnabled && service.ShouldEnableChannel(newAPIError, channel.Status) {
+		if result.localErr == nil && !isChannelEnabled && service.ShouldEnableChannel(newAPIError, channel.Status, channel.GetAutoTestMode()) {
 			service.EnableChannel(channel.Id, common.GetContextKeyString(result.context, constant.ContextKeyChannelKey), channel.Name)
 			summary.Enabled++
 		}
@@ -1160,6 +1160,12 @@ func selectChannelsForAutomaticTest(channels []*model.Channel, mode string, now 
 		if channel.Status == common.ChannelStatusManuallyDisabled {
 			continue
 		}
+		// A channel that opts out of probing is excluded from every automatic
+		// batch, scheduled or manual; the single-channel test endpoint stays.
+		if channel.GetAutoTestMode() == model.ChannelAutoTestForceOff {
+			skipped++
+			continue
+		}
 		if mode == operation_setting.ChannelTestModePassiveRecovery &&
 			channel.Status != common.ChannelStatusAutoDisabled &&
 			!hasAutoDisabledMultiKey(channel) {
@@ -1175,8 +1181,14 @@ func selectChannelsForAutomaticTest(channels []*model.Channel, mode string, now 
 }
 
 func shouldRunAutomaticChannelTest(channel *model.Channel, defaultMinutes float64, now int64) bool {
+	mode := channel.GetAutoTestMode()
+	if mode == model.ChannelAutoTestForceOff {
+		return false
+	}
 	settings := channel.GetOtherSettings()
-	if settings.AutomaticChannelTestDisabled {
+	// Legacy per-channel opt-out: still honored while the channel follows the
+	// global switches; an explicit "force on" overrides it.
+	if mode == model.ChannelAutoTestFollowGlobal && settings.AutomaticChannelTestDisabled {
 		return false
 	}
 	if channel.TestTime <= 0 {

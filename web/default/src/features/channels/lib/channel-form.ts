@@ -165,6 +165,7 @@ export const channelFormSchema = z
     weight: z.number().optional(),
     test_model: z.string().optional(),
     auto_ban: z.number().optional(),
+    auto_test: z.number().optional(),
     auto_ban_rules_enabled: z.boolean().optional(),
     auto_ban_status_codes: z
       .string()
@@ -233,7 +234,6 @@ export const channelFormSchema = z
     allow_speed: z.boolean().optional(), // Anthropic: speed mode control
     claude_beta_query: z.boolean().optional(), // Anthropic: beta query passthrough
     disable_task_polling_sleep: z.boolean().optional(),
-    automatic_channel_test_disabled: z.boolean().optional(),
     auto_test_channel_interval_minutes: z.number().min(0).optional(),
     // Upstream model update settings (stored in settings JSON)
     upstream_model_update_check_enabled: z.boolean().optional(),
@@ -344,6 +344,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   weight: 0,
   test_model: '',
   auto_ban: 1,
+  auto_test: 1,
   auto_ban_rules_enabled: false,
   auto_ban_status_codes: '',
   auto_ban_keywords: '',
@@ -381,7 +382,6 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   allow_speed: false,
   claude_beta_query: false,
   disable_task_polling_sleep: false,
-  automatic_channel_test_disabled: false,
   auto_test_channel_interval_minutes: 0,
   upstream_model_update_check_enabled: false,
   upstream_model_update_auto_sync_enabled: false,
@@ -515,6 +515,7 @@ export function transformChannelToFormDefaults(
     weight: channel.weight || 0,
     test_model: channel.test_model || '',
     auto_ban: channel.auto_ban ?? 1,
+    auto_test: channel.auto_test ?? (automaticChannelTestDisabled ? 0 : 1),
     status: channel.status,
     status_code_mapping: channel.status_code_mapping || '',
     tag: channel.tag || '',
@@ -543,7 +544,6 @@ export function transformChannelToFormDefaults(
     allow_speed: allowSpeed,
     claude_beta_query: claudeBetaQuery,
     disable_task_polling_sleep: disableTaskPollingSleep,
-    automatic_channel_test_disabled: automaticChannelTestDisabled,
     auto_test_channel_interval_minutes: autoTestChannelIntervalMinutes,
     allow_safety_identifier: allowSafetyIdentifier,
     upstream_model_update_check_enabled: upstreamModelUpdateCheckEnabled,
@@ -656,11 +656,9 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
 
   settingsObj.disable_task_polling_sleep =
     formData.disable_task_polling_sleep === true
-  if (formData.automatic_channel_test_disabled === true) {
-    settingsObj.automatic_channel_test_disabled = true
-  } else if ('automatic_channel_test_disabled' in settingsObj) {
-    delete settingsObj.automatic_channel_test_disabled
-  }
+  // auto_test replaced the old per-channel skip flag; drop it so saved
+  // settings stop carrying the legacy toggle.
+  delete settingsObj.automatic_channel_test_disabled
   const autoTestIntervalMinutes = Number(
     formData.auto_test_channel_interval_minutes || 0
   )
@@ -750,6 +748,7 @@ export function transformFormDataToCreatePayload(
     weight: formData.weight || null,
     test_model: formData.test_model || null,
     auto_ban: formData.auto_ban ?? 1,
+    auto_test: formData.auto_test ?? 1,
     status: formData.status,
     status_code_mapping: formData.status_code_mapping || null,
     tag: formData.tag || null,
@@ -802,6 +801,7 @@ export function transformFormDataToUpdatePayload(
     weight: formData.weight ?? 0,
     test_model: formData.test_model || null,
     auto_ban: formData.auto_ban ?? 1,
+    auto_test: formData.auto_test ?? 1,
     status_code_mapping: formData.status_code_mapping || null,
     tag: formData.tag || null,
     remark: formData.remark || '',

@@ -4275,7 +4275,11 @@
     "原地转换：当前密钥将变为第 1 把密钥；在上方密钥输入框中每行一把填入其余密钥，转换后即可在下方选择分发模式": "Convert in place: the current key becomes key #1; enter the remaining keys in the key field above (one per line), then pick the distribution mode below",
     "主备模式": "Sticky mode",
     "已将 {{models}} 折叠进统一模型名": "Folded {{models}} into their unified names",
-    "多个上游名可用英文逗号分隔，渠道已有的名字应用模板时会折叠合并为左侧模型": "Multiple upstream names can be comma-separated; served ones fold into the model on the left"
+    "多个上游名可用英文逗号分隔，渠道已有的名字应用模板时会折叠合并为左侧模型": "Multiple upstream names can be comma-separated; served ones fold into the model on the left",
+    "定时自动测试": "Scheduled automatic test",
+    "强制参与": "Always test",
+    "强制跳过": "Never test",
+    "强制参与时，即使全局定时测试和自动恢复开关都关闭，也会定时检测该渠道，测试成功后自动启用；强制跳过则绝不参与定时检测；跟随全局时按全局开关决定": "With \"Always test\", this channel is probed on schedule and re-enabled on success even when the global scheduled-test and auto-enable switches are both off; \"Never test\" excludes it from every scheduled probe; \"Follow global\" uses the global switches."
   },
   "已保存官方价格预览失败": "Failed to preview saved official prices",
   "查看官方价格变更": "Review official price changes",

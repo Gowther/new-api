@@ -145,6 +145,7 @@ import {
 import {
   ADD_MODE_OPTIONS,
   AUTO_BAN_OPTIONS,
+  AUTO_TEST_OPTIONS,
   CHANNEL_STATUS_LABELS,
   CHANNEL_TYPE_OPTIONS,
   CHANNEL_TYPE_WARNINGS,
@@ -333,7 +334,7 @@ const SENSITIVE_FORM_FIELDS = [
   'allow_speed',
   'claude_beta_query',
   'disable_task_polling_sleep',
-  'automatic_channel_test_disabled',
+  'auto_test',
   'auto_test_channel_interval_minutes',
   'upstream_model_update_check_enabled',
   'upstream_model_update_auto_sync_enabled',
@@ -377,7 +378,7 @@ function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
     values.thinking_to_content ||
     values.pass_through_body_enabled ||
     values.system_prompt_override ||
-    values.automatic_channel_test_disabled ||
+    (values.auto_test !== undefined && values.auto_test !== 1) ||
     Number(values.auto_test_channel_interval_minutes || 0) > 0 ||
     values.auto_ban_rules_enabled ||
     values.claude_beta_query ||
@@ -886,9 +887,8 @@ export function ChannelMutateDrawer({
   const currentDisableTaskPollingSleep = form.watch(
     'disable_task_polling_sleep'
   )
-  const currentAutomaticChannelTestDisabled = form.watch(
-    'automatic_channel_test_disabled'
-  )
+  const currentAutoTest = form.watch('auto_test')
+  const currentAutomaticChannelTestDisabled = currentAutoTest === 0
   const currentAutoTestChannelIntervalMinutes = form.watch(
     'auto_test_channel_interval_minutes'
   )
@@ -930,9 +930,13 @@ export function ChannelMutateDrawer({
       shouldDirty: true,
       shouldValidate: true,
     })
-    form.setValue('automatic_channel_test_disabled', enabled, {
-      shouldDirty: true,
-    })
+    // The official-client toggle used to ride on the per-channel skip flag;
+    // now it maps to the auto-test mode.
+    if (enabled) {
+      form.setValue('auto_test', 0, { shouldDirty: true })
+    } else if (currentAutoTest === 0) {
+      form.setValue('auto_test', 1, { shouldDirty: true })
+    }
   }
 
   const handleImportGlobalAutoBanRules = (): void => {
@@ -1142,7 +1146,7 @@ export function ChannelMutateDrawer({
     currentSystemPromptOverride
   )
   const automaticTestingConfigured = Boolean(
-    currentAutomaticChannelTestDisabled ||
+    (currentAutoTest !== undefined && currentAutoTest !== 1) ||
     Number(currentAutoTestChannelIntervalMinutes || 0) > 0
   )
   let fieldPassthroughConfigured = false
@@ -4950,25 +4954,36 @@ export function ChannelMutateDrawer({
 
                             <FormField
                               control={form.control}
-                              name='automatic_channel_test_disabled'
+                              name='auto_test'
                               render={({ field }) => (
-                                <FormItem className='flex items-center justify-between gap-3'>
-                                  <div className='space-y-0.5'>
-                                    <FormLabel>
-                                      {t('Disable automatic recovery checks')}
-                                    </FormLabel>
-                                    <FormDescription>
-                                      {t(
-                                        'Skip this channel in scheduled automatic tests; manual tests still run'
-                                      )}
-                                    </FormDescription>
-                                  </div>
+                                <FormItem>
+                                  <FormLabel>{t('Auto Test')}</FormLabel>
                                   <FormControl>
-                                    <Switch
-                                      checked={field.value}
-                                      onCheckedChange={field.onChange}
-                                    />
+                                    <Select
+                                      value={String(field.value ?? 1)}
+                                      onValueChange={(value) =>
+                                        field.onChange(Number(value))
+                                      }
+                                    >
+                                      <SelectTrigger className='w-full'>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {AUTO_TEST_OPTIONS.map((option) => (
+                                          <SelectItem
+                                            key={option.value}
+                                            value={String(option.value)}
+                                          >
+                                            {t(option.label)}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
                                   </FormControl>
+                                  <FormDescription>
+                                    {t(FIELD_DESCRIPTIONS.AUTO_TEST)}
+                                  </FormDescription>
+                                  <FormMessage />
                                 </FormItem>
                               )}
                             />

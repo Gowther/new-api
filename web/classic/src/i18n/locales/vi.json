@@ -4658,7 +4658,11 @@
     "原地转换：当前密钥将变为第 1 把密钥；在上方密钥输入框中每行一把填入其余密钥，转换后即可在下方选择分发模式": "Chuyển đổi tại chỗ: khóa hiện tại trở thành khóa thứ nhất; nhập các khóa còn lại vào ô khóa phía trên (mỗi dòng một khóa), sau khi chuyển đổi có thể chọn chế độ phân phối bên dưới",
     "主备模式": "Chế độ chuyển dự phòng",
     "已将 {{models}} 折叠进统一模型名": "Đã gộp {{models}} vào tên mô hình thống nhất",
-    "多个上游名可用英文逗号分隔，渠道已有的名字应用模板时会折叠合并为左侧模型": "Nhiều tên upstream có thể phân tách bằng dấu phẩy; khi áp dụng, tên mà kênh đã có được gộp vào mô hình bên trái"
+    "多个上游名可用英文逗号分隔，渠道已有的名字应用模板时会折叠合并为左侧模型": "Nhiều tên upstream có thể phân tách bằng dấu phẩy; khi áp dụng, tên mà kênh đã có được gộp vào mô hình bên trái",
+    "定时自动测试": "Tự động kiểm tra định kỳ",
+    "强制参与": "Luôn kiểm tra",
+    "强制跳过": "Không kiểm tra",
+    "强制参与时，即使全局定时测试和自动恢复开关都关闭，也会定时检测该渠道，测试成功后自动启用；强制跳过则绝不参与定时检测；跟随全局时按全局开关决定": "Với \"Luôn kiểm tra\", kênh này được thăm dò theo lịch và kích hoạt lại khi thành công kể cả khi cả hai công tắc chung (kiểm tra định kỳ và tự kích hoạt) đều tắt; \"Không kiểm tra\" loại khỏi mọi lần thăm dò định kỳ; \"Theo cài đặt chung\" dựa vào công tắc toàn cục."
   },
   "已保存官方价格预览失败": "Không thể xem trước giá chính thức đã lưu",
   "查看官方价格变更": "Xem thay đổi giá chính thức",

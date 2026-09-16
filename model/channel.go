@@ -47,6 +47,7 @@ type Channel struct {
 	StatusCodeMapping *string `json:"status_code_mapping" gorm:"type:varchar(1024);default:''"`
 	Priority          *int64  `json:"priority" gorm:"bigint;default:0"`
 	AutoBan           *int    `json:"auto_ban" gorm:"default:1"`
+	AutoTest          *int    `json:"auto_test" gorm:"default:1"`
 	OtherInfo         string  `json:"other_info"`
 	Tag               *string `json:"tag" gorm:"index"`
 	Setting           *string `json:"setting" gorm:"type:text"` // 渠道额外设置
@@ -515,6 +516,43 @@ func (channel *Channel) GetAutoBanMode() int {
 	}
 }
 
+// Channel auto-test mode: 0 = force off (the channel is never probed by the
+// scheduled test), 1 = follow the global monitor switches (default), 2 = force
+// on (scheduled tests run for it, and a successful probe re-enables it, even
+// when every global switch is off).
+const (
+	ChannelAutoTestForceOff     = 0
+	ChannelAutoTestFollowGlobal = 1
+	ChannelAutoTestForceOn      = 2
+)
+
+func (channel *Channel) GetAutoTestMode() int {
+	if channel.AutoTest == nil {
+		return ChannelAutoTestFollowGlobal
+	}
+	switch *channel.AutoTest {
+	case ChannelAutoTestForceOff, ChannelAutoTestForceOn:
+		return *channel.AutoTest
+	default:
+		return ChannelAutoTestFollowGlobal
+	}
+}
+
+// HasAutoTestForceOnChannels reports whether any channel opts itself into the
+// scheduled test. The scheduler stays alive for these channels even when the
+// global switch is off, so a per-channel "force on" works without probing
+// every channel.
+func HasAutoTestForceOnChannels() bool {
+	var count int64
+	if err := DB.Model(&Channel{}).
+		Where("auto_test = ?", ChannelAutoTestForceOn).
+		Count(&count).Error; err != nil {
+		common.SysError(fmt.Sprintf("failed to query force-on auto test channels: %v", err))
+		return false
+	}
+	return count > 0
+}
+
 // GetAutoBanRules returns the channel-level automatic-disable rules, or nil when
 // the channel follows the global status-code and keyword settings.
 func (channel *Channel) GetAutoBanRules() *types.ChannelAutoBanRules {
@@ -546,7 +584,7 @@ func GetAllChannels(startIdx int, num int, selectAll bool, idSort bool, sortOpti
 
 func GetAllChannelTestScheduleSnapshots() ([]*Channel, error) {
 	var channels []*Channel
-	err := DB.Select("id", "status", "test_time", "settings", "channel_info").Find(&channels).Error
+	err := DB.Select("id", "status", "test_time", "settings", "channel_info", "auto_test").Find(&channels).Error
 	return channels, err
 }
 
@@ -1390,6 +1428,13 @@ func (channel *Channel) ValidateSettings() error {
 		case ChannelAutoBanForceOff, ChannelAutoBanFollowGlobal, ChannelAutoBanForceOn:
 		default:
 			return fmt.Errorf("invalid auto_ban value %d, must be 0 (off), 1 (follow global) or 2 (force on)", *channel.AutoBan)
+		}
+	}
+	if channel.AutoTest != nil {
+		switch *channel.AutoTest {
+		case ChannelAutoTestForceOff, ChannelAutoTestFollowGlobal, ChannelAutoTestForceOn:
+		default:
+			return fmt.Errorf("invalid auto_test value %d, must be 0 (skip), 1 (follow global) or 2 (force on)", *channel.AutoTest)
 		}
 	}
 	if channelOtherSettings.AutoBanRules != nil {

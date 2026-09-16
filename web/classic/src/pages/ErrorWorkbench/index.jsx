@@ -775,7 +775,10 @@ function ErrorClusterDetails({
               <div>
                 <Typography.Text strong>{t('当前渠道')}</Typography.Text>
                 <div className='mt-1 text-xs text-gray-500'>
-                  {record.automatic_channel_test_disabled
+                  {Number(
+                    record.auto_test ??
+                      (record.automatic_channel_test_disabled ? 0 : 1),
+                  ) === 0
                     ? t('已跳过自动测活')
                     : t('参与自动测活')}
                 </div>

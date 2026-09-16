@@ -422,3 +422,32 @@ func TestTestAllChannelsRejectsExistingActiveTask(t *testing.T) {
 	require.Contains(t, recorder.Body.String(), existing.TaskID)
 	require.Contains(t, recorder.Body.String(), "已有通道测试任务正在运行或等待中")
 }
+
+func TestSelectChannelsForAutomaticTestRespectsAutoTestMode(t *testing.T) {
+	forceOff := model.ChannelAutoTestForceOff
+	forceOn := model.ChannelAutoTestForceOn
+	now := int64(1000)
+	channels := []*model.Channel{
+		{Id: 1, Status: common.ChannelStatusAutoDisabled, AutoTest: &forceOff},
+		{Id: 2, Status: common.ChannelStatusAutoDisabled, OtherSettings: `{"automatic_channel_test_disabled":true}`},
+		{Id: 3, Status: common.ChannelStatusAutoDisabled, AutoTest: &forceOn, TestTime: now - 30, OtherSettings: `{"auto_test_channel_interval_minutes":60}`},
+		{Id: 4, Status: common.ChannelStatusAutoDisabled, AutoTest: &forceOn, OtherSettings: `{"automatic_channel_test_disabled":true}`},
+		{Id: 5, Status: common.ChannelStatusAutoDisabled},
+	}
+
+	selected, skipped := selectChannelsForAutomaticTest(channels, operation_setting.ChannelTestModeScheduledAll, now, true)
+	require.Len(t, selected, 2)
+	require.Equal(t, 4, selected[0].Id)
+	require.Equal(t, 5, selected[1].Id)
+	require.Equal(t, 3, skipped)
+
+	// A manual run bypasses the interval and the legacy opt-out, but a channel
+	// that opts out of probing is excluded from every automatic batch.
+	selected, skipped = selectChannelsForAutomaticTest(channels, operation_setting.ChannelTestModeScheduledAll, now, false)
+	require.Len(t, selected, 4)
+	require.Equal(t, 2, selected[0].Id)
+	require.Equal(t, 3, selected[1].Id)
+	require.Equal(t, 4, selected[2].Id)
+	require.Equal(t, 5, selected[3].Id)
+	require.Equal(t, 1, skipped)
+}

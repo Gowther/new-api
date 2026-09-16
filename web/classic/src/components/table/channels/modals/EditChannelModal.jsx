@@ -359,7 +359,9 @@ function isOfficialClientPassthroughEnabled(values) {
   return Boolean(
     headerOverride &&
     Object.hasOwn(headerOverride, '*') &&
-    values.automatic_channel_test_disabled,
+    Number(
+      values.auto_test ?? (values.automatic_channel_test_disabled ? 0 : 1),
+    ) === 0,
   );
 }
 
@@ -443,7 +445,7 @@ const EditChannelModal = (props) => {
     allow_inference_geo: false,
     allow_speed: false,
     claude_beta_query: false,
-    automatic_channel_test_disabled: false,
+    auto_test: 1,
     auto_test_channel_interval_minutes: 0,
     upstream_model_update_check_enabled: false,
     upstream_model_update_auto_sync_enabled: false,
@@ -1074,10 +1076,12 @@ const EditChannelModal = (props) => {
       return;
     }
 
-    handleChannelOtherSettingsChange(
-      'automatic_channel_test_disabled',
-      enabled,
-    );
+    // 官方客户端透传原先绑定渠道级跳过开关，现在映射到 auto_test
+    if (enabled) {
+      handleInputChange('auto_test', 0);
+    } else if (Number(inputs.auto_test) === 0) {
+      handleInputChange('auto_test', 1);
+    }
     handleInputChange('header_override', nextHeaderOverride);
   };
 
@@ -1429,8 +1433,13 @@ const EditChannelModal = (props) => {
             parsedSettings.allow_inference_geo || false;
           data.allow_speed = parsedSettings.allow_speed || false;
           data.claude_beta_query = parsedSettings.claude_beta_query || false;
-          data.automatic_channel_test_disabled =
-            parsedSettings.automatic_channel_test_disabled === true;
+          if ([0, 1, 2].includes(Number(data.auto_test))) {
+            data.auto_test = Number(data.auto_test);
+          } else {
+            // 旧的渠道级跳过开关：跟随全局时仍按旧字段判定
+            data.auto_test =
+              parsedSettings.automatic_channel_test_disabled === true ? 0 : 1;
+          }
           data.auto_test_channel_interval_minutes =
             Number(parsedSettings.auto_test_channel_interval_minutes) > 0
               ? Number(parsedSettings.auto_test_channel_interval_minutes)
@@ -1485,7 +1494,7 @@ const EditChannelModal = (props) => {
           data.allow_inference_geo = false;
           data.allow_speed = false;
           data.claude_beta_query = false;
-          data.automatic_channel_test_disabled = false;
+          data.auto_test ??= 1;
           data.auto_test_channel_interval_minutes = 0;
           data.upstream_model_update_check_enabled = false;
           data.upstream_model_update_auto_sync_enabled = false;
@@ -1512,7 +1521,7 @@ const EditChannelModal = (props) => {
         data.allow_inference_geo = false;
         data.allow_speed = false;
         data.claude_beta_query = false;
-        data.automatic_channel_test_disabled = false;
+        data.auto_test ??= 1;
         data.auto_test_channel_interval_minutes = 0;
         data.upstream_model_update_check_enabled = false;
         data.upstream_model_update_auto_sync_enabled = false;
@@ -2627,11 +2636,8 @@ const EditChannelModal = (props) => {
       }
     }
 
-    if (localInputs.automatic_channel_test_disabled === true) {
-      settings.automatic_channel_test_disabled = true;
-    } else if ('automatic_channel_test_disabled' in settings) {
-      delete settings.automatic_channel_test_disabled;
-    }
+    // auto_test 取代旧的渠道级跳过开关，保存时清理旧字段
+    delete settings.automatic_channel_test_disabled;
     const autoTestChannelIntervalMinutes = Number(
       localInputs.auto_test_channel_interval_minutes || 0,
     );
@@ -2721,6 +2727,10 @@ const EditChannelModal = (props) => {
     let res;
     const autoBanValue = Number(localInputs.auto_ban);
     localInputs.auto_ban = [0, 1, 2].includes(autoBanValue) ? autoBanValue : 1;
+    const autoTestValue = Number(localInputs.auto_test);
+    localInputs.auto_test = [0, 1, 2].includes(autoTestValue)
+      ? autoTestValue
+      : 1;
     localInputs.models = localInputs.models.join(',');
     localInputs.group = (localInputs.groups || []).join(',');
 
@@ -3218,21 +3228,21 @@ const EditChannelModal = (props) => {
                       )
                     }
                   />
-                  <Form.Switch
-                    field='automatic_channel_test_disabled'
-                    label={t('禁用自动恢复检测')}
-                    checkedText={t('开')}
-                    uncheckedText={t('关')}
+                  <Form.RadioGroup
+                    field='auto_test'
+                    label={t('定时自动测试')}
+                    type='button'
                     onChange={(value) =>
-                      handleChannelOtherSettingsChange(
-                        'automatic_channel_test_disabled',
-                        value,
-                      )
+                      handleInputChange('auto_test', Number(value))
                     }
                     extraText={t(
-                      '开启后后台定时任务会跳过该渠道，手动测试仍会执行',
+                      '强制参与：即使全局定时测试和自动恢复开关都关闭，也会定时检测该渠道，测试成功后自动启用；强制跳过：绝不参与定时检测；跟随全局：按全局开关决定',
                     )}
-                  />
+                  >
+                    <Form.Radio value={1}>{t('跟随全局')}</Form.Radio>
+                    <Form.Radio value={2}>{t('强制参与')}</Form.Radio>
+                    <Form.Radio value={0}>{t('强制跳过')}</Form.Radio>
+                  </Form.RadioGroup>
                 </div>
 
                 {/* Upstream Model Management Section */}

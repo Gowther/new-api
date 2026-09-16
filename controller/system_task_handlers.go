@@ -32,7 +32,12 @@ type channelTestHandler struct{}
 func (channelTestHandler) Type() string { return model.SystemTaskTypeChannelTest }
 
 func (channelTestHandler) Enabled() bool {
-	return operation_setting.GetMonitorSetting().AutoTestChannelEnabled
+	if operation_setting.GetMonitorSetting().AutoTestChannelEnabled {
+		return true
+	}
+	// Channels that opt themselves in keep the scheduled test alive even when
+	// every global switch is off.
+	return model.HasAutoTestForceOnChannels()
 }
 
 func (channelTestHandler) Interval() time.Duration {

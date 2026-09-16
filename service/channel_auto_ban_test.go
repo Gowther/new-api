@@ -174,3 +174,94 @@ func TestChannelGetAutoBanMode(t *testing.T) {
 	assert.Equal(t, 2, (&model.Channel{AutoBan: &two}).GetAutoBanMode())
 	assert.Equal(t, 1, (&model.Channel{AutoBan: &invalid}).GetAutoBanMode())
 }
+
+func TestShouldEnableChannel(t *testing.T) {
+	tests := []struct {
+		name          string
+		globalEnabled bool
+		autoTestMode  int
+		err           *types.NewAPIError
+		status        int
+		want          bool
+	}{
+		{
+			name:          "force off never enables",
+			globalEnabled: true,
+			autoTestMode:  model.ChannelAutoTestForceOff,
+			err:           nil,
+			status:        common.ChannelStatusAutoDisabled,
+			want:          false,
+		},
+		{
+			name:          "follow global with switch off",
+			globalEnabled: false,
+			autoTestMode:  model.ChannelAutoTestFollowGlobal,
+			err:           nil,
+			status:        common.ChannelStatusAutoDisabled,
+			want:          false,
+		},
+		{
+			name:          "follow global with switch on",
+			globalEnabled: true,
+			autoTestMode:  model.ChannelAutoTestFollowGlobal,
+			err:           nil,
+			status:        common.ChannelStatusAutoDisabled,
+			want:          true,
+		},
+		{
+			name:          "force on ignores global switch",
+			globalEnabled: false,
+			autoTestMode:  model.ChannelAutoTestForceOn,
+			err:           nil,
+			status:        common.ChannelStatusAutoDisabled,
+			want:          true,
+		},
+		{
+			name:          "force on still requires a successful probe",
+			globalEnabled: false,
+			autoTestMode:  model.ChannelAutoTestForceOn,
+			err:           newDisableTestError(429, "rate limited"),
+			status:        common.ChannelStatusAutoDisabled,
+			want:          false,
+		},
+		{
+			name:          "force on ignores manually disabled channels",
+			globalEnabled: false,
+			autoTestMode:  model.ChannelAutoTestForceOn,
+			err:           nil,
+			status:        common.ChannelStatusManuallyDisabled,
+			want:          false,
+		},
+		{
+			name:          "force on ignores already enabled channels",
+			globalEnabled: false,
+			autoTestMode:  model.ChannelAutoTestForceOn,
+			err:           nil,
+			status:        common.ChannelStatusEnabled,
+			want:          false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			original := common.AutomaticEnableChannelEnabled
+			common.AutomaticEnableChannelEnabled = tt.globalEnabled
+			t.Cleanup(func() { common.AutomaticEnableChannelEnabled = original })
+
+			assert.Equal(t, tt.want, ShouldEnableChannel(tt.err, tt.status, tt.autoTestMode))
+		})
+	}
+}
+
+func TestChannelGetAutoTestMode(t *testing.T) {
+	zero := 0
+	one := 1
+	two := 2
+	invalid := 9
+
+	require.Equal(t, 1, (&model.Channel{}).GetAutoTestMode())
+	assert.Equal(t, 0, (&model.Channel{AutoTest: &zero}).GetAutoTestMode())
+	assert.Equal(t, 1, (&model.Channel{AutoTest: &one}).GetAutoTestMode())
+	assert.Equal(t, 2, (&model.Channel{AutoTest: &two}).GetAutoTestMode())
+	assert.Equal(t, 1, (&model.Channel{AutoTest: &invalid}).GetAutoTestMode())
+}

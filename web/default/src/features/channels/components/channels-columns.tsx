@@ -24,6 +24,7 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronRight,
+  ArrowRightLeft,
   ListOrdered,
   Shuffle,
   SlidersHorizontal,
@@ -648,18 +649,18 @@ export function useChannelsColumns(
             <div className='flex items-center gap-2'>
               <div className='flex flex-col gap-1'>
                 <div className='flex items-center gap-1.5'>
-                <Link
-                  to='/usage-logs/$section'
-                  params={{ section: 'common' }}
-                  search={{ channel: String(channel.id) }}
-                  className='focus-visible:ring-ring inline-flex rounded-sm underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:outline-none'
-                >
-                  <TruncatedText
-                    text={sensitiveVisible ? name : SENSITIVE_MASK}
-                    className='font-medium'
-                    maxWidth='max-w-[180px]'
-                  />
-                </Link>
+                  <Link
+                    to='/usage-logs/$section'
+                    params={{ section: 'common' }}
+                    search={{ channel: String(channel.id) }}
+                    className='focus-visible:ring-ring inline-flex rounded-sm underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:outline-none'
+                  >
+                    <TruncatedText
+                      text={sensitiveVisible ? name : SENSITIVE_MASK}
+                      className='font-medium'
+                      maxWidth='max-w-[180px]'
+                    />
+                  </Link>
                   {isPassThrough && (
                     <TooltipProvider delay={100}>
                       <Tooltip>
@@ -742,11 +743,17 @@ export function useChannelsColumns(
           const isMultiKey = isMultiKeyChannel(channel)
           const multiKeyMode = channel.channel_info?.multi_key_mode ?? 'random'
           const MultiKeyModeIcon =
-            multiKeyMode === 'random' ? Shuffle : ListOrdered
+            multiKeyMode === 'random'
+              ? Shuffle
+              : multiKeyMode === 'failover'
+                ? ArrowRightLeft
+                : ListOrdered
           const multiKeyTooltip =
             multiKeyMode === 'random'
               ? t('Multi-key: Random rotation')
-              : t('Multi-key: Polling rotation')
+              : multiKeyMode === 'failover'
+                ? t('Multi-key: Sticky failover')
+                : t('Multi-key: Polling rotation')
 
           const ionetMeta = parseIonetMeta(channel.other_info)
           const isIonet = ionetMeta?.source === 'ionet'

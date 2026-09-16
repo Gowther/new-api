@@ -1182,6 +1182,65 @@ func UpdateChannel(c *gin.Context) {
 		channel.ChannelInfo.MultiKeyMode = constant.MultiKeyMode(*channel.MultiKeyMode)
 	}
 
+	// 单 key 渠道原地转多 key：现有 key 保持为第一把（index 0），请求密钥清洗去重后
+	// 追加在后；per-key 状态清零（全部启用），游标归零，分发模式取 multi_key_mode。
+	if channel.KeyMode != nil && !channel.ChannelInfo.IsMultiKey && *channel.KeyMode == "convert_to_multi" {
+		allKeys := make([]string, 0)
+		seen := make(map[string]struct{})
+		appendKey := func(raw string) {
+			trimmed := strings.TrimSpace(raw)
+			if trimmed == "" {
+				return
+			}
+			if _, exists := seen[trimmed]; exists {
+				return
+			}
+			seen[trimmed] = struct{}{}
+			allKeys = append(allKeys, trimmed)
+		}
+		for _, key := range originChannel.GetKeys() {
+			appendKey(key)
+		}
+		var newKeys []string
+		if channel.Type == constant.ChannelTypeVertexAi && channel.GetOtherSettings().VertexKeyType != dto.VertexKeyTypeAPIKey {
+			if strings.HasPrefix(strings.TrimSpace(channel.Key), "[") {
+				var err error
+				newKeys, err = getVertexArrayKeys(channel.Key)
+				if err != nil {
+					c.JSON(http.StatusOK, gin.H{
+						"success": false,
+						"message": "转换密钥解析失败: " + err.Error(),
+					})
+					return
+				}
+			} else if strings.TrimSpace(channel.Key) != "" {
+				newKeys = []string{strings.TrimSpace(channel.Key)}
+			}
+		} else {
+			newKeys = strings.Split(channel.Key, "\n")
+		}
+		for _, key := range newKeys {
+			appendKey(key)
+		}
+		if len(allKeys) == 0 {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "没有可用的密钥，无法转换为多密钥渠道",
+			})
+			return
+		}
+		channel.Key = strings.Join(allKeys, "\n")
+		channel.ChannelInfo.IsMultiKey = true
+		if channel.MultiKeyMode == nil || *channel.MultiKeyMode == "" {
+			channel.ChannelInfo.MultiKeyMode = constant.MultiKeyModeRandom
+		}
+		channel.ChannelInfo.MultiKeySize = len(allKeys)
+		channel.ChannelInfo.MultiKeyStatusList = nil
+		channel.ChannelInfo.MultiKeyDisabledReason = nil
+		channel.ChannelInfo.MultiKeyDisabledTime = nil
+		channel.ChannelInfo.MultiKeyPollingIndex = 0
+	}
+
 	// 处理多key模式下的密钥追加/覆盖逻辑
 	if channel.KeyMode != nil && channel.ChannelInfo.IsMultiKey {
 		switch *channel.KeyMode {
@@ -1961,6 +2020,21 @@ func ManageMultiKeys(c *gin.Context) {
 		channel.ChannelInfo.MultiKeyStatusList = newStatusList
 		channel.ChannelInfo.MultiKeyDisabledTime = newDisabledTime
 		channel.ChannelInfo.MultiKeyDisabledReason = newDisabledReason
+		// Compaction shifted surviving key indexes: re-anchor the rotation /
+		// failover cursor so it still points at the same key. Deleting the
+		// active key hands its slot to the key that follows it.
+		newPollingIndex := channel.ChannelInfo.MultiKeyPollingIndex
+		if keyIndex < newPollingIndex {
+			newPollingIndex--
+		}
+		if newPollingIndex < 0 {
+			newPollingIndex = 0
+		}
+		if newPollingIndex >= len(remainingKeys) {
+			newPollingIndex = 0
+		}
+		channel.ChannelInfo.MultiKeyPollingIndex = newPollingIndex
+		model.SetChannelPollingCursor(channel.Id, newPollingIndex)
 
 		err = channel.Update()
 		if err != nil {
@@ -1983,6 +2057,8 @@ func ManageMultiKeys(c *gin.Context) {
 		var newDisabledTime = make(map[int]int64)
 		var newDisabledReason = make(map[int]string)
 
+		pollingIndex := channel.ChannelInfo.MultiKeyPollingIndex
+		var removedBeforeCursor int
 		newIndex := 0
 		for i, key := range keys {
 			status := 1 // default enabled
@@ -1995,6 +2071,9 @@ func ManageMultiKeys(c *gin.Context) {
 			// 只删除自动禁用（status == 3）的密钥，保留启用（status == 1）和手动禁用（status == 2）的密钥
 			if status == 3 {
 				deletedCount++
+				if i < pollingIndex {
+					removedBeforeCursor++
+				}
 			} else {
 				remainingKeys = append(remainingKeys, key)
 				// 保留非自动禁用密钥的状态信息，重新索引
@@ -2029,6 +2108,16 @@ func ManageMultiKeys(c *gin.Context) {
 		channel.ChannelInfo.MultiKeyStatusList = newStatusList
 		channel.ChannelInfo.MultiKeyDisabledTime = newDisabledTime
 		channel.ChannelInfo.MultiKeyDisabledReason = newDisabledReason
+		// See delete_key: keep the fallback cursor anchored to the same key.
+		newPollingIndex := pollingIndex - removedBeforeCursor
+		if newPollingIndex < 0 {
+			newPollingIndex = 0
+		}
+		if newPollingIndex >= len(remainingKeys) {
+			newPollingIndex = 0
+		}
+		channel.ChannelInfo.MultiKeyPollingIndex = newPollingIndex
+		model.SetChannelPollingCursor(channel.Id, newPollingIndex)
 
 		err = channel.Update()
 		if err != nil {

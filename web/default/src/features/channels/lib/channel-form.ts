@@ -77,11 +77,7 @@ function isOptionalStatusCodeRangeList(value: string | undefined): boolean {
     const start = Number(match[1])
     const end = match[2] ? Number(match[2]) : start
     return (
-      start >= 100 &&
-      start <= 599 &&
-      end >= 100 &&
-      end <= 599 &&
-      start <= end
+      start >= 100 && start <= 599 && end >= 100 && end <= 599 && start <= end
     )
   })
 }
@@ -211,10 +207,11 @@ export const channelFormSchema = z
     other: z.string().optional(),
     // Multi-key options (not sent to backend directly)
     multi_key_mode: z.enum(['single', 'batch', 'multi_to_single']).optional(),
-    multi_key_type: z.enum(['random', 'polling']).optional(),
+    multi_key_type: z.enum(['random', 'polling', 'failover']).optional(),
     batch_add_set_key_prefix_2_name: z.boolean().optional(),
     enable_routing_override: z.boolean().optional(),
     key_mode: z.enum(['append', 'replace']).optional(), // For editing multi-key channels
+    convert_to_multi: z.boolean().optional(), // In-place single-key -> multi-key conversion
     // Channel extra settings (stored in setting JSON, not sent directly)
     force_format: z.boolean().optional(),
     thinking_to_content: z.boolean().optional(),
@@ -530,7 +527,8 @@ export function transformChannelToFormDefaults(
     multi_key_mode: 'single',
     multi_key_type: channel.channel_info.multi_key_mode || 'random',
     batch_add_set_key_prefix_2_name: false,
-    key_mode: 'append', // Default to append mode for editing multi-key channels
+    key_mode: 'append',
+    convert_to_multi: false, // Default to append mode for editing multi-key channels
     // Channel extra settings
     ...extraSettings,
     // Type-specific settings

@@ -358,8 +358,8 @@ function isOfficialClientPassthroughEnabled(values) {
   const headerOverride = parseHeaderOverride(values.header_override);
   return Boolean(
     headerOverride &&
-      Object.hasOwn(headerOverride, '*') &&
-      values.automatic_channel_test_disabled,
+    Object.hasOwn(headerOverride, '*') &&
+    values.automatic_channel_test_disabled,
   );
 }
 
@@ -504,6 +504,7 @@ const EditChannelModal = (props) => {
   const [channelSearchValue, setChannelSearchValue] = useState('');
   const [useManualInput, setUseManualInput] = useState(false); // 是否使用手动输入模式
   const [keyMode, setKeyMode] = useState('append'); // 密钥模式：replace（覆盖）或 append（追加）
+  const [convertToMulti, setConvertToMulti] = useState(false); // 单 key 渠道原地转多 key
   const [isEnterpriseAccount, setIsEnterpriseAccount] = useState(false); // 是否为企业账户
   const [doubaoApiEditUnlocked, setDoubaoApiEditUnlocked] = useState(false); // 豆包渠道自定义 API 地址隐藏入口
   const redirectModelList = useMemo(() => {
@@ -2049,6 +2050,8 @@ const EditChannelModal = (props) => {
     });
     // 重置密钥模式状态
     setKeyMode('append');
+    // 重置单 key 转多 key 状态
+    setConvertToMulti(false);
     // 重置企业账户状态
     setIsEnterpriseAccount(false);
     // 重置豆包隐藏入口状态
@@ -2754,7 +2757,11 @@ const EditChannelModal = (props) => {
         res = await API.put(`/api/channel/`, {
           ...localInputs,
           id: parseInt(channelId),
-          key_mode: isMultiKeyChannel ? keyMode : undefined,
+          key_mode: isMultiKeyChannel
+            ? keyMode
+            : convertToMulti
+              ? 'convert_to_multi'
+              : undefined,
         });
       } else {
         const payload = {
@@ -4375,6 +4382,27 @@ const EditChannelModal = (props) => {
                         </>
                       )}
 
+                      {isEdit && !isMultiKeyChannel && inputs.type !== 57 && (
+                        <Form.Slot label={t('转为多密钥')}>
+                          <Switch
+                            checked={convertToMulti}
+                            checkedText={t('开')}
+                            uncheckedText={t('关')}
+                            onChange={(value) =>
+                              setConvertToMulti(value === true)
+                            }
+                          />
+                          <Text
+                            type='tertiary'
+                            size='small'
+                            style={{ display: 'block', marginTop: 4 }}
+                          >
+                            {t(
+                              '原地转换：当前密钥将变为第 1 把密钥；在上方密钥输入框中每行一把填入其余密钥，转换后即可在下方选择分发模式',
+                            )}
+                          </Text>
+                        </Form.Slot>
+                      )}
                       {isEdit && isMultiKeyChannel && (
                         <Form.Select
                           field='key_mode'
@@ -4396,7 +4424,8 @@ const EditChannelModal = (props) => {
                           }
                         />
                       )}
-                      {batch && multiToSingle && (
+                      {((batch && multiToSingle) ||
+                        (isEdit && (isMultiKeyChannel || convertToMulti))) && (
                         <>
                           <Form.Select
                             field='multi_key_mode'
@@ -4405,6 +4434,10 @@ const EditChannelModal = (props) => {
                             optionList={[
                               { label: t('随机'), value: 'random' },
                               { label: t('轮询'), value: 'polling' },
+                              {
+                                label: t('主备切换（粘滞）'),
+                                value: 'failover',
+                              },
                             ]}
                             style={{ width: '100%' }}
                             value={inputs.multi_key_mode || 'random'}
@@ -4418,6 +4451,15 @@ const EditChannelModal = (props) => {
                               type='warning'
                               description={t(
                                 '轮询模式必须搭配Redis和内存缓存功能使用，否则性能将大幅降低，并且无法实现轮询功能',
+                              )}
+                              className='!rounded-lg mt-2'
+                            />
+                          )}
+                          {inputs.multi_key_mode === 'failover' && (
+                            <Banner
+                              type='info'
+                              description={t(
+                                '主备模式：请求固定使用当前上游密钥以保持缓存亲和，仅在该密钥被自动禁用后才切换到下一把启用的密钥',
                               )}
                               className='!rounded-lg mt-2'
                             />

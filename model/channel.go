@@ -392,6 +392,50 @@ func (channel *Channel) GetNextEnabledKey() (string, int, *types.NewAPIError) {
 		}
 		// Fallback – should not happen, but return first enabled key
 		return keys[enabledIdx[0]], enabledIdx[0], nil
+	case constant.MultiKeyModeFailover:
+		// Sticky failover: requests stay pinned to the cursor key so upstream
+		// cache affinity survives; the cursor only moves forward when that key
+		// was auto-disabled (per-key status skips it headlessly). Cursor
+		// storage rules are the same as polling.
+		var start int
+		if common.MemoryCacheEnabled {
+			if cursor, ok := channelPollingCursors.Load(channel.Id); ok {
+				start = cursor.(int)
+			} else {
+				start = channel.ChannelInfo.MultiKeyPollingIndex
+			}
+		} else {
+			// Without the memory cache the database is the source of truth, and it is
+			// re-read inside the lock so concurrent requests do not reuse a cursor.
+			info, err := CacheGetChannelInfo(channel.Id)
+			if err != nil {
+				return "", 0, types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+			}
+			start = info.MultiKeyPollingIndex
+		}
+		defer func() {
+			if common.DebugEnabled {
+				logger.LogDebug(nil, "channel %d failover index: %d", channel.Id, channel.ChannelInfo.MultiKeyPollingIndex)
+			}
+			if !common.MemoryCacheEnabled {
+				_ = channel.SaveChannelInfo()
+			}
+		}()
+		if start < 0 || start >= len(keys) {
+			start = 0
+		}
+		for i := 0; i < len(keys); i++ {
+			idx := (start + i) % len(keys)
+			if getStatus(idx) == common.ChannelStatusEnabled {
+				// Stay on this key: do not advance the cursor, so the next request
+				// reuses the same upstream key until it gets auto-disabled.
+				channelPollingCursors.Store(channel.Id, idx)
+				channel.ChannelInfo.MultiKeyPollingIndex = idx
+				return keys[idx], idx, nil
+			}
+		}
+		// Fallback – should not happen, but return first enabled key
+		return keys[enabledIdx[0]], enabledIdx[0], nil
 	default:
 		// Unknown mode, default to first enabled key (or original key string)
 		return keys[enabledIdx[0]], enabledIdx[0], nil
@@ -887,6 +931,18 @@ func CleanupChannelPollingLocks() {
 		}
 		return true
 	})
+}
+
+// SetChannelPollingCursor overwrites the memory-cache cursor for a channel.
+// Admin key-removal flows call it after indexes were compacted so the in-memory
+// cursor stays in step with the persisted MultiKeyPollingIndex; absent entries
+// gain an entry equal to the persisted value, which is harmless because it
+// matches what a fresh load would seed.
+func SetChannelPollingCursor(channelId int, index int) {
+	if index < 0 {
+		index = 0
+	}
+	channelPollingCursors.Store(channelId, index)
 }
 
 func handlerMultiKeyUpdate(channel *Channel, usingKey string, status int, reason string) bool {

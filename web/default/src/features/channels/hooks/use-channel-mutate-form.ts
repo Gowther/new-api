@@ -112,21 +112,40 @@ export function useChannelMutateForm(props: UseChannelMutateFormParams) {
             delete payload[field]
           }
         }
-        const payloadWithKeyMode =
+        // Switching the distribution mode of an existing multi-key channel is
+        // not a sensitive change; in-place single-key conversion and key
+        // updates touch the key material and require sensitive write access.
+        let updatePayload: Partial<Channel> & {
+          key_mode?: string
+          multi_key_mode?: string
+        } = payload
+        if (props.isMultiKeyChannel && data.multi_key_type) {
+          updatePayload = {
+            ...updatePayload,
+            multi_key_mode: data.multi_key_type,
+          }
+        }
+        if (
           canEditSensitive &&
           props.isMultiKeyChannel &&
           data.key?.trim() &&
           data.key_mode
-            ? {
-                ...payload,
-                key_mode: data.key_mode,
-              }
-            : payload
+        ) {
+          updatePayload = { ...updatePayload, key_mode: data.key_mode }
+        }
+        if (
+          canEditSensitive &&
+          !props.isMultiKeyChannel &&
+          data.convert_to_multi
+        ) {
+          updatePayload = {
+            ...updatePayload,
+            key_mode: 'convert_to_multi',
+            multi_key_mode: data.multi_key_type ?? 'random',
+          }
+        }
 
-        const response = await updateChannel(
-          props.currentRow.id,
-          payloadWithKeyMode
-        )
+        const response = await updateChannel(props.currentRow.id, updatePayload)
         if (!response.success) {
           throw new Error(response.message || t(ERROR_MESSAGES.UPDATE_FAILED))
         }

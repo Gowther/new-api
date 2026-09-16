@@ -4268,7 +4268,12 @@
     "跟随全局时由运营设置中的开关决定；也可仅为该渠道强制开启或关闭": "When set to follow global, the switch in operation settings decides; you can also force this channel on or off only",
     "开启后用下方状态码和关键词替换全局禁用规则，仅对此渠道生效；关闭则跟随全局": "When enabled, the status codes and keywords below replace the global disable rules for this channel only; disabled follows the global lists",
     "触发该渠道自动禁用的HTTP状态码，支持逗号分隔的代码或范围，如 401,429,500-502": "HTTP status codes that disable this channel, comma-separated codes or ranges like 401,429,500-502",
-    "上游错误信息包含任一关键词时禁用该渠道，每行一个关键词": "Disable this channel when the upstream error contains any of these keywords, one per line"
+    "上游错误信息包含任一关键词时禁用该渠道，每行一个关键词": "Disable this channel when the upstream error contains any of these keywords, one per line",
+    "主备切换（粘滞）": "Failover (sticky)",
+    "主备模式：请求固定使用当前上游密钥以保持缓存亲和，仅在该密钥被自动禁用后才切换到下一把启用的密钥": "Sticky mode: requests stay pinned to the current upstream key to keep cache affinity and only move to the next enabled key after it is auto-disabled",
+    "转为多密钥": "Convert to multi-key",
+    "原地转换：当前密钥将变为第 1 把密钥；在上方密钥输入框中每行一把填入其余密钥，转换后即可在下方选择分发模式": "Convert in place: the current key becomes key #1; enter the remaining keys in the key field above (one per line), then pick the distribution mode below",
+    "主备模式": "Sticky mode"
   },
   "已保存官方价格预览失败": "Failed to preview saved official prices",
   "查看官方价格变更": "Review official price changes",

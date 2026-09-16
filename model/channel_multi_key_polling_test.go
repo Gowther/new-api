@@ -15,9 +15,9 @@ import (
 	"gorm.io/gorm"
 )
 
-// setupPollingChannelTest installs an isolated in-memory database plus channel
-// cache and returns the multi-key polling channel stored in it.
-func setupPollingChannelTest(t *testing.T, memoryCacheEnabled bool, keys []string) *Channel {
+// setupMultiKeyChannelTest installs an isolated in-memory database plus channel
+// cache and returns the multi-key channel stored in it.
+func setupMultiKeyChannelTest(t *testing.T, memoryCacheEnabled bool, mode constant.MultiKeyMode, keys []string) *Channel {
 	t.Helper()
 
 	originalDB := DB
@@ -79,7 +79,7 @@ func setupPollingChannelTest(t *testing.T, memoryCacheEnabled bool, keys []strin
 		ChannelInfo: ChannelInfo{
 			IsMultiKey:   true,
 			MultiKeySize: len(keys),
-			MultiKeyMode: constant.MultiKeyModePolling,
+			MultiKeyMode: mode,
 		},
 	}
 	require.NoError(t, db.Create(channel).Error)
@@ -97,7 +97,7 @@ func setupPollingChannelTest(t *testing.T, memoryCacheEnabled bool, keys []strin
 // same upstream key.
 func TestGetNextEnabledKeyAdvancesCursorForUncachedChannelObject(t *testing.T) {
 	keys := []string{"key-a", "key-b", "key-c"}
-	setupPollingChannelTest(t, true, keys)
+	setupMultiKeyChannelTest(t, true, constant.MultiKeyModePolling, keys)
 
 	got := make([]string, 0, len(keys))
 	gotIndexes := make([]int, 0, len(keys))
@@ -119,7 +119,7 @@ func TestGetNextEnabledKeyAdvancesCursorForUncachedChannelObject(t *testing.T) {
 
 func TestGetNextEnabledKeyAdvancesCursorForCachedChannelObject(t *testing.T) {
 	keys := []string{"key-a", "key-b", "key-c"}
-	setupPollingChannelTest(t, true, keys)
+	setupMultiKeyChannelTest(t, true, constant.MultiKeyModePolling, keys)
 
 	got := make([]string, 0, len(keys)+1)
 	for i := 0; i < len(keys)+1; i++ {
@@ -137,7 +137,7 @@ func TestGetNextEnabledKeyAdvancesCursorForCachedChannelObject(t *testing.T) {
 
 func TestGetNextEnabledKeyPersistsCursorWithoutMemoryCache(t *testing.T) {
 	keys := []string{"key-a", "key-b"}
-	setupPollingChannelTest(t, false, keys)
+	setupMultiKeyChannelTest(t, false, constant.MultiKeyModePolling, keys)
 
 	first, err := GetChannelById(91, true)
 	require.NoError(t, err)
@@ -163,7 +163,7 @@ func TestGetNextEnabledKeyPersistsCursorWithoutMemoryCache(t *testing.T) {
 // the unsynchronized cursor access this guards against.
 func TestGetNextEnabledKeyConcurrentWithCacheSyncIsRaceFree(t *testing.T) {
 	keys := []string{"key-a", "key-b", "key-c"}
-	setupPollingChannelTest(t, true, keys)
+	setupMultiKeyChannelTest(t, true, constant.MultiKeyModePolling, keys)
 
 	var wg sync.WaitGroup
 	for i := 0; i < 4; i++ {
@@ -205,7 +205,7 @@ func TestGetNextEnabledKeyConcurrentWithCacheSyncIsRaceFree(t *testing.T) {
 // must not reset multi-key rotation back to the first key.
 func TestGetNextEnabledKeyKeepsCursorAcrossCacheSync(t *testing.T) {
 	keys := []string{"key-a", "key-b", "key-c"}
-	setupPollingChannelTest(t, true, keys)
+	setupMultiKeyChannelTest(t, true, constant.MultiKeyModePolling, keys)
 
 	cached, err := CacheGetChannel(91)
 	require.NoError(t, err)
@@ -231,7 +231,7 @@ func TestGetNextEnabledKeyKeepsCursorAcrossCacheSync(t *testing.T) {
 // admin actions.
 func TestInitChannelCacheUnderPollingLockDoesNotDeadlock(t *testing.T) {
 	keys := []string{"key-a", "key-b", "key-c"}
-	setupPollingChannelTest(t, true, keys)
+	setupMultiKeyChannelTest(t, true, constant.MultiKeyModePolling, keys)
 
 	lock := GetChannelPollingLock(91)
 	lock.Lock()
@@ -255,7 +255,7 @@ func TestInitChannelCacheUnderPollingLockDoesNotDeadlock(t *testing.T) {
 // uncached-object path.
 func TestGetNextEnabledKeySkipsDisabledKeysForUncachedChannelObject(t *testing.T) {
 	keys := []string{"key-a", "key-b", "key-c"}
-	setupPollingChannelTest(t, true, keys)
+	setupMultiKeyChannelTest(t, true, constant.MultiKeyModePolling, keys)
 
 	require.True(t, UpdateChannelStatusByKeyIndex(91, 1, common.ChannelStatusAutoDisabled, "test"))
 

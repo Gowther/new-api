@@ -111,11 +111,11 @@ import {
   SecureVerificationDialog,
   useSecureVerification,
 } from '@/features/auth/secure-verification'
+import { modelRoutingQueryKeys } from '@/features/models/lib/query-keys'
 import {
   getOptionValue,
   useSystemOptions,
 } from '@/features/system-settings/hooks/use-system-options'
-import { modelRoutingQueryKeys } from '@/features/models/lib/query-keys'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { useHiddenClickUnlock } from '@/hooks/use-hidden-click-unlock'
 import {
@@ -798,7 +798,9 @@ export function ChannelMutateDrawer({
         form.setValue('remark', config.remark, { shouldDirty: true })
       }
       if (config.header_override) {
-        form.setValue('header_override', config.header_override, { shouldDirty: true })
+        form.setValue('header_override', config.header_override, {
+          shouldDirty: true,
+        })
       }
       setClipboardConfig(null)
       toast.success(t('Connection info filled in'))
@@ -852,6 +854,7 @@ export function ChannelMutateDrawer({
   const multiKeyMode = form.watch('multi_key_mode')
   const multiKeyType = form.watch('multi_key_type')
   const keyMode = form.watch('key_mode')
+  const convertToMulti = form.watch('convert_to_multi')
   const currentGroups = form.watch('group')
   const currentType = form.watch('type')
   const currentStatus = form.watch('status')
@@ -942,11 +945,10 @@ export function ChannelMutateDrawer({
       globalOptions.AutomaticDisableStatusCodes,
       { shouldDirty: true, shouldValidate: true }
     )
-    form.setValue(
-      'auto_ban_keywords',
-      globalOptions.AutomaticDisableKeywords,
-      { shouldDirty: true, shouldValidate: true }
-    )
+    form.setValue('auto_ban_keywords', globalOptions.AutomaticDisableKeywords, {
+      shouldDirty: true,
+      shouldValidate: true,
+    })
   }
   const {
     unlocked: doubaoApiEditUnlocked,
@@ -1846,7 +1848,9 @@ export function ChannelMutateDrawer({
         })
       }
       queryClient.invalidateQueries({ queryKey: ['playground-models'] })
-      queryClient.invalidateQueries({ queryKey: ['playground-model-channels'] })
+      queryClient.invalidateQueries({
+        queryKey: ['playground-model-channels'],
+      })
       if (channelId) {
         queryClient.invalidateQueries({
           queryKey: channelsQueryKeys.detail(channelId),
@@ -3625,6 +3629,40 @@ export function ChannelMutateDrawer({
                                 </div>
                               )}
 
+                              {isEditing &&
+                                !isMultiKeyChannel &&
+                                supportsMultiKeyAddMode && (
+                                  <FormField
+                                    control={form.control}
+                                    name='convert_to_multi'
+                                    render={({ field }) => (
+                                      <FormItem
+                                        className={sideDrawerSwitchItemClassName()}
+                                      >
+                                        <div className='flex flex-col gap-0.5'>
+                                          <FormLabel>
+                                            {t('Convert to multi-key')}
+                                          </FormLabel>
+                                          <FormDescription className='text-xs'>
+                                            {t(
+                                              'Convert in place: the current key becomes key #1; put additional keys in the key field above (one per line), then pick a distribution mode below'
+                                            )}
+                                          </FormDescription>
+                                        </div>
+                                        <FormControl>
+                                          <Switch
+                                            checked={field.value ?? false}
+                                            onCheckedChange={field.onChange}
+                                            aria-label={t(
+                                              'Convert to multi-key'
+                                            )}
+                                          />
+                                        </FormControl>
+                                      </FormItem>
+                                    )}
+                                  />
+                                )}
+
                               {isEditing && isMultiKeyChannel && (
                                 <FormField
                                   control={form.control}
@@ -3683,66 +3721,79 @@ export function ChannelMutateDrawer({
                                 />
                               )}
 
-                              {!isEditing &&
-                                multiKeyMode === 'multi_to_single' && (
-                                  <FormField
-                                    control={form.control}
-                                    name='multi_key_type'
-                                    render={({ field }) => (
-                                      <FormItem>
-                                        <FormLabel>
-                                          {t('Multi-Key Strategy')}
-                                        </FormLabel>
-                                        <Select
-                                          items={[
-                                            {
-                                              value: 'random',
-                                              label: t('Random'),
-                                            },
-                                            {
-                                              value: 'polling',
-                                              label: t('Polling'),
-                                            },
-                                          ]}
-                                          onValueChange={field.onChange}
-                                          value={field.value}
+                              {((!isEditing &&
+                                multiKeyMode === 'multi_to_single') ||
+                                (isEditing &&
+                                  (isMultiKeyChannel || convertToMulti))) && (
+                                <FormField
+                                  control={form.control}
+                                  name='multi_key_type'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>
+                                        {t('Multi-Key Strategy')}
+                                      </FormLabel>
+                                      <Select
+                                        items={[
+                                          {
+                                            value: 'random',
+                                            label: t('Random'),
+                                          },
+                                          {
+                                            value: 'polling',
+                                            label: t('Polling'),
+                                          },
+                                          {
+                                            value: 'failover',
+                                            label: t('Failover (sticky)'),
+                                          },
+                                        ]}
+                                        onValueChange={field.onChange}
+                                        value={field.value}
+                                      >
+                                        <FormControl>
+                                          <SelectTrigger>
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent
+                                          alignItemWithTrigger={false}
                                         >
-                                          <FormControl>
-                                            <SelectTrigger>
-                                              <SelectValue />
-                                            </SelectTrigger>
-                                          </FormControl>
-                                          <SelectContent
-                                            alignItemWithTrigger={false}
-                                          >
-                                            <SelectGroup>
-                                              <SelectItem value='random'>
-                                                {t('Random')}
-                                              </SelectItem>
-                                              <SelectItem value='polling'>
-                                                {t('Polling')}
-                                              </SelectItem>
-                                            </SelectGroup>
-                                          </SelectContent>
-                                        </Select>
-                                        <FormDescription>
-                                          {multiKeyType === 'polling' ? (
-                                            <span className='text-warning'>
-                                              {t(
-                                                'Polling mode requires Redis and memory cache, otherwise performance will be significantly degraded'
-                                              )}
-                                            </span>
-                                          ) : (
-                                            t(
-                                              'Randomly select a key from the pool for each request'
-                                            )
-                                          )}
-                                        </FormDescription>
-                                        <FormMessage />
-                                      </FormItem>
-                                    )}
-                                  />
-                                )}
+                                          <SelectGroup>
+                                            <SelectItem value='random'>
+                                              {t('Random')}
+                                            </SelectItem>
+                                            <SelectItem value='polling'>
+                                              {t('Polling')}
+                                            </SelectItem>
+                                            <SelectItem value='failover'>
+                                              {t('Failover (sticky)')}
+                                            </SelectItem>
+                                          </SelectGroup>
+                                        </SelectContent>
+                                      </Select>
+                                      <FormDescription>
+                                        {multiKeyType === 'polling' ? (
+                                          <span className='text-warning'>
+                                            {t(
+                                              'Polling mode requires Redis and memory cache, otherwise performance will be significantly degraded'
+                                            )}
+                                          </span>
+                                        ) : multiKeyType === 'failover' ? (
+                                          t(
+                                            'Failover mode: requests stick to the current upstream key to keep cache affinity and only move to the next enabled key after it is auto-disabled'
+                                          )
+                                        ) : (
+                                          t(
+                                            'Randomly select a key from the pool for each request'
+                                          )
+                                        )}
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              )}
                             </ChannelAuthSection>
                           </fieldset>
                         </div>
@@ -4358,7 +4409,9 @@ export function ChannelMutateDrawer({
                                       <FormControl>
                                         <Textarea
                                           rows={5}
-                                          placeholder={'Your credit balance is too low\nYou exceeded your current quota'}
+                                          placeholder={
+                                            'Your credit balance is too low\nYou exceeded your current quota'
+                                          }
                                           {...field}
                                           value={field.value || ''}
                                         />

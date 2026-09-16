@@ -1970,8 +1970,7 @@ const EditChannelModal = (props) => {
         // TEMP-DEBUG: 临时排查 classic 自动预填 header_override 丢失，确认后删除
         console.error(
           '[classic-modal-init]',
-          'ivHdr=' +
-            String(props.initialValues?.header_override ?? '<absent>'),
+          'ivHdr=' + String(props.initialValues?.header_override ?? '<absent>'),
           'mergedHdr=' + String(nextValues.header_override ?? '<absent>'),
         );
         setSelectedModels(initialModels);
@@ -1984,7 +1983,10 @@ const EditChannelModal = (props) => {
         // setValues 落不到它上面（自动弹窗时唯独该字段显示为空的原因）
         prefillHeaderOverride = nextValues.header_override ?? '';
         if (prefillHeaderOverride) {
-          formApiRef.current?.setValue('header_override', prefillHeaderOverride);
+          formApiRef.current?.setValue(
+            'header_override',
+            prefillHeaderOverride,
+          );
         }
         // 调用方已经预填了 key，说明连接信息就是它给的，再提示剪贴板只会重复表单里的内容
         if (!props.initialValues?.key) {

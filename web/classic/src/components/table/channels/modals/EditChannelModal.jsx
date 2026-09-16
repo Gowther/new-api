@@ -457,6 +457,7 @@ const EditChannelModal = (props) => {
   const [multiToSingle, setMultiToSingle] = useState(false);
   const [multiKeyMode, setMultiKeyMode] = useState('random');
   const [autoBanMode, setAutoBanMode] = useState(1);
+  const [autoTestMode, setAutoTestMode] = useState(1);
   const [autoBanRulesEnabled, setAutoBanRulesEnabled] = useState(false);
   const [inputs, setInputs] = useState(originInputs);
   const officialClientPassthroughEnabled =
@@ -1079,8 +1080,10 @@ const EditChannelModal = (props) => {
     // 官方客户端透传原先绑定渠道级跳过开关，现在映射到 auto_test
     if (enabled) {
       handleInputChange('auto_test', 0);
+      setAutoTestMode(0);
     } else if (Number(inputs.auto_test) === 0) {
       handleInputChange('auto_test', 1);
+      setAutoTestMode(1);
     }
     handleInputChange('header_override', nextHeaderOverride);
   };
@@ -1550,6 +1553,13 @@ const EditChannelModal = (props) => {
         setAutoBanMode(2);
       } else {
         setAutoBanMode(1);
+      }
+      if (data.auto_test === 0) {
+        setAutoTestMode(0);
+      } else if (data.auto_test === 2) {
+        setAutoTestMode(2);
+      } else {
+        setAutoTestMode(1);
       }
       setAutoBanRulesEnabled(data.auto_ban_rules_enabled || false);
       // 同步企业账户状态
@@ -3232,9 +3242,8 @@ const EditChannelModal = (props) => {
                     field='auto_test'
                     label={t('定时自动测试')}
                     type='button'
-                    onChange={(value) =>
-                      handleInputChange('auto_test', Number(value))
-                    }
+                    initValue={autoTestMode}
+                    onChange={(value) => setAutoTestMode(Number(value))}
                     extraText={t(
                       '强制参与：即使全局定时测试和自动恢复开关都关闭，也会定时检测该渠道，测试成功后自动启用；强制跳过：绝不参与定时检测；跟随全局：按全局开关决定',
                     )}

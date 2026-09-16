@@ -357,6 +357,8 @@
     "Template": "Modèle",
     "Temporary mode requires one enabled channel": "Le mode temporaire nécessite un seul canal actif",
     "Temporary single-channel mode": "Mode temporaire à canal unique",
+    "Jump to model routing after creation": "Aller au routage des modèles après la création",
+    "When off, land on the channel management list after creation.": "Désactivé : retourner à la liste des canaux après la création.",
     "The fingerprint is derived from error type, error code, HTTP status, and normalized error text. Changing request IDs, URLs, UUIDs, and long tokens are removed before grouping.": "L'empreinte est dérivée du type d'erreur, du code d'erreur, du statut HTTP et du texte normalisé. Les ID de requête, URL, UUID et jetons longs variables sont retirés avant le regroupement.",
     "Token Endpoint": "Point de terminaison du jeton",
     "token 会按倍率换算成“额度/次数”，请求结束后再做差额结算（补扣/返还）。": "Les tokens sont convertis en quota/nombre d'utilisations selon le ratio. Après la requête, la différence est réglée (déduction supplémentaire/remboursement).",

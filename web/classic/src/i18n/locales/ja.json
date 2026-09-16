@@ -360,6 +360,8 @@
     "Template": "テンプレート",
     "Temporary mode requires one enabled channel": "有効な単一チャネルでのみ利用できます",
     "Temporary single-channel mode": "一時的な単一チャネルモード",
+    "Jump to model routing after creation": "作成後にモデルルーティングへ移動",
+    "When off, land on the channel management list after creation.": "オフの場合、作成後にチャネル一覧へ移動します。",
     "The fingerprint is derived from error type, error code, HTTP status, and normalized error text. Changing request IDs, URLs, UUIDs, and long tokens are removed before grouping.": "エラーフィンガープリントは、エラー種別、エラーコード、HTTP ステータス、正規化したエラー文から生成します。変動するリクエスト ID、URL、UUID、長いトークンはグループ化前に除去します。",
     "Token Endpoint": "Token Endpoint",
     "token 会按倍率换算成“额度/次数”，请求结束后再做差额结算（补扣/返还）。": "トークンは比率に基づいて「クォータ/回数」に換算されます。リクエスト完了後に差額精算（追加控除/返金）が行われます。",

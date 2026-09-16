@@ -25,8 +25,6 @@ import React, {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
-import { Modal, Select } from '@douyinfe/semi-ui';
 import {
   CHANNEL_CREATED_EVENT,
   channelConnectionPasteClaim,
@@ -35,6 +33,7 @@ import {
   readClipboardWhenAllowed,
   showSuccess,
 } from '../../helpers';
+import { useRoutingFollowUp } from '../table/channels/RoutingFollowUp';
 import { UserContext } from '../../context/User';
 import EditChannelModal from '../table/channels/modals/EditChannelModal';
 
@@ -51,7 +50,6 @@ const MODAL_EXIT_MS = 300;
  */
 const ChannelPasteListener = () => {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const [userState] = useContext(UserContext);
   const [pasted, setPasted] = useState(null);
   const [visible, setVisible] = useState(false);
@@ -112,38 +110,9 @@ const ChannelPasteListener = () => {
     return () => window.clearTimeout(timer);
   }, [visible, pasted]);
 
-  // 加完渠道通常紧接着要调优先级、或者把它设成临时单渠道，这两件事都在路由表里。
-  // 创建响应不带渠道 ID，但路由表是按模型组织的，所以点名一个该渠道服务的模型就够
-  // 落到它那一行——工作台会从这个模型推出 vendor。多模型渠道让操作者选落地模型，
-  // 而不是永远落字母序第一个；单模型渠道维持直接跳转。
-  const [routingChoice, setRoutingChoice] = useState(null);
-
-  const navigateToRouting = useCallback(
-    (model) => {
-      const params = new URLSearchParams({
-        tab: 'routing',
-        routing_model: model,
-      });
-      navigate(`/console/models?${params.toString()}`);
-    },
-    [navigate],
-  );
-
-  const followToRouting = useCallback(
-    (createdModels) => {
-      const models = [...new Set(createdModels)].sort((a, b) =>
-        a.localeCompare(b),
-      );
-      const [firstByName] = models;
-      if (!firstByName) return;
-      if (models.length === 1) {
-        navigateToRouting(firstByName);
-        return;
-      }
-      setRoutingChoice({ models, selected: firstByName });
-    },
-    [navigateToRouting],
-  );
+  // 加完渠道去模型路由还是渠道管理列表，由「临时单渠道模式」旁的跟随开关决定，
+  // 落点行为在 RoutingFollowUp 的偏好里，粘贴监听器、渠道页、路由工作台共用。
+  const { followCreated, landingModal } = useRoutingFollowUp();
 
   const initialValues = useMemo(() => {
     if (!pasted) return undefined;
@@ -163,7 +132,7 @@ const ChannelPasteListener = () => {
           visible={visible}
           editingChannel={EMPTY_CHANNEL}
           initialValues={initialValues}
-          onCreated={followToRouting}
+          onCreated={followCreated}
           handleClose={() => setVisible(false)}
           refresh={() => {
             // 渠道管理页可能已经挂载，通知它自己刷新
@@ -171,35 +140,7 @@ const ChannelPasteListener = () => {
           }}
         />
       )}
-      <Modal
-        title={t('前往模型路由')}
-        visible={routingChoice !== null}
-        onCancel={() => setRoutingChoice(null)}
-        onOk={() => {
-          if (routingChoice?.selected) {
-            navigateToRouting(routingChoice.selected);
-          }
-          setRoutingChoice(null);
-        }}
-        okText={t('前往')}
-        cancelText={t('留在此页')}
-        size='small'
-      >
-        <div className='mb-2'>{t('选择路由表要定位的模型')}</div>
-        <Select
-          value={routingChoice?.selected}
-          onChange={(value) =>
-            setRoutingChoice((current) =>
-              current ? { ...current, selected: value } : current,
-            )
-          }
-          className='w-full'
-          optionList={routingChoice?.models.map((model) => ({
-            value: model,
-            label: model,
-          }))}
-        />
-      </Modal>
+      {landingModal}
     </>
   );
 };

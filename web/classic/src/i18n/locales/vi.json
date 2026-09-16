@@ -361,6 +361,8 @@
     "Template": "Mẫu",
     "Temporary mode requires one enabled channel": "Chế độ tạm thời chỉ áp dụng cho một kênh đang bật",
     "Temporary single-channel mode": "Chế độ một kênh tạm thời",
+    "Jump to model routing after creation": "Sau khi tạo, chuyển đến định tuyến mô hình",
+    "When off, land on the channel management list after creation.": "Khi tắt, sau khi tạo sẽ về danh sách kênh.",
     "The fingerprint is derived from error type, error code, HTTP status, and normalized error text. Changing request IDs, URLs, UUIDs, and long tokens are removed before grouping.": "Dấu vân tay được tạo từ loại lỗi, mã lỗi, trạng thái HTTP và nội dung lỗi đã chuẩn hóa. ID yêu cầu, URL, UUID và token dài thay đổi sẽ bị loại bỏ trước khi nhóm.",
     "Token Endpoint": "Token Endpoint",
     "token 会按倍率换算成“额度/次数”，请求结束后再做差额结算（补扣/返还）。": "Token được quy đổi thành hạn mức/số lần theo tỷ lệ. Sau khi yêu cầu hoàn tất, chênh lệch sẽ được quyết toán (trừ thêm/hoàn trả).",

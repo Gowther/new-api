@@ -63,6 +63,10 @@ import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 
 import { ChannelRemarkTooltip } from '../../common/ChannelRemarkTooltip';
+import {
+  CHANNEL_LIST_PATH,
+  readStoredFollowRouting,
+} from '../channels/RoutingFollowUp';
 import { CHANNEL_OPTIONS } from '../../../constants';
 import {
   API,
@@ -1135,6 +1139,11 @@ const ModelRoutingWorkbench = ({ targetModelName, targetChannelId }) => {
   // A new channel's models are only selectable once the reloaded channel list
   // has put them in the catalog, so the jump is queued and applied by an effect.
   const handleChannelCreated = (createdModels) => {
+    if (!readStoredFollowRouting()) {
+      // 跟随开关关着时，落点是渠道管理列表而不是留在路由工作台
+      navigate(CHANNEL_LIST_PATH);
+      return;
+    }
     setPendingCreated({ models: createdModels, channelsAtQueue: channels });
   };
 

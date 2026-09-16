@@ -31,6 +31,7 @@ import BatchTagModal from './modals/BatchTagModal';
 import ModelTestModal from './modals/ModelTestModal';
 import ColumnSelectorModal from './modals/ColumnSelectorModal';
 import EditChannelModal from './modals/EditChannelModal';
+import { useRoutingFollowUp } from './RoutingFollowUp';
 import EditTagModal from './modals/EditTagModal';
 import MultiKeyManageModal from './modals/MultiKeyManageModal';
 import ChannelUpstreamUpdateModal from './modals/ChannelUpstreamUpdateModal';
@@ -42,6 +43,8 @@ const ChannelsPage = () => {
   const channelsData = useChannelsData();
   const isMobile = useIsMobile();
   const [ccSwitchChannel, setCCSwitchChannel] = React.useState(null);
+  // 新建渠道的落点跟随偏好，开关在创建弹窗底栏「临时单渠道模式」旁边
+  const { followCreated, landingModal } = useRoutingFollowUp();
 
   return (
     <>
@@ -58,7 +61,9 @@ const ChannelsPage = () => {
         visible={channelsData.showEdit}
         handleClose={channelsData.closeEdit}
         editingChannel={channelsData.editingChannel}
+        onCreated={followCreated}
       />
+      {landingModal}
       <BatchTagModal {...channelsData} />
       <ModelTestModal {...channelsData} />
       <MultiKeyManageModal

@@ -34,6 +34,10 @@ import {
 } from '../../../../helpers';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import {
+  readStoredFollowRouting,
+  writeStoredFollowRouting,
+} from '../RoutingFollowUp';
+import {
   CHANNEL_OPTIONS,
   MODEL_FETCHABLE_CHANNEL_TYPES,
 } from '../../../../constants';
@@ -380,6 +384,14 @@ const EditChannelModal = (props) => {
   const [loading, setLoading] = useState(isEdit);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [enableRoutingOverride, setEnableRoutingOverride] = useState(false);
+  // 「临时单渠道模式」旁的跟随开关：新建成功后落模型路由还是渠道管理列表
+  const [followRoutingAfterCreate, setFollowRoutingAfterCreate] = useState(
+    readStoredFollowRouting,
+  );
+  // 弹窗常驻挂载（渠道页）：打开时与存储里的偏好同步一次，粘贴流程也可能翻转它
+  useEffect(() => {
+    if (props.visible) setFollowRoutingAfterCreate(readStoredFollowRouting());
+  }, [props.visible]);
   const isMobile = useIsMobile();
   const handleCancel = () => {
     if (isSubmitting) return;
@@ -3107,30 +3119,43 @@ const EditChannelModal = (props) => {
         footer={
           <div className='flex flex-wrap justify-end items-center gap-2'>
             {!isEdit && (
-              <div
-                className='mr-auto min-w-0 basis-full sm:basis-auto'
-                title={
-                  (batch && !multiToSingle) || splitByModelVendor
-                    ? t('Temporary mode requires one enabled channel')
-                    : undefined
-                }
-              >
-                <Checkbox
-                  checked={
-                    enableRoutingOverride &&
-                    (!batch || multiToSingle) &&
-                    !splitByModelVendor
-                  }
-                  disabled={
-                    isSubmitting ||
-                    (batch && !multiToSingle) ||
-                    splitByModelVendor
-                  }
-                  onChange={(event) =>
-                    setEnableRoutingOverride(event.target.checked)
+              <div className='mr-auto flex min-w-0 basis-full flex-wrap items-center gap-x-4 sm:basis-auto'>
+                <div
+                  title={
+                    (batch && !multiToSingle) || splitByModelVendor
+                      ? t('Temporary mode requires one enabled channel')
+                      : undefined
                   }
                 >
-                  {t('Temporary single-channel mode')}
+                  <Checkbox
+                    checked={
+                      enableRoutingOverride &&
+                      (!batch || multiToSingle) &&
+                      !splitByModelVendor
+                    }
+                    disabled={
+                      isSubmitting ||
+                      (batch && !multiToSingle) ||
+                      splitByModelVendor
+                    }
+                    onChange={(event) =>
+                      setEnableRoutingOverride(event.target.checked)
+                    }
+                  >
+                    {t('Temporary single-channel mode')}
+                  </Checkbox>
+                </div>
+                <Checkbox
+                  checked={followRoutingAfterCreate}
+                  title={t(
+                    'When off, land on the channel management list after creation.',
+                  )}
+                  onChange={(event) => {
+                    setFollowRoutingAfterCreate(event.target.checked);
+                    writeStoredFollowRouting(event.target.checked);
+                  }}
+                >
+                  {t('Jump to model routing after creation')}
                 </Checkbox>
               </div>
             )}

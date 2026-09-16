@@ -209,6 +209,10 @@ import {
 } from '../dialogs/model-rule-coverage-dialog'
 import { ParamOverrideEditorDialog } from '../dialogs/param-override-editor-dialog'
 import { StatusCodeRiskDialog } from '../dialogs/status-code-risk-dialog'
+import {
+  readStoredFollowRouting,
+  writeStoredFollowRouting,
+} from '../follow-created-channel'
 import { ModelMappingEditor } from '../model-mapping-editor'
 import { RoutingOverrideConflictNotice } from '../routing-override-conflict-notice'
 import {
@@ -646,6 +650,15 @@ export function ChannelMutateDrawer({
     ADMIN_PERMISSION_ACTIONS.WRITE
   )
   const [fetchModelsDialogOpen, setFetchModelsDialogOpen] = useState(false)
+  // "Temporary single-channel mode"'s neighbour: after a create, land on the
+  // model routing table or back on the channel list (see follow-created-channel).
+  const [followRoutingAfterCreate, setFollowRoutingAfterCreate] =
+    useState<boolean>(readStoredFollowRouting)
+  // The drawer stays mounted on the channels page: re-sync the toggle with the
+  // stored preference each time it opens, since the paste flow can flip it.
+  useEffect(() => {
+    if (open) setFollowRoutingAfterCreate(readStoredFollowRouting())
+  }, [open])
   const [modelMappingPreviewOpen, setModelMappingPreviewOpen] = useState(false)
   const [modelMappingPreview, setModelMappingPreview] =
     useState<ChannelModelMappingPreview | null>(null)
@@ -5354,42 +5367,65 @@ export function ChannelMutateDrawer({
           </Form>
 
           <SheetFooter className={sideDrawerFooterClassName()}>
-            {!isEditing && canEditRouting && (
+            {!isEditing && (
               <FieldGroup className='col-span-2 min-w-0 sm:mr-auto sm:w-auto sm:flex-1'>
-                <Field
-                  orientation='horizontal'
-                  data-disabled={
-                    multiKeyMode === 'batch' ||
-                    currentStatus !== 1 ||
-                    isSubmitting
-                  }
-                  title={
-                    multiKeyMode === 'batch' || currentStatus !== 1
-                      ? t('Temporary mode requires one enabled channel')
-                      : undefined
-                  }
-                >
-                  <Switch
-                    id='create-channel-routing-override'
-                    checked={
-                      multiKeyMode !== 'batch' &&
-                      currentStatus === 1 &&
-                      Boolean(form.watch('enable_routing_override'))
-                    }
-                    onCheckedChange={(checked) =>
-                      form.setValue('enable_routing_override', checked)
-                    }
-                    disabled={
+                {canEditRouting && (
+                  <Field
+                    orientation='horizontal'
+                    data-disabled={
                       multiKeyMode === 'batch' ||
                       currentStatus !== 1 ||
                       isSubmitting
                     }
+                    title={
+                      multiKeyMode === 'batch' || currentStatus !== 1
+                        ? t('Temporary mode requires one enabled channel')
+                        : undefined
+                    }
+                  >
+                    <Switch
+                      id='create-channel-routing-override'
+                      checked={
+                        multiKeyMode !== 'batch' &&
+                        currentStatus === 1 &&
+                        Boolean(form.watch('enable_routing_override'))
+                      }
+                      onCheckedChange={(checked) =>
+                        form.setValue('enable_routing_override', checked)
+                      }
+                      disabled={
+                        multiKeyMode === 'batch' ||
+                        currentStatus !== 1 ||
+                        isSubmitting
+                      }
+                    />
+                    <FieldLabel
+                      htmlFor='create-channel-routing-override'
+                      className='min-w-0'
+                    >
+                      {t('Temporary single-channel mode')}
+                    </FieldLabel>
+                  </Field>
+                )}
+                <Field
+                  orientation='horizontal'
+                  title={t(
+                    'When off, land on the channel management list after creation.'
+                  )}
+                >
+                  <Switch
+                    id='create-channel-follow-routing'
+                    checked={followRoutingAfterCreate}
+                    onCheckedChange={(checked) => {
+                      setFollowRoutingAfterCreate(checked)
+                      writeStoredFollowRouting(checked)
+                    }}
                   />
                   <FieldLabel
-                    htmlFor='create-channel-routing-override'
+                    htmlFor='create-channel-follow-routing'
                     className='min-w-0'
                   >
-                    {t('Temporary single-channel mode')}
+                    {t('Jump to model routing after creation')}
                   </FieldLabel>
                 </Field>
               </FieldGroup>

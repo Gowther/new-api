@@ -258,6 +258,8 @@
     "Template": "模板",
     "Temporary mode requires one enabled channel": "仅支持单个已启用的渠道",
     "Temporary single-channel mode": "临时单渠道模式",
+    "Jump to model routing after creation": "创建后跳转到模型路由",
+    "When off, land on the channel management list after creation.": "关闭时，创建后跳转到渠道管理列表。",
     "Token Endpoint": "Token Endpoint",
     "true": "true",
     "Turnstile Secret Key": "Turnstile Secret Key",

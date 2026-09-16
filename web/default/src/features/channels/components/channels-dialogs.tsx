@@ -29,9 +29,12 @@ import { OllamaModelsDialog } from './dialogs/ollama-models-dialog'
 import { TagBatchEditDialog } from './dialogs/tag-batch-edit-dialog'
 import { UpstreamUpdateDialog } from './dialogs/upstream-update-dialog'
 import { ChannelMutateDrawer } from './drawers/channel-mutate-drawer'
+import { useFollowCreatedChannel } from './follow-created-channel'
 
 export function ChannelsDialogs() {
   const { open, setOpen, currentRow, upstream } = useChannels()
+  // 新建渠道后的落点跟随偏好，开关在创建抽屉底栏
+  const { followCreated, followDialog } = useFollowCreatedChannel()
 
   return (
     <>
@@ -40,6 +43,7 @@ export function ChannelsDialogs() {
         open={open === 'create-channel' || open === 'update-channel'}
         onOpenChange={(v) => !v && setOpen(null)}
         currentRow={open === 'update-channel' ? currentRow : null}
+        onCreated={followCreated}
       />
 
       {/* Test Channel Dialog */}
@@ -114,6 +118,9 @@ export function ChannelsDialogs() {
         onConfirm={upstream.applyUpdates}
         onCancel={upstream.closeModal}
       />
+
+      {/* 落地模型选择：创建抽屉关闭动画期间也要活着 */}
+      {followDialog}
     </>
   )
 }

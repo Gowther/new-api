@@ -373,6 +373,8 @@
     "Template": "Шаблон",
     "Temporary mode requires one enabled channel": "Временный режим доступен для одного активного канала",
     "Temporary single-channel mode": "Временный режим одного канала",
+    "Jump to model routing after creation": "После создания перейти к маршрутизации моделей",
+    "When off, land on the channel management list after creation.": "Если выключено, после создания откроется список каналов.",
     "The fingerprint is derived from error type, error code, HTTP status, and normalized error text. Changing request IDs, URLs, UUIDs, and long tokens are removed before grouping.": "Отпечаток строится из типа и кода ошибки, HTTP-статуса и нормализованного текста. Изменяющиеся ID запросов, URL, UUID и длинные токены удаляются до группировки.",
     "Token Endpoint": "Конечная точка токена",
     "token 会按倍率换算成“额度/次数”，请求结束后再做差额结算（补扣/返还）。": "Токены конвертируются в квоту/количество использований по коэффициенту. После завершения запроса производится расчёт разницы (дополнительное списание/возврат).",

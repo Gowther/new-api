@@ -358,6 +358,8 @@
     "Template": "範本",
     "Temporary mode requires one enabled channel": "僅支援單個已啟用的渠道",
     "Temporary single-channel mode": "臨時單渠道模式",
+    "Jump to model routing after creation": "建立後跳轉至模型路由",
+    "When off, land on the channel management list after creation.": "關閉時，建立後跳轉至渠道管理列表。",
     "The fingerprint is derived from error type, error code, HTTP status, and normalized error text. Changing request IDs, URLs, UUIDs, and long tokens are removed before grouping.": "錯誤指紋根據錯誤類型、錯誤代碼、HTTP 狀態和標準化後的錯誤文字產生。分組前會移除變動的請求 ID、URL、UUID 和長權杖。",
     "Token Endpoint": "Token Endpoint",
     "token 会按倍率换算成“额度/次数”，请求结束后再做差额结算（补扣/返还）。": "",

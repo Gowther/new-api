@@ -373,6 +373,8 @@
     "Template": "Template",
     "Temporary mode requires one enabled channel": "Temporary mode requires one enabled channel",
     "Temporary single-channel mode": "Temporary single-channel mode",
+    "Jump to model routing after creation": "Jump to model routing after creation",
+    "When off, land on the channel management list after creation.": "When off, land on the channel management list after creation.",
     "The fingerprint is derived from error type, error code, HTTP status, and normalized error text. Changing request IDs, URLs, UUIDs, and long tokens are removed before grouping.": "The fingerprint is derived from error type, error code, HTTP status, and normalized error text. Changing request IDs, URLs, UUIDs, and long tokens are removed before grouping.",
     "Token Endpoint": "Token Endpoint",
     "token 会按倍率换算成“额度/次数”，请求结束后再做差额结算（补扣/返还）。": "Tokens are converted to quota/usage count by ratio. After the request completes, the difference is settled (additional deduction/refund).",

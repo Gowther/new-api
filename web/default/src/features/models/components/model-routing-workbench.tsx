@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { Analytics02Icon, LockIcon, UndoIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import {
   ChevronDown,
   Copy,
@@ -93,6 +93,7 @@ import {
 import { ChannelTestDialog } from '@/features/channels/components/dialogs/channel-test-dialog'
 import { CopyChannelDialog } from '@/features/channels/components/dialogs/copy-channel-dialog'
 import { ChannelMutateDrawer } from '@/features/channels/components/drawers/channel-mutate-drawer'
+import { readStoredFollowRouting } from '@/features/channels/components/follow-created-channel'
 import { RoutingOverrideConflictNotice } from '@/features/channels/components/routing-override-conflict-notice'
 import {
   CHANNEL_STATUS,
@@ -611,6 +612,7 @@ function getChangedCount(changes: RoutingChanges): number {
 export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const currentUser = useAuthStore((state) => state.auth.user)
   const canEditSensitive = hasPermission(
     currentUser,
@@ -1313,6 +1315,11 @@ export function ModelRoutingWorkbench(props: ModelRoutingWorkbenchProps) {
   // A new channel's models are only selectable once the refetched channel list
   // has put them in the catalog, so the jump is queued and applied by an effect.
   const handleChannelCreated = (createdModels: string[]) => {
+    if (!readStoredFollowRouting()) {
+      // 跟随开关关着时，落点是渠道管理列表而不是留在路由工作台
+      void navigate({ to: '/channels' })
+      return
+    }
     setPendingCreated({ models: createdModels, channelsAtQueue: channels })
   }
 

@@ -888,7 +888,12 @@ const EditChannelModal = (props) => {
     const patch = { key: config.key, base_url: config.url };
     if (config.name) patch.name = config.name;
     if (config.remark) patch.remark = config.remark;
-    if (config.header_override) patch.header_override = config.header_override;
+    if (config.header_override) {
+      patch.header_override = config.header_override;
+      // 折叠区的字段还没挂载，setValues 落不到它上面：展开面板并直接落值
+      setAdvancedSettingsOpen(true);
+      formApiRef.current?.setValue('header_override', config.header_override);
+    }
     setInputs((prev) => ({ ...prev, ...patch }));
     if (formApiRef.current) {
       Object.entries(patch).forEach(([field, value]) => {
@@ -1953,6 +1958,8 @@ const EditChannelModal = (props) => {
 
   useEffect(() => {
     setModelSearchValue('');
+    // 创建时若剪贴板带了请求头覆盖，初始化后要展开高级面板
+    let prefillHeaderOverride = '';
     if (props.visible) {
       if (isEdit) {
         loadChannel();
@@ -1973,6 +1980,12 @@ const EditChannelModal = (props) => {
         setSplitByModelVendor(false);
         setModelVendorGroups([]);
         formApiRef.current?.setValues(nextValues);
+        // 剪贴板带来的请求头覆盖用 setValue 钉一遍：折叠区字段还没挂载，
+        // setValues 落不到它上面（自动弹窗时唯独该字段显示为空的原因）
+        prefillHeaderOverride = nextValues.header_override ?? '';
+        if (prefillHeaderOverride) {
+          formApiRef.current?.setValue('header_override', prefillHeaderOverride);
+        }
         // 调用方已经预填了 key，说明连接信息就是它给的，再提示剪贴板只会重复表单里的内容
         if (!props.initialValues?.key) {
           try {
@@ -1991,10 +2004,11 @@ const EditChannelModal = (props) => {
       fetchModelGroups();
       // 重置手动输入模式状态
       setUseManualInput(false);
-      // 编辑模式下恢复用户偏好，创建模式一律折叠
+      // 编辑模式恢复用户偏好；创建模式若剪贴板带了请求头覆盖，展开高级设置让人直接可见
       setAdvancedSettingsOpen(
-        isEdit &&
-          localStorage.getItem(ADVANCED_SETTINGS_EXPANDED_KEY) === 'true',
+        (isEdit &&
+          localStorage.getItem(ADVANCED_SETTINGS_EXPANDED_KEY) === 'true') ||
+          !!prefillHeaderOverride,
       );
     } else {
       // 统一的模态框关闭重置逻辑

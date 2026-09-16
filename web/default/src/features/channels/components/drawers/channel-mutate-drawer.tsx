@@ -864,10 +864,6 @@ export function ChannelMutateDrawer({
   const currentStatusCodeMapping = form.watch('status_code_mapping')
   const currentParamOverride = form.watch('param_override')
   const currentHeaderOverride = form.watch('header_override')
-  // TEMP-DEBUG: 临时跟踪 header_override 的每次变化，定位清空来源，确认后删除
-  useEffect(() => {
-    console.error('[watch header_override]', String(currentHeaderOverride))
-  }, [currentHeaderOverride])
   const currentForceFormat = form.watch('force_format')
   const currentThinkingToContent = form.watch('thinking_to_content')
   const currentPassThroughBodyEnabled = form.watch('pass_through_body_enabled')
@@ -1384,12 +1380,6 @@ export function ChannelMutateDrawer({
         ...initialValues,
       }
       form.reset(createDefaults)
-      // TEMP-DEBUG: 临时排查自动弹窗预填 header_override 丢失，确认后删除
-      console.error(
-        '[paste-init]',
-        'hdr=' + String(initialValues?.header_override ?? '<absent>'),
-        'afterReset=' + String(form.getValues('header_override'))
-      )
       // 剪贴板带来的请求头覆盖用 setValue 再钉一遍：和抽屉「粘贴配置」按钮走
       // 同一套机制，不依赖 reset 在未展开区域字段上的落值时序。
       if (initialValues?.header_override) {

@@ -1948,14 +1948,6 @@ const EditChannelModal = (props) => {
     }
   }, [inputs]);
 
-  // TEMP-DEBUG: 临时跟踪 header_override 的每次变化，定位清空来源，确认后删除
-  useEffect(() => {
-    console.error(
-      '[classic-inputs header_override]',
-      String(inputs?.header_override ?? '<undefined>'),
-    );
-  }, [inputs?.header_override]);
-
   useEffect(() => {
     setModelSearchValue('');
     // 创建时若剪贴板带了请求头覆盖，初始化后要展开高级面板
@@ -1967,12 +1959,6 @@ const EditChannelModal = (props) => {
         const initialValues = getInitValues();
         const initialModels = initialValues.models;
         const nextValues = { ...initialValues, models: initialModels };
-        // TEMP-DEBUG: 临时排查 classic 自动预填 header_override 丢失，确认后删除
-        console.error(
-          '[classic-modal-init]',
-          'ivHdr=' + String(props.initialValues?.header_override ?? '<absent>'),
-          'mergedHdr=' + String(nextValues.header_override ?? '<absent>'),
-        );
         setSelectedModels(initialModels);
         setInputs(nextValues);
         setBasicModels(getChannelModels(initialValues.type));

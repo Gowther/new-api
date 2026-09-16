@@ -61,11 +61,6 @@ const ChannelPasteListener = () => {
 
   const offer = useCallback(
     (text, config) => {
-      // TEMP-DEBUG: 临时排查 classic 自动预填 header_override 丢失，确认后删除
-      console.error(
-        '[classic-offer]',
-        'hdr=' + String(config.header_override ?? '<absent>'),
-      );
       offeredRef.current = text;
       setPasted(config);
       setVisible(true);

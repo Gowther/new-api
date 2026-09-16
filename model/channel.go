@@ -584,7 +584,7 @@ func GetAllChannels(startIdx int, num int, selectAll bool, idSort bool, sortOpti
 
 func GetAllChannelTestScheduleSnapshots() ([]*Channel, error) {
 	var channels []*Channel
-	err := DB.Select("id", "status", "test_time", "settings", "channel_info", "auto_test").Find(&channels).Error
+	err := DB.Select("id", "status", "test_time", "settings", "channel_info", "other_info", "auto_test").Find(&channels).Error
 	return channels, err
 }
 

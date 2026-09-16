@@ -1035,6 +1035,11 @@ func recoverAutoDisabledMultiKeyKeys(ctx context.Context, channel *model.Channel
 		if ctx != nil && ctx.Err() != nil {
 			break
 		}
+		if service.MultiKeyProbeDeferred(channel, keyIndex, time.Now().Unix()) {
+			// The key's disable reason names a reset time that is still in the
+			// future; probing now would repeat the same failure.
+			continue
+		}
 		tik := time.Now()
 		forcedKeyIndex := keyIndex
 		result := testChannelWithKeyIndex(ctx, channel, testUserID, "", "", shouldUseStreamForAutomaticChannelTest(channel), &forcedKeyIndex)
@@ -1066,6 +1071,15 @@ func recoverAutoDisabledMultiKeyKeys(ctx context.Context, channel *model.Channel
 			}
 		} else {
 			summary.KeyFailed++
+			// A repeat probe that still hit the reset window re-arms the
+			// deferral from the newest error, so the next wait reflects what
+			// the upstream now claims.
+			if result.newAPIError != nil {
+				message := result.newAPIError.ErrorWithStatusCode()
+				if service.ChannelProbeNoBefore(message, tok.Unix(), tok.Unix()) > 0 {
+					model.UpdateChannelStatusByKeyIndex(channel.Id, keyIndex, common.ChannelStatusAutoDisabled, message)
+				}
+			}
 		}
 
 		channel.UpdateResponseTime(milliseconds)
@@ -1189,6 +1203,11 @@ func shouldRunAutomaticChannelTest(channel *model.Channel, defaultMinutes float6
 	// Legacy per-channel opt-out: still honored while the channel follows the
 	// global switches; an explicit "force on" overrides it.
 	if mode == model.ChannelAutoTestFollowGlobal && settings.AutomaticChannelTestDisabled {
+		return false
+	}
+	// A reset hint parsed from the ban error holds off recovery probing until
+	// it passes; enabled channels are probed regardless.
+	if channel.Status == common.ChannelStatusAutoDisabled && service.ChannelProbeDeferred(channel, now) {
 		return false
 	}
 	if channel.TestTime <= 0 {

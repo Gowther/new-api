@@ -27,10 +27,32 @@ func DisableChannel(channelError types.ChannelError, reason string) {
 
 	success := model.UpdateChannelStatus(channelError.ChannelId, channelError.UsingKey, common.ChannelStatusAutoDisabled, reason)
 	if success {
-		subject := fmt.Sprintf("通道「%s」（#%d）已被禁用", channelError.ChannelName, channelError.ChannelId)
-		content := fmt.Sprintf("通道「%s」（#%d）已被禁用，原因：%s", channelError.ChannelName, channelError.ChannelId, reason)
+		scope := fmt.Sprintf("通道「%s」（#%d）", channelError.ChannelName, channelError.ChannelId)
+		// 多 key 渠道禁的是单条 key：定位它在列表中的位置，让通知指向具体 key
+		if channelError.IsMultiKey && channelError.UsingKey != "" {
+			if channel, err := model.GetChannelById(channelError.ChannelId, true); err == nil {
+				for i, key := range channel.GetKeys() {
+					if key == channelError.UsingKey {
+						scope = fmt.Sprintf("通道「%s」（#%d）第 %d 个 Key", channelError.ChannelName, channelError.ChannelId, i+1)
+						break
+					}
+				}
+			}
+		}
+		subject := fmt.Sprintf("%s已被禁用", scope)
+		content := fmt.Sprintf("%s已被禁用，原因：%s%s", scope, reason, probeHintSuffix(reason))
 		NotifyRootUser(formatNotifyType(channelError.ChannelId, common.ChannelStatusAutoDisabled), subject, content)
 	}
+}
+
+// probeHintSuffix appends the parsed reset hint to a disable notification so
+// the operator knows when recovery probing resumes for it.
+func probeHintSuffix(reason string) string {
+	delay, ok := parseProbeDelayForNotify(reason)
+	if !ok {
+		return ""
+	}
+	return fmt.Sprintf("（预计约 %s 后可再探测恢复）", humanizeProbeDelay(delay))
 }
 
 func EnableChannel(channelId int, usingKey string, channelName string) {

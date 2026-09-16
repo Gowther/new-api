@@ -28,9 +28,11 @@ import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 
 import {
+  normalizeTemplateTargets,
   persistModelMappingTemplates,
   upsertModelMappingTemplate,
   type ModelMappingTemplate,
+  type ModelMappingTemplateMapping,
 } from '../../lib/model-mapping-templates'
 import { ModelMappingEditor } from '../model-mapping-editor'
 
@@ -47,7 +49,7 @@ type ModelMappingTemplatesDialogProps = {
 
 const EMPTY_DRAFT_ID = ''
 
-function toJson(mapping: Record<string, string>): string {
+function toJson(mapping: ModelMappingTemplateMapping): string {
   if (Object.keys(mapping).length === 0) return ''
   return JSON.stringify(mapping, null, 2)
 }
@@ -100,22 +102,31 @@ export function ModelMappingTemplatesDialog({
       return
     }
 
-    let mapping: Record<string, string> = {}
+    let mapping: ModelMappingTemplateMapping = {}
     if (draftJson.trim()) {
+      let parsed: unknown
       try {
-        const parsed = JSON.parse(draftJson)
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-          setNameError(t('Model mapping must be a valid JSON object'))
-          return
-        }
-        if (Object.values(parsed).some((value) => typeof value !== 'string')) {
-          setNameError(t('Model mapping values must be strings'))
-          return
-        }
-        mapping = parsed as Record<string, string>
+        parsed = JSON.parse(draftJson)
       } catch {
         setNameError(t('Model mapping must be valid JSON format'))
         return
+      }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        setNameError(t('Model mapping must be a valid JSON object'))
+        return
+      }
+      // Targets go through the same normalisation loading uses, so what gets
+      // stored round-trips: a single name stays a string, a candidate list
+      // keeps trimmed deduped names, anything else is rejected.
+      mapping = {}
+      for (const [from, value] of Object.entries(parsed)) {
+        const target = normalizeTemplateTargets(value)
+        if (target === null) {
+          setNameError(t('Model mapping values must be strings'))
+          return
+        }
+        const source = from.trim()
+        if (source) mapping[source] = target
       }
     }
 
@@ -263,9 +274,15 @@ export function ModelMappingTemplatesDialog({
               value={draftJson}
               onChange={setDraftJson}
               hideTemplates
+              allowMultiTarget
               sourceModelOptions={sourceModelOptions}
               targetModelOptions={targetModelOptions}
             />
+            <p className='text-muted-foreground text-xs'>
+              {t(
+                'Multiple upstream names can be comma-separated; served ones fold into the model on the left'
+              )}
+            </p>
           </div>
         </div>
       </Dialog>

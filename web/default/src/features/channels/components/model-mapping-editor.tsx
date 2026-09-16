@@ -56,6 +56,7 @@ import { cn } from '@/lib/utils'
 import {
   applyModelMappingTemplate,
   loadModelMappingTemplates,
+  splitTemplateTargetText,
   type ModelMappingTemplate,
   type ModelMappingTemplateSkip,
 } from '../lib/model-mapping-templates'
@@ -68,11 +69,16 @@ type ModelMappingEditorProps = {
   targetModelOptions?: string[]
   onTemplateApplied?: (
     appliedMapping: Record<string, string>,
-    completeMapping: Record<string, string>
+    completeMapping: Record<string, string>,
+    foldedModels: string[]
   ) => void
   /** Hides the template menu. Set by the template dialog, which embeds this
    *  editor to edit a template's own mapping. */
   hideTemplates?: boolean
+  /** Only the template dialog sets this: a template's target may list several
+   *  candidate upstream names, comma-separated, that fold into the source when
+   *  a channel serves them. A channel's own mapping never does. */
+  allowMultiTarget?: boolean
 }
 
 type MappingRow = {
@@ -165,7 +171,12 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
           return false
         }
         const entries = Object.entries(parsed)
-        const invalidValue = entries.find(([, to]) => typeof to !== 'string')
+        const invalidValue = entries.find(([, to]) => {
+          if (props.allowMultiTarget && Array.isArray(to)) {
+            return to.some((part) => typeof part !== 'string')
+          }
+          return typeof to !== 'string'
+        })
         if (invalidValue) {
           setJsonError(t('Model mapping values must be strings'))
           return false
@@ -173,7 +184,12 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
         setRows((previousRows) => {
           const remainingRows = [...previousRows]
           return entries.map(([from, to], index) => {
-            const toString = String(to)
+            const toString = Array.isArray(to)
+              ? to
+                  .map((part) => String(part).trim())
+                  .filter(Boolean)
+                  .join(', ')
+              : String(to)
             const existingIndex = remainingRows.findIndex(
               (row) =>
                 row.from === from ||
@@ -202,7 +218,7 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
         return false
       }
     },
-    [createRowId, t]
+    [createRowId, props.allowMultiTarget, t]
   )
 
   // Parse JSON to rows when value changes externally
@@ -216,10 +232,12 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
     if (updatedRows.length === 0) {
       return ''
     }
-    const obj: Record<string, string> = {}
+    const obj: Record<string, string | string[]> = {}
     updatedRows.forEach((row) => {
       if (row.from.trim()) {
-        obj[row.from.trim()] = row.to.trim()
+        obj[row.from.trim()] = props.allowMultiTarget
+          ? splitTemplateTargetText(row.to)
+          : row.to.trim()
       }
     })
     return JSON.stringify(obj, null, 2)
@@ -277,9 +295,18 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
   // channel's model list, or nothing at all.
   const reportTemplateApplication = (
     appliedCount: number,
-    skipped: ModelMappingTemplateSkip[]
+    skipped: ModelMappingTemplateSkip[],
+    folded: string[]
   ) => {
-    if (skipped.length === 0) {
+    const lines = skipped.map((skip) => describeTemplateSkip(skip, t))
+    if (folded.length > 0) {
+      lines.push(
+        t('Folded {{models}} into their unified names', {
+          models: folded.join(', '),
+        })
+      )
+    }
+    if (lines.length === 0) {
       if (appliedCount > 0) {
         toast.success(
           t('Applied {{count}} mappings from the template', {
@@ -289,14 +316,17 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
       }
       return
     }
-    const description = skipped
-      .map((skip) => describeTemplateSkip(skip, t))
-      .join('\n')
-    const message = t('Applied {{applied}}, skipped {{skipped}}', {
-      applied: appliedCount,
-      skipped: skipped.length,
-    })
-    if (appliedCount === 0) {
+    const message =
+      skipped.length > 0
+        ? t('Applied {{applied}}, skipped {{skipped}}', {
+            applied: appliedCount,
+            skipped: skipped.length,
+          })
+        : t('Applied {{count}} mappings from the template', {
+            count: appliedCount,
+          })
+    const description = lines.join('\n')
+    if (appliedCount === 0 && skipped.length > 0) {
       toast.warning(message, { description })
       return
     }
@@ -327,17 +357,17 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
     // routinely lists models this one does not serve. sourceModelOptions is the
     // served set when a channel is in context; without it (a tag, or a
     // template's own mapping) there is nothing to filter against.
-    const { mapping, appliedMapping, addedMapping, skipped } =
+    const { mapping, appliedMapping, addedMapping, skipped, folded } =
       applyModelMappingTemplate(
         currentMapping,
         template.mapping,
         props.sourceModelOptions
       )
     setSelectedTemplateId(template.id)
-    reportTemplateApplication(Object.keys(addedMapping).length, skipped)
+    reportTemplateApplication(Object.keys(addedMapping).length, skipped, folded)
     if (Object.keys(addedMapping).length === 0) {
       setJsonError(null)
-      props.onTemplateApplied?.(appliedMapping, mapping)
+      props.onTemplateApplied?.(appliedMapping, mapping, folded)
       return
     }
 
@@ -345,7 +375,7 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
     setJsonValue(value)
     props.onChange(value)
     parseJsonToRows(value)
-    props.onTemplateApplied?.(appliedMapping, mapping)
+    props.onTemplateApplied?.(appliedMapping, mapping, folded)
   }
 
   const openTemplateManager = (seedWithCurrentMapping: boolean) => {
@@ -503,7 +533,11 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
                     onChange={(e) =>
                       handleRowChange(row.id, 'to', e.target.value)
                     }
-                    placeholder='upstream-model'
+                    placeholder={
+                      props.allowMultiTarget
+                        ? 'upstream-model, upstream-model-alt'
+                        : 'upstream-model'
+                    }
                     disabled={props.disabled}
                     list={targetListId}
                   />

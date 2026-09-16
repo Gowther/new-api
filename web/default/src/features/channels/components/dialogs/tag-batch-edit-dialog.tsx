@@ -278,13 +278,14 @@ export function TagBatchEditDialog({
               <ModelMappingEditor
                 value={modelMapping}
                 onChange={setModelMapping}
-                onTemplateApplied={(appliedMapping, completeMapping) =>
+                onTemplateApplied={(appliedMapping, completeMapping, folded) =>
                   setModels(
                     formatModelsArray(
                       reconcileModelsForMapping(
                         parseModelsString(models),
                         appliedMapping,
-                        completeMapping
+                        completeMapping,
+                        folded
                       )
                     )
                   )

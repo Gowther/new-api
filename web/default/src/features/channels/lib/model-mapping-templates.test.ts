@@ -22,8 +22,11 @@ import { describe, test } from 'node:test'
 import {
   applyModelMappingTemplate,
   MODEL_MAPPING_TEMPLATES_STORAGE_KEY,
+  normalizeModelMappingTemplate,
+  normalizeTemplateTargets,
   persistModelMappingTemplates,
   reconcileModelsForMapping,
+  splitTemplateTargetText,
   upsertModelMappingTemplate,
   type ModelMappingTemplate,
 } from './model-mapping-templates.ts'
@@ -117,6 +120,172 @@ describe('model mapping templates', () => {
 
     assert.deepEqual(result.mapping, { alias: 'never-served' })
     assert.deepEqual(result.skipped, [])
+  })
+
+  test('folds every served candidate into the first hit for a multi-target entry', () => {
+    const result = applyModelMappingTemplate(
+      {},
+      {
+        'gemini-2.5-pro': [
+          'gemini-2.5-pro-preview-05-06',
+          'gemini-2.5-pro-exp-03-25',
+        ],
+      },
+      ['gemini-2.5-pro-exp-03-25', 'gemini-2.5-pro-preview-05-06', 'other']
+    )
+
+    assert.deepEqual(result.mapping, {
+      'gemini-2.5-pro': 'gemini-2.5-pro-preview-05-06',
+    })
+    assert.deepEqual(result.addedMapping, {
+      'gemini-2.5-pro': 'gemini-2.5-pro-preview-05-06',
+    })
+    assert.deepEqual(result.folded, [
+      'gemini-2.5-pro-preview-05-06',
+      'gemini-2.5-pro-exp-03-25',
+    ])
+    assert.deepEqual(result.skipped, [])
+  })
+
+  test('folds renamed copies matched past vendor prefixes and case', () => {
+    const result = applyModelMappingTemplate(
+      {},
+      { 'gpt-4o-alias': ['GPT-4O', 'gpt-4o'] },
+      ['gpt-4o', 'openai/gpt-4o']
+    )
+
+    assert.deepEqual(result.mapping, { 'gpt-4o-alias': 'gpt-4o' })
+    assert.deepEqual(result.folded, ['gpt-4o', 'openai/gpt-4o'])
+    assert.deepEqual(result.skipped, [])
+  })
+
+  test('skips a multi-target entry when none of the candidates is served', () => {
+    const result = applyModelMappingTemplate(
+      {},
+      { unified: ['upstream-a', 'upstream-b'] },
+      ['unrelated']
+    )
+
+    assert.deepEqual(result.mapping, {})
+    assert.deepEqual(result.folded, [])
+    assert.deepEqual(result.skipped, [
+      {
+        source: 'unified',
+        target: 'upstream-a, upstream-b',
+        reason: 'target-not-served',
+      },
+    ])
+  })
+
+  test('a multi-target entry folds variants without redirecting an already-served name', () => {
+    const result = applyModelMappingTemplate(
+      {},
+      { 'gpt-4o': ['gpt-4o-preview', 'gpt-4o'] },
+      ['gpt-4o', 'gpt-4o-preview']
+    )
+
+    assert.deepEqual(result.mapping, {})
+    assert.deepEqual(result.folded, ['gpt-4o-preview'])
+    assert.deepEqual(result.skipped, [
+      {
+        source: 'gpt-4o',
+        target: 'gpt-4o-preview, gpt-4o',
+        reason: 'already-served',
+      },
+    ])
+  })
+
+  test('a multi-target entry folds variants while keeping the operator mapping', () => {
+    const result = applyModelMappingTemplate(
+      { 'gpt-4o': 'azure/gpt-4o' },
+      { 'gpt-4o': ['gpt-4o-preview'] },
+      ['gpt-4o-preview']
+    )
+
+    assert.deepEqual(result.mapping, { 'gpt-4o': 'azure/gpt-4o' })
+    assert.deepEqual(result.addedMapping, {})
+    assert.deepEqual(result.appliedMapping, { 'gpt-4o': 'azure/gpt-4o' })
+    assert.deepEqual(result.folded, ['gpt-4o-preview'])
+    assert.deepEqual(result.skipped, [])
+  })
+
+  test('without a served set an array target degrades to its first candidate', () => {
+    const result = applyModelMappingTemplate(
+      {},
+      { unified: ['upstream-a', 'upstream-b'] }
+    )
+
+    assert.deepEqual(result.mapping, { unified: 'upstream-a' })
+    assert.deepEqual(result.folded, [])
+    assert.deepEqual(result.appliedMapping, { unified: 'upstream-a' })
+  })
+
+  test('reconcile also removes folded models from the model list', () => {
+    assert.deepEqual(
+      reconcileModelsForMapping(
+        ['gpt-4o', 'gpt-4o-preview', 'gpt-4o-exp', 'unrelated'],
+        { 'gpt-4o': 'gpt-4o-preview' },
+        { 'gpt-4o': 'gpt-4o-preview' },
+        ['gpt-4o-exp']
+      ),
+      ['gpt-4o', 'unrelated']
+    )
+  })
+
+  test('a folded model that is another mapping source stays exposed', () => {
+    assert.deepEqual(
+      reconcileModelsForMapping(
+        ['gpt-4o-preview'],
+        {},
+        { 'gpt-4o-preview': 'upstream' },
+        ['gpt-4o-preview']
+      ),
+      ['gpt-4o-preview']
+    )
+  })
+
+  test('normalising a template keeps candidate arrays trimmed and deduped', () => {
+    const template = normalizeModelMappingTemplate({
+      id: 't',
+      name: 'renames',
+      mapping: {
+        unified: [' openai/pro ', 'openai/pro', 'PRO'],
+        plain: 'upstream',
+      },
+    })
+
+    assert.deepEqual(template?.mapping, {
+      unified: ['openai/pro', 'PRO'],
+      plain: 'upstream',
+    })
+  })
+
+  test('an unusable target value still rejects the whole template', () => {
+    assert.equal(
+      normalizeModelMappingTemplate({
+        id: 't',
+        name: 'bad',
+        mapping: { unified: ['x'], other: 42 },
+      }),
+      null
+    )
+    assert.equal(
+      normalizeModelMappingTemplate({
+        id: 't',
+        name: 'empty candidates',
+        mapping: { unified: ['   '] },
+      }),
+      null
+    )
+  })
+
+  test('comma-separated editor text splits into one target or an array', () => {
+    assert.equal(splitTemplateTargetText(' upstream '), 'upstream')
+    assert.equal(splitTemplateTargetText(' upstream , '), 'upstream')
+    assert.deepEqual(splitTemplateTargetText('a, b ,a'), ['a', 'b', 'a'])
+    assert.deepEqual(normalizeTemplateTargets([' x ', 'x', 'y']), ['x', 'y'])
+    assert.equal(normalizeTemplateTargets('upstream'), 'upstream')
+    assert.equal(normalizeTemplateTargets(42), null)
   })
 
   test('hides new targets and appends missing sources to the model list', () => {

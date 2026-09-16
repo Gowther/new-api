@@ -23,6 +23,7 @@ import { useTranslation } from 'react-i18next';
 
 import {
   persistModelMappingTemplates,
+  splitTemplateTargetText,
   upsertModelMappingTemplate,
 } from '../../../helpers/modelMapping';
 
@@ -32,7 +33,7 @@ const mappingToRows = (mapping) =>
   Object.entries(mapping || {}).map(([from, to], index) => ({
     id: `tpl-row-${index}`,
     from,
-    to: String(to ?? ''),
+    to: Array.isArray(to) ? to.join(', ') : String(to ?? ''),
   }));
 
 /**
@@ -108,7 +109,9 @@ const ModelMappingTemplateModal = ({
         duplicates.push(from);
         continue;
       }
-      mapping[from] = row.to.trim();
+      // A comma-separated target is the candidate list a multi-target template
+      // entry needs; a single name stays a plain string.
+      mapping[from] = splitTemplateTargetText(row.to);
     }
 
     if (duplicates.length > 0) {
@@ -268,6 +271,11 @@ const ModelMappingTemplateModal = ({
           <Text strong className='mb-1 block'>
             {t('模型重定向')}
           </Text>
+          <Text type='tertiary' size='small' className='mb-2 block'>
+            {t(
+              '多个上游名可用英文逗号分隔，渠道已有的名字应用模板时会折叠合并为左侧模型',
+            )}
+          </Text>
           {rows.length === 0 ? (
             <div className='mb-2 rounded-lg border border-dashed border-[var(--semi-color-border)] px-2 py-6 text-center'>
               <Text type='tertiary' size='small'>
@@ -287,7 +295,7 @@ const ModelMappingTemplateModal = ({
                   <Input
                     value={row.to}
                     onChange={(value) => updateRow(row.id, 'to', value)}
-                    placeholder='upstream-model'
+                    placeholder='upstream-model, upstream-model-alt'
                     className='min-w-0 flex-1'
                   />
                   <Button

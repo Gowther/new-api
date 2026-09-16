@@ -374,12 +374,13 @@ export function EditTagDialog({ open, onOpenChange }: EditTagDialogProps) {
               value={modelMapping}
               onChange={setModelMapping}
               disabled={isSubmitting}
-              onTemplateApplied={(appliedMapping, completeMapping) =>
+              onTemplateApplied={(appliedMapping, completeMapping, folded) =>
                 setSelectedModels(
                   reconcileModelsForMapping(
                     selectedModels,
                     appliedMapping,
-                    completeMapping
+                    completeMapping,
+                    folded
                   )
                 )
               }

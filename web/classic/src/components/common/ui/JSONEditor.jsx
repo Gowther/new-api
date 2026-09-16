@@ -353,8 +353,8 @@ const JSONEditor = ({
   // alone does not tell the operator whether to fix the template, the channel's
   // model list, or nothing at all.
   const reportTemplateApplication = useCallback(
-    (appliedCount, skipped) => {
-      if (skipped.length === 0) {
+    (appliedCount, skipped, folded = []) => {
+      if (skipped.length === 0 && folded.length === 0) {
         if (appliedCount > 0) {
           Toast.success(
             t('已应用模板中的 {{count}} 条重定向', { count: appliedCount }),
@@ -364,20 +364,35 @@ const JSONEditor = ({
       }
       const content = (
         <div>
-          <div>
-            {t('已应用 {{applied}} 条，跳过 {{skipped}} 条', {
-              applied: appliedCount,
-              skipped: skipped.length,
-            })}
-          </div>
+          {skipped.length === 0 ? (
+            <div>
+              {t('已应用模板中的 {{count}} 条重定向', {
+                count: appliedCount,
+              })}
+            </div>
+          ) : (
+            <div>
+              {t('已应用 {{applied}} 条，跳过 {{skipped}} 条', {
+                applied: appliedCount,
+                skipped: skipped.length,
+              })}
+            </div>
+          )}
           {skipped.map((skip) => (
             <div key={`${skip.source}-${skip.reason}`} className='text-xs'>
               {describeTemplateSkip(skip, t)}
             </div>
           ))}
+          {folded.length > 0 && (
+            <div className='text-xs'>
+              {t('已将 {{models}} 折叠进统一模型名', {
+                models: folded.join('、'),
+              })}
+            </div>
+          )}
         </div>
       );
-      if (appliedCount === 0) {
+      if (appliedCount === 0 && skipped.length > 0) {
         Toast.warning({ content });
         return;
       }
@@ -391,6 +406,7 @@ const JSONEditor = ({
       let nextValue = templateValue;
       let addedMapping = null;
       let appliedMapping = null;
+      let foldedModels = null;
 
       if (templateStorageKey === MODEL_MAPPING_TEMPLATES_STORAGE_KEY) {
         let currentMapping;
@@ -430,13 +446,15 @@ const JSONEditor = ({
         nextValue = applied.mapping;
         addedMapping = applied.addedMapping;
         appliedMapping = applied.appliedMapping;
+        foldedModels = applied.folded;
         setSelectedTemplateId(templateId);
         reportTemplateApplication(
           Object.keys(addedMapping).length,
           applied.skipped,
+          applied.folded,
         );
         if (Object.keys(addedMapping).length === 0) {
-          onTemplateApplied?.(appliedMapping, nextValue);
+          onTemplateApplied?.(appliedMapping, nextValue, foldedModels);
           setJsonError('');
           return;
         }
@@ -452,7 +470,8 @@ const JSONEditor = ({
       setKeyValuePairs(objectToKeyValueArray(nextValue, keyValuePairs));
       setSelectedTemplateId(templateId);
       onChange?.(templateString);
-      if (appliedMapping) onTemplateApplied?.(appliedMapping, nextValue);
+      if (appliedMapping)
+        onTemplateApplied?.(appliedMapping, nextValue, foldedModels);
       setJsonError('');
     },
     [

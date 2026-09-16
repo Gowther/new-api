@@ -1570,7 +1570,8 @@ export function ChannelMutateDrawer({
   const handleModelMappingTemplateApplied = useCallback(
     (
       appliedMapping: Record<string, string>,
-      completeMapping: Record<string, string>
+      completeMapping: Record<string, string>,
+      foldedModels: string[]
     ) => {
       form.setValue(
         'models',
@@ -1578,7 +1579,8 @@ export function ChannelMutateDrawer({
           reconcileModelsForMapping(
             currentModelsArray,
             appliedMapping,
-            completeMapping
+            completeMapping,
+            foldedModels
           )
         ),
         { shouldDirty: true, shouldValidate: true }

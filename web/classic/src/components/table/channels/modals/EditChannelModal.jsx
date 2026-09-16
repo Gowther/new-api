@@ -5224,13 +5224,18 @@ const EditChannelModal = (props) => {
                         templateLabel={t('填入模板')}
                         templateStorageKey='new-api:model-mapping-templates:v1'
                         servedModels={inputs.models}
-                        onTemplateApplied={(appliedMapping, completeMapping) =>
+                        onTemplateApplied={(
+                          appliedMapping,
+                          completeMapping,
+                          foldedModels,
+                        ) =>
                           handleInputChange(
                             'models',
                             reconcileModelsForMapping(
                               inputs.models,
                               appliedMapping,
                               completeMapping,
+                              foldedModels,
                             ),
                           )
                         }

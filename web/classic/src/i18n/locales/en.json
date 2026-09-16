@@ -4273,7 +4273,9 @@
     "主备模式：请求固定使用当前上游密钥以保持缓存亲和，仅在该密钥被自动禁用后才切换到下一把启用的密钥": "Sticky mode: requests stay pinned to the current upstream key to keep cache affinity and only move to the next enabled key after it is auto-disabled",
     "转为多密钥": "Convert to multi-key",
     "原地转换：当前密钥将变为第 1 把密钥；在上方密钥输入框中每行一把填入其余密钥，转换后即可在下方选择分发模式": "Convert in place: the current key becomes key #1; enter the remaining keys in the key field above (one per line), then pick the distribution mode below",
-    "主备模式": "Sticky mode"
+    "主备模式": "Sticky mode",
+    "已将 {{models}} 折叠进统一模型名": "Folded {{models}} into their unified names",
+    "多个上游名可用英文逗号分隔，渠道已有的名字应用模板时会折叠合并为左侧模型": "Multiple upstream names can be comma-separated; served ones fold into the model on the left"
   },
   "已保存官方价格预览失败": "Failed to preview saved official prices",
   "查看官方价格变更": "Review official price changes",

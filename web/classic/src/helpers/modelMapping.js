@@ -21,6 +21,38 @@ export const MODEL_MAPPING_TEMPLATES_STORAGE_KEY =
   'new-api:model-mapping-templates:v1';
 const LEGACY_DEFAULT_MODEL_MAPPING_TEMPLATE_ID = 'default-gpt-3.5-turbo';
 
+/**
+ * Normalises one template target. A non-string scalar stays rejected the same
+ * way templates have always been, so malformed entries keep failing loudly; an
+ * array keeps its well-formed names (trimmed, deduped) and collapses to null
+ * when none survive.
+ */
+export const normalizeTemplateTargets = (value) => {
+  if (typeof value === 'string') return value;
+  if (!Array.isArray(value)) return null;
+  const candidates = [
+    ...new Set(
+      value
+        .filter((item) => typeof item === 'string')
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ];
+  return candidates.length > 0 ? candidates : null;
+};
+
+/**
+ * Comma-separated editor text for a template target: a single candidate stays a
+ * plain string, several become the candidate array.
+ */
+export const splitTemplateTargetText = (text) => {
+  const candidates = String(text || '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return candidates.length > 1 ? candidates : candidates[0] || '';
+};
+
 export const normalizeModelMappingTemplate = (value) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const mapping = value.mapping || value.value;
@@ -35,9 +67,10 @@ export const normalizeModelMappingTemplate = (value) => {
   }
   const normalizedMapping = {};
   for (const [key, item] of Object.entries(mapping)) {
-    if (typeof item !== 'string') return null;
+    const target = normalizeTemplateTargets(item);
+    if (target === null) return null;
     const trimmedKey = String(key).trim();
-    if (trimmedKey) normalizedMapping[trimmedKey] = item;
+    if (trimmedKey) normalizedMapping[trimmedKey] = target;
   }
   const name = value.name.trim();
   return name ? { id: value.id, name, mapping: normalizedMapping } : null;
@@ -120,6 +153,33 @@ const resolveTemplateTarget = (target, servedModels) => {
   return { candidates: [] };
 };
 
+/** Whether a served model resembles a candidate target on any match tier. */
+const modelMatchesTarget = (model, target) => {
+  for (const normalize of TARGET_MATCH_TIERS) {
+    const normalizedModel = normalize(model);
+    if (normalizedModel && normalizedModel === normalize(target)) return true;
+  }
+  return false;
+};
+
+/**
+ * Served models matching any candidate, in candidate order: the first hit is
+ * what gets sent upstream, the rest are folded out of the model list. The
+ * unified name itself never counts as its own fold.
+ */
+const matchServedCandidates = (source, candidates, servedModels) => {
+  const hits = [];
+  for (const candidate of candidates) {
+    for (const model of servedModels) {
+      if (model === source) continue;
+      if (!hits.includes(model) && modelMatchesTarget(model, candidate)) {
+        hits.push(model);
+      }
+    }
+  }
+  return hits;
+};
+
 /**
  * Applies a template on top of the current mapping.
  *
@@ -136,9 +196,17 @@ const resolveTemplateTarget = (target, servedModels) => {
  * `gpt-4o`. The stored target is always the served model's own name, because
  * that is what gets sent upstream.
  *
+ * An array target lists several upstream names for one exposed model — an
+ * upstream serving the same model under multiple names. Every candidate the
+ * channel serves becomes a hit: the first hit is stored as the redirect target
+ * and all hits fold out of the model list, so the source name answers alone.
+ * Without a served set an array degrades to its first candidate, since there
+ * is nothing to match against and nothing to fold.
+ *
  * Sources already present in the current mapping are left alone and reported as
  * applied: they are the operator's own edits, not something this template is
- * introducing.
+ * introducing. A multi-target entry still folds its served candidates even then
+ * — only the mapping value is the operator's, the folding is the template's.
  */
 export const applyModelMappingTemplate = (
   currentMapping,
@@ -149,6 +217,7 @@ export const applyModelMappingTemplate = (
   const appliedMapping = {};
   const addedMapping = {};
   const skipped = [];
+  const folded = [];
 
   const served = servedModels
     ? [
@@ -162,57 +231,98 @@ export const applyModelMappingTemplate = (
 
   for (const [rawSource, rawTarget] of Object.entries(templateMapping)) {
     const source = String(rawSource || '').trim();
-    const target = String(rawTarget || '').trim();
     if (!source) continue;
+    const isMultiTarget = Array.isArray(rawTarget);
+    const normalizedTarget = isMultiTarget
+      ? normalizeTemplateTargets(rawTarget)
+      : null;
+    const candidates = Array.isArray(normalizedTarget) ? normalizedTarget : [];
+    const target = typeof rawTarget === 'string' ? rawTarget.trim() : '';
+    if (!target && candidates.length === 0) continue;
 
     if (Object.prototype.hasOwnProperty.call(currentMapping, source)) {
       appliedMapping[source] = currentMapping[source];
+      if (isMultiTarget && candidates.length > 0 && served) {
+        folded.push(...matchServedCandidates(source, candidates, served));
+      }
       continue;
     }
-    if (!target) continue;
 
     if (!served) {
-      mapping[source] = target;
-      addedMapping[source] = target;
-      appliedMapping[source] = target;
+      const value = candidates.length > 0 ? candidates[0] : target;
+      mapping[source] = value;
+      addedMapping[source] = value;
+      appliedMapping[source] = value;
       continue;
     }
 
-    const resolved = resolveTemplateTarget(target, served);
-    if (resolved.candidates) {
+    if (!isMultiTarget) {
+      const resolved = resolveTemplateTarget(target, served);
+      if (resolved.candidates) {
+        skipped.push({
+          source,
+          target,
+          reason:
+            resolved.candidates.length > 0
+              ? 'target-ambiguous'
+              : 'target-not-served',
+          ...(resolved.candidates.length > 0
+            ? { candidates: resolved.candidates }
+            : {}),
+        });
+        continue;
+      }
+
+      // The channel serves the exposed name itself, so it is already reachable
+      // and the mapping would be an identity no-op.
+      if (resolved.model === source) {
+        skipped.push({ source, target, reason: 'already-served' });
+        continue;
+      }
+
+      mapping[source] = resolved.model;
+      addedMapping[source] = resolved.model;
+      appliedMapping[source] = resolved.model;
+      continue;
+    }
+
+    // Multi-target entry: every candidate name this channel serves belongs to
+    // the source model.
+    const hits = matchServedCandidates(source, candidates, served);
+    if (hits.length === 0) {
       skipped.push({
         source,
-        target,
-        reason:
-          resolved.candidates.length > 0
-            ? 'target-ambiguous'
-            : 'target-not-served',
-        ...(resolved.candidates.length > 0
-          ? { candidates: resolved.candidates }
-          : {}),
+        target: candidates.join(', '),
+        reason: 'target-not-served',
       });
       continue;
     }
-
-    // The channel serves the exposed name itself, so it is already reachable and
-    // the mapping would be an identity no-op.
-    if (resolved.model === source) {
-      skipped.push({ source, target, reason: 'already-served' });
+    if (served.includes(source)) {
+      // The unified name answers for itself, so no redirect is needed — but
+      // the renamed copies still leave the model list.
+      skipped.push({
+        source,
+        target: candidates.join(', '),
+        reason: 'already-served',
+      });
+      folded.push(...hits);
       continue;
     }
 
-    mapping[source] = resolved.model;
-    addedMapping[source] = resolved.model;
-    appliedMapping[source] = resolved.model;
+    mapping[source] = hits[0];
+    addedMapping[source] = hits[0];
+    appliedMapping[source] = hits[0];
+    folded.push(...hits);
   }
 
-  return { mapping, appliedMapping, addedMapping, skipped };
+  return { mapping, appliedMapping, addedMapping, skipped, folded };
 };
 
 export const reconcileModelsForMapping = (
   currentModels,
   appliedMapping,
   completeMapping = appliedMapping,
+  foldedModels = [],
 ) => {
   const sourceModels = [
     ...new Set(Object.keys(appliedMapping).map((model) => model.trim())),
@@ -227,6 +337,10 @@ export const reconcileModelsForMapping = (
       .map((model) => model.trim())
       .filter((model) => model && !sourceSet.has(model)),
   );
+  for (const rawModel of foldedModels) {
+    const model = String(rawModel || '').trim();
+    if (model && !sourceSet.has(model)) targetSet.add(model);
+  }
   const nextModels = [];
   const seen = new Set();
 

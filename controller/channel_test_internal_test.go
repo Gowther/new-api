@@ -293,6 +293,11 @@ func TestAutoDisabledMultiKeyIndexesReturnsOnlyValidAutoDisabledKeys(t *testing.
 }
 
 func TestSelectChannelsForAutomaticTestAppliesPerChannelPolicy(t *testing.T) {
+	monitorSetting := operation_setting.GetMonitorSetting()
+	original := *monitorSetting
+	t.Cleanup(func() { *monitorSetting = original })
+	monitorSetting.AutoTestChannelEnabled = true
+
 	now := int64(1000)
 	channels := []*model.Channel{
 		{Id: 1, Status: common.ChannelStatusAutoDisabled, TestTime: now - 120, OtherSettings: `{"auto_test_channel_interval_minutes":1}`},
@@ -424,6 +429,10 @@ func TestTestAllChannelsRejectsExistingActiveTask(t *testing.T) {
 }
 
 func TestSelectChannelsForAutomaticTestRespectsAutoTestMode(t *testing.T) {
+	monitorSetting := operation_setting.GetMonitorSetting()
+	original := *monitorSetting
+	t.Cleanup(func() { *monitorSetting = original })
+
 	forceOff := model.ChannelAutoTestForceOff
 	forceOn := model.ChannelAutoTestForceOn
 	now := int64(1000)
@@ -435,15 +444,27 @@ func TestSelectChannelsForAutomaticTestRespectsAutoTestMode(t *testing.T) {
 		{Id: 5, Status: common.ChannelStatusAutoDisabled},
 	}
 
-	selected, skipped := selectChannelsForAutomaticTest(channels, operation_setting.ChannelTestModeScheduledAll, now, true)
-	require.Len(t, selected, 2)
-	require.Equal(t, 4, selected[0].Id)
-	require.Equal(t, 5, selected[1].Id)
-	require.Equal(t, 3, skipped)
+	t.Run("global switch on probes follow-global channels too", func(t *testing.T) {
+		monitorSetting.AutoTestChannelEnabled = true
+		selected, skipped := selectChannelsForAutomaticTest(channels, operation_setting.ChannelTestModeScheduledAll, now, true)
+		require.Len(t, selected, 2)
+		require.Equal(t, 4, selected[0].Id)
+		require.Equal(t, 5, selected[1].Id)
+		require.Equal(t, 3, skipped)
+	})
 
-	// A manual run bypasses the interval and the legacy opt-out, but a channel
-	// that opts out of probing is excluded from every automatic batch.
-	selected, skipped = selectChannelsForAutomaticTest(channels, operation_setting.ChannelTestModeScheduledAll, now, false)
+	t.Run("global switch off keeps only force-on channels", func(t *testing.T) {
+		monitorSetting.AutoTestChannelEnabled = false
+		selected, skipped := selectChannelsForAutomaticTest(channels, operation_setting.ChannelTestModeScheduledAll, now, true)
+		require.Len(t, selected, 1)
+		require.Equal(t, 4, selected[0].Id)
+		require.Equal(t, 4, skipped)
+	})
+
+	// A manual run bypasses the interval, the legacy opt-out and the global
+	// switch — the admin clicked the button — but a channel that opts out of
+	// probing is excluded from every automatic batch.
+	selected, skipped := selectChannelsForAutomaticTest(channels, operation_setting.ChannelTestModeScheduledAll, now, false)
 	require.Len(t, selected, 4)
 	require.Equal(t, 2, selected[0].Id)
 	require.Equal(t, 3, selected[1].Id)

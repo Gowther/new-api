@@ -1205,6 +1205,13 @@ func shouldRunAutomaticChannelTest(channel *model.Channel, defaultMinutes float6
 	if mode == model.ChannelAutoTestFollowGlobal && settings.AutomaticChannelTestDisabled {
 		return false
 	}
+	// The scheduler stays alive for force-on channels even when the global
+	// switch is off; follow-global channels must not ride along with them and
+	// keep waiting for the global switch like before.
+	if mode == model.ChannelAutoTestFollowGlobal &&
+		!operation_setting.GetMonitorSetting().AutoTestChannelEnabled {
+		return false
+	}
 	// A reset hint parsed from the ban error holds off recovery probing until
 	// it passes; enabled channels are probed regardless.
 	if channel.Status == common.ChannelStatusAutoDisabled && service.ChannelProbeDeferred(channel, now) {

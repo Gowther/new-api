@@ -292,14 +292,20 @@ func countDistinctChannels(items []*ErrorLogSummaryItem) int {
 // for the AI briefing. It carries the folded scope and the metrics that decide
 // urgency, so the model ranks and merges from the same facts the UI shows.
 func DescribeErrorLogProblem(problem *ErrorLogProblem, errorText string) string {
+	// The briefing names channels the way the operator knows them: by name. The
+	// id only appears when the channel is already gone and no name can be found.
+	channelLabel := problem.ChannelName
+	if channelLabel == "" {
+		channelLabel = fmt.Sprintf("#%d", problem.ChannelId)
+	}
 	var b strings.Builder
 	switch problem.Scope {
 	case ErrorProblemScopeChannel:
-		fmt.Fprintf(&b, "channel #%d (%s)", problem.ChannelId, problem.ChannelName)
+		fmt.Fprintf(&b, "channel %s", channelLabel)
 	case ErrorProblemScopeModel:
 		fmt.Fprintf(&b, "model %s", problem.ModelName)
 	default:
-		fmt.Fprintf(&b, "model %s on channel #%d (%s)", problem.ModelName, problem.ChannelId, problem.ChannelName)
+		fmt.Fprintf(&b, "model %s on channel %s", problem.ModelName, channelLabel)
 	}
 	fmt.Fprintf(&b, " | status=%d | severity=%s | trend=%s", problem.StatusCode, problem.Severity, problem.Trend)
 	fmt.Fprintf(&b, " | errors=%d | requests=%d | users=%d", problem.Count, problem.AffectedRequests, problem.AffectedUsers)

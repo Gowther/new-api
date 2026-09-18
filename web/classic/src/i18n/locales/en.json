@@ -12,6 +12,7 @@
     "令牌模型限制中存在已无渠道提供的模型": "Some token model limits reference models no longer served by any channel",
     "以下模型已无任何启用渠道提供。条目已保留，渠道恢复提供后自动生效，可按需手动移除。": "The following models are no longer served by any enabled channel. Entries are kept so they take effect automatically if a channel serves them again; remove them manually if desired.",
     "加载失效模型信息失败": "Failed to load stale model limits",
+    "商业站": "Commercial Service",
     "失效模型": "Stale models",
     "清理选中的失效模型": "Clean selected stale models",
     "已清理选中的失效模型": "Checked stale models removed",

@@ -112,11 +112,12 @@ const ChannelsFilters = ({
               placeholder={t('渠道分类')}
               optionList={[
                 { label: t('全部分类'), value: '' },
+                { label: t('临时渠道'), value: 'temporary' },
                 { label: t('公益站'), value: 'welfare' },
                 { label: t('三方 Key'), value: 'third_party' },
-                { label: t('临时渠道'), value: 'temporary' },
                 { label: t('自建服务'), value: 'self_hosted' },
                 { label: t('官方服务'), value: 'official' },
+                { label: t('商业站'), value: 'commercial' },
               ]}
               className='w-full'
               pure

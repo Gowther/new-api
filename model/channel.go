@@ -87,6 +87,7 @@ const (
 	ChannelCategoryTemporary  ChannelCategory = "temporary"
 	ChannelCategorySelfHosted ChannelCategory = "self_hosted"
 	ChannelCategoryOfficial   ChannelCategory = "official"
+	ChannelCategoryCommercial ChannelCategory = "commercial"
 )
 
 var channelSortColumns = map[string]string{
@@ -187,6 +188,8 @@ func ParseChannelCategory(category string) ChannelCategory {
 		return ChannelCategorySelfHosted
 	case ChannelCategoryOfficial:
 		return ChannelCategoryOfficial
+	case ChannelCategoryCommercial:
+		return ChannelCategoryCommercial
 	default:
 		return ""
 	}
@@ -201,6 +204,8 @@ func (channel *Channel) GetCategory() ChannelCategory {
 		return ChannelCategoryThirdParty
 	case strings.HasPrefix(name, "临时"):
 		return ChannelCategoryTemporary
+	case strings.HasPrefix(name, "商业"):
+		return ChannelCategoryCommercial
 	}
 
 	baseURL := channel.GetBaseURL()

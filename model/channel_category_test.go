@@ -18,6 +18,7 @@ func TestChannelGetCategory(t *testing.T) {
 		{name: "welfare prefix overrides URL", channelName: "公益站一号", baseURL: "https://api.openai.com", wantCategory: ChannelCategoryWelfare},
 		{name: "third party prefix overrides URL", channelName: "三方-共享官方 Key", baseURL: "http://host.docker.internal:3000", wantCategory: ChannelCategoryThirdParty},
 		{name: "temporary prefix", channelName: "临时-测试 Key", baseURL: "https://api.openai.com", wantCategory: ChannelCategoryTemporary},
+		{name: "commercial prefix overrides URL", channelName: "商业站-付费中转", baseURL: "https://api.openai.com", wantCategory: ChannelCategoryCommercial},
 		{name: "docker host", channelName: "自建 OpenAI", baseURL: "http://host.docker.internal:3000", wantCategory: ChannelCategorySelfHosted},
 		{name: "compose service name", channelName: "自建服务", baseURL: "http://one-api:3000", wantCategory: ChannelCategorySelfHosted},
 		{name: "localhost", channelName: "本地服务", baseURL: "http://localhost:11434", wantCategory: ChannelCategorySelfHosted},

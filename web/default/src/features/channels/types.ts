@@ -399,6 +399,7 @@ export type ChannelCategory =
   | 'temporary'
   | 'self_hosted'
   | 'official'
+  | 'commercial'
 
 export interface GetChannelsParams {
   p?: number

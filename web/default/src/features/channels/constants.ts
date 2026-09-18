@@ -137,11 +137,12 @@ export const CHANNEL_STATUS_OPTIONS = [
 
 export const CHANNEL_CATEGORY_OPTIONS = [
   { value: 'all', label: 'All Categories' },
+  { value: 'temporary', label: 'Temporary Channel' },
   { value: 'welfare', label: 'Welfare Service' },
   { value: 'third_party', label: 'Third-party Key' },
-  { value: 'temporary', label: 'Temporary Channel' },
   { value: 'self_hosted', label: 'Self-hosted Service' },
   { value: 'official', label: 'Official Service' },
+  { value: 'commercial', label: 'Commercial Service' },
 ] as const
 
 export const CHANNEL_STATUS_CONFIG = {

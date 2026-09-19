@@ -18,7 +18,10 @@ type RetryParam struct {
 	RequestPath             string
 	Retry                   *int
 	PreviousChannelPriority *int64
-	resetNextTry            bool
+	// ChannelFilter optionally narrows the selectable channels (nil means no
+	// extra filtering). It applies to both the cached and override branches.
+	ChannelFilter func(*model.Channel) bool
+	resetNextTry  bool
 }
 
 func (p *RetryParam) GetRetry() int {
@@ -110,7 +113,7 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 	}
 	selectChannel := func(group string, retry int, previousPriority *int64) (*model.Channel, error) {
 		if !hasRoutingOverride {
-			return model.GetRandomSatisfiedChannel(group, param.ModelName, retry, param.RequestPath, previousPriority)
+			return model.GetRandomSatisfiedChannelWithFilter(group, param.ModelName, retry, param.RequestPath, previousPriority, param.ChannelFilter)
 		}
 
 		if retry > 0 || previousPriority != nil {
@@ -119,6 +122,9 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 		overrideChannel, getErr := model.CacheGetChannel(overrideChannelID)
 		if getErr != nil || overrideChannel == nil || overrideChannel.Status != common.ChannelStatusEnabled {
 			return nil, getErr
+		}
+		if param.ChannelFilter != nil && !param.ChannelFilter(overrideChannel) {
+			return nil, nil
 		}
 		if !model.IsChannelEnabledForGroupModel(group, param.ModelName, overrideChannelID) {
 			return nil, nil

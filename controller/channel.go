@@ -832,6 +832,7 @@ func DeleteChannel(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	service.CloseActiveWebSocketsForChannel(id, service.ChannelDisabledCloseReason)
 	model.InitChannelCache()
 	recordManageAudit(c, "channel.delete", map[string]interface{}{
 		"id":   id,
@@ -1006,6 +1007,7 @@ func DeleteChannelBatch(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	service.CloseActiveWebSocketsForChannels(channelBatch.Ids, service.ChannelDisabledCloseReason)
 	model.InitChannelCache()
 	recordManageAudit(c, "channel.delete_batch", map[string]interface{}{
 		"count": len(channelBatch.Ids),
@@ -1326,6 +1328,11 @@ func UpdateChannel(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	if updated, getErr := model.GetChannelById(channel.Id, true); getErr == nil && updated != nil {
+		if updated.Status != common.ChannelStatusEnabled || !updated.GetSetting().ResponsesWebSocketEnabled {
+			service.CloseActiveWebSocketsForChannel(channel.Id, service.ChannelDisabledCloseReason)
+		}
+	}
 	model.InitChannelCache()
 	service.ResetProxyClientCache()
 	// 记录变更的字段名（语言无关的字段标识），密钥仅记录"已更换"绝不记录内容。
@@ -1373,6 +1380,9 @@ func UpdateChannelStatus(c *gin.Context) {
 	}
 	changed := model.UpdateChannelStatus(id, "", req.Status, "manual operation")
 	if changed {
+		if req.Status != common.ChannelStatusEnabled {
+			service.CloseActiveWebSocketsForChannel(id, service.ChannelDisabledCloseReason)
+		}
 		model.InitChannelCache()
 		service.ResetProxyClientCache()
 	}
@@ -1395,10 +1405,17 @@ func BatchUpdateChannelStatus(c *gin.Context) {
 		return
 	}
 	changedCount := 0
+	closedIDs := make([]int, 0)
 	for _, id := range req.Ids {
 		if model.UpdateChannelStatus(id, "", req.Status, "manual batch operation") {
 			changedCount++
+			if req.Status != common.ChannelStatusEnabled {
+				closedIDs = append(closedIDs, id)
+			}
 		}
+	}
+	if len(closedIDs) > 0 {
+		service.CloseActiveWebSocketsForChannels(closedIDs, service.ChannelDisabledCloseReason)
 	}
 	if changedCount > 0 {
 		model.InitChannelCache()

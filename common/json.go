@@ -6,6 +6,10 @@ import (
 	"io"
 )
 
+// RawMessage is the shared raw JSON type; aliasing keeps business code on the
+// host JSON engine while staying compatible with encoding/json literals.
+type RawMessage = json.RawMessage
+
 func Unmarshal(data []byte, v any) error {
 	return json.Unmarshal(data, v)
 }

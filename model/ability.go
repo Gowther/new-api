@@ -113,6 +113,13 @@ func getChannelQuery(group string, model string, retry int, previousPriority *in
 }
 
 func GetChannel(group string, model string, retry int, requestPath string, previousPriority *int64) (*Channel, error) {
+	return GetChannelWithFilter(group, model, retry, requestPath, previousPriority, nil)
+}
+
+// GetChannelWithFilter is the non-memory-cache selection path with an optional
+// channel predicate (nil means no extra filtering), mirroring
+// GetRandomSatisfiedChannelWithFilter.
+func GetChannelWithFilter(group string, model string, retry int, requestPath string, previousPriority *int64, filter func(*Channel) bool) (*Channel, error) {
 	var abilities []Ability
 
 	var err error = nil
@@ -128,7 +135,7 @@ func GetChannel(group string, model string, retry int, requestPath string, previ
 	if err != nil {
 		return nil, err
 	}
-	abilities = filterAbilitiesByRequestPath(abilities, requestPath)
+	abilities = filterAbilitiesByRequestPath(abilities, requestPath, filter)
 	channel := Channel{}
 	if len(abilities) > 0 {
 		// Randomly choose one
@@ -157,8 +164,9 @@ func GetChannel(group string, model string, retry int, requestPath string, previ
 // (non-memory-cache) selection path. Only Advanced Custom (type 58) channels are
 // path-checked: kept only when one of their routes matches requestPath; all other
 // channel types always pass. When requestPath is empty, filtering is skipped.
-func filterAbilitiesByRequestPath(abilities []Ability, requestPath string) []Ability {
-	if requestPath == "" || len(abilities) == 0 {
+// filter additionally applies an optional caller-supplied predicate.
+func filterAbilitiesByRequestPath(abilities []Ability, requestPath string, filter func(*Channel) bool) []Ability {
+	if (requestPath == "" && filter == nil) || len(abilities) == 0 {
 		return abilities
 	}
 
@@ -179,7 +187,9 @@ func filterAbilitiesByRequestPath(abilities []Ability, requestPath string) []Abi
 	}
 
 	advancedConfigs := make(map[int]*dto.AdvancedCustomConfig)
+	channelByID := make(map[int]*Channel, len(channels))
 	for _, channel := range channels {
+		channelByID[channel.Id] = channel
 		if channel.Type == constant.ChannelTypeAdvancedCustom {
 			advancedConfigs[channel.Id] = channel.GetOtherSettings().AdvancedCustom
 		}
@@ -187,6 +197,11 @@ func filterAbilitiesByRequestPath(abilities []Ability, requestPath string) []Abi
 
 	filtered := make([]Ability, 0, len(abilities))
 	for _, ability := range abilities {
+		if filter != nil {
+			if channel, ok := channelByID[ability.ChannelId]; ok && !filter(channel) {
+				continue
+			}
+		}
 		config, isAdvancedCustom := advancedConfigs[ability.ChannelId]
 		if !isAdvancedCustom {
 			filtered = append(filtered, ability)

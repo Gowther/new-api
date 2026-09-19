@@ -101,21 +101,28 @@ func SyncChannelCache(frequency int) {
 }
 
 func GetRandomSatisfiedChannel(group string, model string, retry int, requestPath string, previousPriority *int64) (*Channel, error) {
+	return GetRandomSatisfiedChannelWithFilter(group, model, retry, requestPath, previousPriority, nil)
+}
+
+// GetRandomSatisfiedChannelWithFilter additionally restricts candidates with an
+// optional channel predicate (nil means no extra filtering). The predicate only
+// narrows the candidate list; priority/weight resolution is unchanged.
+func GetRandomSatisfiedChannelWithFilter(group string, model string, retry int, requestPath string, previousPriority *int64, filter func(*Channel) bool) (*Channel, error) {
 	// if memory cache is disabled, get channel directly from database
 	if !common.MemoryCacheEnabled {
-		return GetChannel(group, model, retry, requestPath, previousPriority)
+		return GetChannelWithFilter(group, model, retry, requestPath, previousPriority, filter)
 	}
 
 	channelSyncLock.RLock()
 	defer channelSyncLock.RUnlock()
 
 	// First, try to find channels with the exact model name.
-	channels := filterChannelsByRequestPath(group2model2channels[group][model], requestPath)
+	channels := filterChannelsByPredicate(filterChannelsByRequestPath(group2model2channels[group][model], requestPath), filter)
 
 	// If no channels found, try to find channels with the normalized model name.
 	if len(channels) == 0 {
 		normalizedModel := ratio_setting.FormatMatchingModelName(model)
-		channels = filterChannelsByRequestPath(group2model2channels[group][normalizedModel], requestPath)
+		channels = filterChannelsByPredicate(filterChannelsByRequestPath(group2model2channels[group][normalizedModel], requestPath), filter)
 	}
 
 	if len(channels) == 0 {
@@ -239,6 +246,24 @@ func filterChannelsByRequestPath(channels []int, requestPath string) []int {
 		if config := channel2advancedCustomConfig[channelId]; config != nil && config.SupportsPath(requestPath) {
 			filtered = append(filtered, channelId)
 		}
+	}
+	return filtered
+}
+
+// filterChannelsByPredicate applies an optional caller-supplied predicate to a
+// candidate channel-id list. IDs missing from the id map are kept so the
+// downstream consistency error is raised as before; nil filter is a no-op.
+func filterChannelsByPredicate(channels []int, filter func(*Channel) bool) []int {
+	if filter == nil || len(channels) == 0 {
+		return channels
+	}
+	filtered := make([]int, 0, len(channels))
+	for _, channelId := range channels {
+		channel, ok := channelsIDM[channelId]
+		if ok && !filter(channel) {
+			continue
+		}
+		filtered = append(filtered, channelId)
 	}
 	return filtered
 }

@@ -130,6 +130,13 @@ func exceedsMaxTokensLimit(values ...*uint) bool {
 	return false
 }
 
+// ExceedsMaxTokensLimit is the exported form of exceedsMaxTokensLimit for
+// transports that build request bodies outside the HTTP validators, such as
+// the Responses WebSocket session.
+func ExceedsMaxTokensLimit(values ...*uint) bool {
+	return exceedsMaxTokensLimit(values...)
+}
+
 func GetAndValidateResponsesRequest(c *gin.Context) (*dto.OpenAIResponsesRequest, error) {
 	request := &dto.OpenAIResponsesRequest{}
 	err := common.UnmarshalBodyReusable(c, request)

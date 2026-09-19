@@ -379,6 +379,9 @@ function updateOfficialClientPassthroughHeader(value, enabled) {
   return JSON.stringify(headerOverride, null, 2);
 }
 
+// 上游可承载 Responses WebSocket 协议的渠道类型；与后端过滤器白名单保持一致
+const RESPONSES_WEBSOCKET_CHANNEL_TYPES = [1, 57, 58, 59, 60];
+
 const EditChannelModal = (props) => {
   const { t } = useTranslation();
   const channelId = props.editingChannel.id;
@@ -427,6 +430,7 @@ const EditChannelModal = (props) => {
     thinking_to_content: false,
     proxy: '',
     pass_through_body_enabled: false,
+    responses_websocket_enabled: false,
     system_prompt: '',
     system_prompt_override: false,
     settings: '',
@@ -841,6 +845,7 @@ const EditChannelModal = (props) => {
     thinking_to_content: false,
     proxy: '',
     pass_through_body_enabled: false,
+    responses_websocket_enabled: false,
     system_prompt: '',
   });
   const showApiConfigCard = true; // 控制是否显示 API 配置卡片
@@ -1389,6 +1394,8 @@ const EditChannelModal = (props) => {
           data.proxy = parsedSettings.proxy || '';
           data.pass_through_body_enabled =
             parsedSettings.pass_through_body_enabled || false;
+          data.responses_websocket_enabled =
+            parsedSettings.responses_websocket_enabled || false;
           data.system_prompt = parsedSettings.system_prompt || '';
           data.system_prompt_override =
             parsedSettings.system_prompt_override || false;
@@ -1398,6 +1405,7 @@ const EditChannelModal = (props) => {
           data.thinking_to_content = false;
           data.proxy = '';
           data.pass_through_body_enabled = false;
+          data.responses_websocket_enabled = false;
           data.system_prompt = '';
           data.system_prompt_override = false;
         }
@@ -1406,6 +1414,7 @@ const EditChannelModal = (props) => {
         data.thinking_to_content = false;
         data.proxy = '';
         data.pass_through_body_enabled = false;
+        data.responses_websocket_enabled = false;
         data.system_prompt = '';
         data.system_prompt_override = false;
       }
@@ -1571,6 +1580,8 @@ const EditChannelModal = (props) => {
         thinking_to_content: data.thinking_to_content,
         proxy: data.proxy,
         pass_through_body_enabled: data.pass_through_body_enabled,
+        responses_websocket_enabled:
+          data.responses_websocket_enabled || false,
         system_prompt: data.system_prompt,
         system_prompt_override: data.system_prompt_override || false,
       });
@@ -2064,6 +2075,7 @@ const EditChannelModal = (props) => {
       thinking_to_content: false,
       proxy: '',
       pass_through_body_enabled: false,
+      responses_websocket_enabled: false,
       system_prompt: '',
       system_prompt_override: false,
     });
@@ -2591,6 +2603,9 @@ const EditChannelModal = (props) => {
       thinking_to_content: localInputs.thinking_to_content || false,
       proxy: localInputs.proxy || '',
       pass_through_body_enabled: localInputs.pass_through_body_enabled || false,
+      responses_websocket_enabled:
+        RESPONSES_WEBSOCKET_CHANNEL_TYPES.includes(localInputs.type) &&
+        localInputs.responses_websocket_enabled === true,
       system_prompt: localInputs.system_prompt || '',
       system_prompt_override: localInputs.system_prompt_override || false,
     };
@@ -3743,6 +3758,32 @@ const EditChannelModal = (props) => {
                     }
                     extraText={t('启用请求体透传功能')}
                   />
+
+                  {RESPONSES_WEBSOCKET_CHANNEL_TYPES.includes(
+                    inputs.type,
+                  ) && (
+                    <Form.Switch
+                      field='responses_websocket_enabled'
+                      label={t('启用 Responses WebSocket')}
+                      checkedText={t('开')}
+                      uncheckedText={t('关')}
+                      onChange={(value) =>
+                        handleChannelSettingsChange(
+                          'responses_websocket_enabled',
+                          value,
+                        )
+                      }
+                      extraText={
+                        inputs.type === 58
+                          ? t(
+                              '仅在上游支持 Responses WebSocket 时开启；高级自定义渠道仅对不做协议转换的 /v1/responses 路由生效。关闭后仍可使用普通 HTTP 请求。',
+                            )
+                          : t(
+                              '仅在上游支持 Responses WebSocket 时开启。关闭后仍可使用普通 HTTP 请求。',
+                            )
+                      }
+                    />
+                  )}
 
                   <Form.Input
                     field='proxy'

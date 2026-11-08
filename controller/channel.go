@@ -1649,6 +1649,29 @@ type KeyStatus struct {
 	KeyPreview   string `json:"key_preview"` // first 10 chars of key for identification
 }
 
+// Restore only request-driven key exhaustion. Manual channel/tag disables
+// remain authoritative even if they retain an old exhaustion reason.
+func restoreMultiKeyChannelIfAvailable(channel *model.Channel) {
+	if channel.Status != common.ChannelStatusAutoDisabled {
+		return
+	}
+	info := channel.GetOtherInfo()
+	if info["status_reason"] != "All keys are disabled" {
+		return
+	}
+	for index := range channel.GetKeys() {
+		status, exists := channel.ChannelInfo.MultiKeyStatusList[index]
+		if exists && status != common.ChannelStatusEnabled {
+			continue
+		}
+		channel.Status = common.ChannelStatusEnabled
+		info["status_reason"] = ""
+		info["status_time"] = common.GetTimestamp()
+		channel.SetOtherInfo(info)
+		return
+	}
+}
+
 // ManageMultiKeys handles multi-key management operations
 func ManageMultiKeys(c *gin.Context) {
 	request := MultiKeyManageRequest{}
@@ -1884,6 +1907,7 @@ func ManageMultiKeys(c *gin.Context) {
 			delete(channel.ChannelInfo.MultiKeyDisabledReason, keyIndex)
 		}
 
+		restoreMultiKeyChannelIfAvailable(channel)
 		err = channel.Update()
 		if err != nil {
 			common.ApiError(c, err)
@@ -1908,6 +1932,7 @@ func ManageMultiKeys(c *gin.Context) {
 		channel.ChannelInfo.MultiKeyDisabledTime = make(map[int]int64)
 		channel.ChannelInfo.MultiKeyDisabledReason = make(map[int]string)
 
+		restoreMultiKeyChannelIfAvailable(channel)
 		err = channel.Update()
 		if err != nil {
 			common.ApiError(c, err)

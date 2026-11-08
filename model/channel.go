@@ -1136,9 +1136,25 @@ func updateChannelStatus(channelId int, usingKey string, keyIndex *int, status i
 	if common.MemoryCacheEnabled {
 		channelStatusLock.Lock()
 		defer channelStatusLock.Unlock()
+	}
 
+	channel, err := GetChannelById(channelId, true)
+	if err != nil {
+		return false, common.ChannelStatusUnknown
+	}
+	// A request started before a manual disable must not make the channel
+	// eligible for automatic recovery, even if this node's cache is stale.
+	if status == common.ChannelStatusAutoDisabled && channel.Status == common.ChannelStatusManuallyDisabled {
+		CacheUpdateChannelStatus(channelId, channel.Status)
+		return false, common.ChannelStatusUnknown
+	}
+
+	if common.MemoryCacheEnabled {
 		channelCache, _ := CacheGetChannel(channelId)
 		if channelCache == nil {
+			return false, common.ChannelStatusUnknown
+		}
+		if status == common.ChannelStatusAutoDisabled && channelCache.Status == common.ChannelStatusManuallyDisabled {
 			return false, common.ChannelStatusUnknown
 		}
 		if channelCache.ChannelInfo.IsMultiKey {
@@ -1178,56 +1194,55 @@ func updateChannelStatus(channelId int, usingKey string, keyIndex *int, status i
 			}
 		}
 	}()
-	channel, err := GetChannelById(channelId, true)
-	if err != nil {
+	if !channel.ChannelInfo.IsMultiKey && channel.Status == status {
 		return false, common.ChannelStatusUnknown
-	} else {
-		if !channel.ChannelInfo.IsMultiKey && channel.Status == status {
+	}
+
+	if channel.ChannelInfo.IsMultiKey {
+		// Without the memory cache the channel row itself is the shared state,
+		// and SaveWithoutKey below rewrites the whole row. Hold the per-channel
+		// lock across the entire read-modify-write so a concurrent key-status
+		// update (or GetNextEnabledKey persisting the polling cursor) cannot
+		// last-write-wins a stale snapshot over this change.
+		pollingLock := GetChannelPollingLock(channelId)
+		pollingLock.Lock()
+		defer pollingLock.Unlock()
+		freshChannel, err := GetChannelById(channelId, true)
+		if err != nil {
 			return false, common.ChannelStatusUnknown
 		}
-
-		if channel.ChannelInfo.IsMultiKey {
-			// Without the memory cache the channel row itself is the shared state,
-			// and SaveWithoutKey below rewrites the whole row. Hold the per-channel
-			// lock across the entire read-modify-write so a concurrent key-status
-			// update (or GetNextEnabledKey persisting the polling cursor) cannot
-			// last-write-wins a stale snapshot over this change.
-			pollingLock := GetChannelPollingLock(channelId)
-			pollingLock.Lock()
-			defer pollingLock.Unlock()
-			freshChannel, err := GetChannelById(channelId, true)
-			if err != nil {
-				return false, common.ChannelStatusUnknown
-			}
-			channel = freshChannel
-			beforeStatus := channel.Status
-			updated := false
-			if keyIndex != nil {
-				updated = handlerMultiKeyUpdateByIndex(channel, *keyIndex, status, reason)
-			} else {
-				updated = handlerMultiKeyUpdate(channel, usingKey, status, reason)
-			}
-			if !updated {
-				return false, common.ChannelStatusUnknown
-			}
-			if beforeStatus != channel.Status {
-				shouldUpdateAbilities = true
-			}
+		channel = freshChannel
+		if status == common.ChannelStatusAutoDisabled && channel.Status == common.ChannelStatusManuallyDisabled {
+			CacheUpdateChannelStatus(channelId, channel.Status)
+			return false, common.ChannelStatusUnknown
+		}
+		beforeStatus := channel.Status
+		updated := false
+		if keyIndex != nil {
+			updated = handlerMultiKeyUpdateByIndex(channel, *keyIndex, status, reason)
 		} else {
-			info := channel.GetOtherInfo()
-			info["status_reason"] = reason
-			info["status_time"] = common.GetTimestamp()
-			channel.SetOtherInfo(info)
-			channel.Status = status
+			updated = handlerMultiKeyUpdate(channel, usingKey, status, reason)
+		}
+		if !updated {
+			return false, common.ChannelStatusUnknown
+		}
+		if beforeStatus != channel.Status {
 			shouldUpdateAbilities = true
 		}
-		err = channel.SaveWithoutKey()
-		if err != nil {
-			common.SysLog(fmt.Sprintf("failed to update channel status: channel_id=%d, status=%d, error=%v", channel.Id, status, err))
-			return false, common.ChannelStatusUnknown
-		}
-		return true, channel.Status
+	} else {
+		info := channel.GetOtherInfo()
+		info["status_reason"] = reason
+		info["status_time"] = common.GetTimestamp()
+		channel.SetOtherInfo(info)
+		channel.Status = status
+		shouldUpdateAbilities = true
 	}
+	err = channel.SaveWithoutKey()
+	if err != nil {
+		common.SysLog(fmt.Sprintf("failed to update channel status: channel_id=%d, status=%d, error=%v", channel.Id, status, err))
+		return false, common.ChannelStatusUnknown
+	}
+	return true, channel.Status
 }
 
 func EnableChannelByTag(tag string) error {

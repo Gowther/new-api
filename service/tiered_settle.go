@@ -22,12 +22,12 @@ func BuildTieredTokenParams(usage *dto.Usage, isClaudeUsageSemantic bool, usedVa
 	p := float64(usage.PromptTokens)
 	c := float64(usage.CompletionTokens)
 	cr := float64(usage.PromptTokensDetails.CachedTokens)
-	cc5m := float64(usage.PromptTokensDetails.CachedCreationTokens)
+	cc5m := float64(usage.PromptTokensDetails.CacheCreationTokensTotal())
 	cc1h := float64(0)
 
 	if isClaudeUsageSemantic {
 		// Unlabelled cache writes belong to the default five-minute tier.
-		split5m, split1h := NormalizeCacheCreationSplit(usage.PromptTokensDetails.CachedCreationTokens,
+		split5m, split1h := NormalizeCacheCreationSplit(usage.PromptTokensDetails.CacheCreationTokensTotal(),
 			usage.ClaudeCacheCreation5mTokens, usage.ClaudeCacheCreation1hTokens)
 		cc5m, cc1h = float64(split5m), float64(split1h)
 	}

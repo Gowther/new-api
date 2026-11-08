@@ -108,7 +108,7 @@ func applyResponsesUsage(dst *dto.Usage, src *dto.Usage) {
 		dst.TotalTokens = src.TotalTokens
 	}
 	if src.InputTokensDetails != nil {
-		dst.PromptTokensDetails.CachedTokens = src.InputTokensDetails.CachedTokens
+		dst.PromptTokensDetails = *src.InputTokensDetails
 	}
 }
 

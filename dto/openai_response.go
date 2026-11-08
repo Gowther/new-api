@@ -253,11 +253,19 @@ type OpenAIVideoResponse struct {
 }
 
 type InputTokenDetails struct {
-	CachedTokens         int `json:"cached_tokens"`
-	CachedCreationTokens int `json:"cached_creation_tokens,omitempty"`
-	TextTokens           int `json:"text_tokens"`
-	AudioTokens          int `json:"audio_tokens"`
-	ImageTokens          int `json:"image_tokens"`
+	CacheWriteTokens         int `json:"cache_write_tokens,omitempty"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
+	CachedTokens             int `json:"cached_tokens"`
+	CachedCreationTokens     int `json:"cached_creation_tokens,omitempty"`
+	TextTokens               int `json:"text_tokens"`
+	AudioTokens              int `json:"audio_tokens"`
+	ImageTokens              int `json:"image_tokens"`
+}
+
+// CacheCreationTokensTotal normalizes equivalent upstream cache-write fields.
+// They describe the same tokens; adding them would double-charge the request.
+func (d InputTokenDetails) CacheCreationTokensTotal() int {
+	return max(0, d.CachedCreationTokens, d.CacheWriteTokens, d.CacheCreationInputTokens)
 }
 
 type OutputTokenDetails struct {

@@ -18,9 +18,11 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { Code2, Eye, RotateCcw, Save } from 'lucide-react'
 import { memo, useCallback, useRef, useState } from 'react'
-import { type UseFormReturn } from 'react-hook-form'
+import type { UseFormReturn } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { JsonCodeEditor } from '@/components/json-code-editor'
 import { Button } from '@/components/ui/button'
 import {
@@ -35,6 +37,10 @@ import {
 import { Switch } from '@/components/ui/switch'
 
 import {
+  buildPriceChanges,
+  type PriceChange,
+} from '../../../../../shared/price-changes'
+import {
   SettingsForm,
   SettingsSwitchContent,
   SettingsSwitchItem,
@@ -43,6 +49,7 @@ import {
   ModelRatioVisualEditor,
   type ModelRatioVisualEditorHandle,
 } from './model-ratio-visual-editor'
+import { PriceChangeReview } from './price-change-review'
 
 type ModelFormValues = {
   ModelPrice: string
@@ -167,6 +174,12 @@ export const ModelRatioForm = memo(function ModelRatioForm({
 }: ModelRatioFormProps) {
   const { t } = useTranslation()
   const [editMode, setEditMode] = useState<'visual' | 'json'>('visual')
+  const [review, setReview] = useState<{
+    values: ModelFormValues
+    changes: PriceChange[]
+  } | null>(null)
+  const [confirming, setConfirming] = useState(false)
+  const savingRef = useRef(false)
   const visualEditorRef = useRef<ModelRatioVisualEditorHandle>(null)
 
   const handleFieldChange = useCallback(
@@ -183,14 +196,41 @@ export const ModelRatioForm = memo(function ModelRatioForm({
     setEditMode((prev) => (prev === 'visual' ? 'json' : 'visual'))
   }, [])
 
+  const prepareSave = useCallback(
+    (values: ModelFormValues) => {
+      const changes = buildPriceChanges(savedValues, values)
+      if (changes.length === 0) {
+        toast.info(t('No model price changes to save'))
+        return
+      }
+      setReview({ values: structuredClone(values), changes })
+    },
+    [savedValues, t]
+  )
+
+  const confirmSave = async () => {
+    if (!review || savingRef.current) return
+    savingRef.current = true
+    setConfirming(true)
+    try {
+      await onSave(review.values)
+      setReview(null)
+    } catch {
+      // The mutation reports the error; keep the reviewed snapshot for retry.
+    } finally {
+      savingRef.current = false
+      setConfirming(false)
+    }
+  }
+
   const handleSave = useCallback(async () => {
     if (editMode === 'visual') {
       const committed = await visualEditorRef.current?.commitOpenEditor()
       if (committed === false) return
     }
 
-    await form.handleSubmit(onSave)()
-  }, [editMode, form, onSave])
+    await form.handleSubmit(prepareSave)()
+  }, [editMode, form, prepareSave])
 
   return (
     <div className='space-y-6'>
@@ -293,7 +333,7 @@ export const ModelRatioForm = memo(function ModelRatioForm({
             />
           </div>
         ) : (
-          <SettingsForm onSubmit={form.handleSubmit(onSave)}>
+          <SettingsForm onSubmit={form.handleSubmit(prepareSave)}>
             <div className='grid min-w-0 gap-x-5 gap-y-8 lg:grid-cols-2 2xl:grid-cols-3'>
               {modelJsonFields.map((config) => (
                 <ModelJsonTextareaField
@@ -331,6 +371,20 @@ export const ModelRatioForm = memo(function ModelRatioForm({
           </SettingsForm>
         )}
       </Form>
+      <ConfirmDialog
+        open={review !== null}
+        onOpenChange={(open) => {
+          if (!open && !savingRef.current) setReview(null)
+        }}
+        title={t('Review price changes')}
+        desc={t('Review the values below before saving.')}
+        confirmText={t('Confirm and save')}
+        handleConfirm={confirmSave}
+        isLoading={confirming}
+        className='sm:max-w-4xl'
+      >
+        {review && <PriceChangeReview changes={review.changes} />}
+      </ConfirmDialog>
     </div>
   )
 })

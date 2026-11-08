@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect, useMemo, useState } from 'react';
 import { API, showError, showSuccess } from '../../../../helpers';
+import { confirmPriceChanges } from '../../../../components/price-change-review';
 import {
   combineBillingExpr,
   splitBillingExprAndRequestRules,
@@ -1084,7 +1085,6 @@ export function useModelPricingEditorState({
   };
 
   const handleSubmit = async () => {
-    setLoading(true);
     try {
       const output = {
         ModelPrice: {},
@@ -1134,35 +1134,29 @@ export function useModelPricingEditorState({
         }
       }
 
-      const requestQueue = [
-        ...Object.entries(output).map(([key, value]) =>
-          API.put('/api/option/', {
-            key,
-            value: JSON.stringify(value, null, 2),
-          }),
-        ),
-        ...Object.entries(tieredOutput).map(([key, value]) =>
-          API.put('/api/option/', {
-            key,
-            value: JSON.stringify(value, null, 2),
-          }),
-        ),
-      ];
-
-      const results = await Promise.all(requestQueue);
-      for (const res of results) {
-        if (!res?.data?.success) {
-          throw new Error(res?.data?.message || t('保存失败，请重试'));
+      const values = Object.fromEntries(Object.entries({ ...output, ...tieredOutput }).map(
+        ([key, value]) => [key, JSON.stringify(value, null, 2)],
+      ));
+      confirmPriceChanges(options, values, async () => {
+        setLoading(true);
+        try {
+          const results = await Promise.all(Object.entries(values).map(
+            ([key, value]) => API.put('/api/option/', { key, value }),
+          ));
+          for (const result of results) {
+            if (!result?.data?.success) throw new Error(result?.data?.message || t('保存失败，请重试'));
+          }
+          showSuccess(t('保存成功'));
+          await refresh();
+        } catch (error) {
+          showError(error.message || t('保存失败，请重试'));
+          throw error;
+        } finally {
+          setLoading(false);
         }
-      }
-
-      showSuccess(t('保存成功'));
-      await refresh();
+      }, t);
     } catch (error) {
-      console.error('保存失败:', error);
       showError(error.message || t('保存失败，请重试'));
-    } finally {
-      setLoading(false);
     }
   };
 

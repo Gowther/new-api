@@ -32,10 +32,10 @@ import {
   API,
   showError,
   showSuccess,
-  showWarning,
   verifyJSON,
 } from '../../../helpers';
 import { useTranslation } from 'react-i18next';
+import { confirmPriceChanges } from '../../../components/price-change-review';
 
 export default function ModelRatioSettings(props) {
   const [loading, setLoading] = useState(false);
@@ -57,55 +57,29 @@ export default function ModelRatioSettings(props) {
 
   async function onSubmit() {
     try {
-      await refForm.current
-        .validate()
-        .then(() => {
-          const updateArray = compareObjects(inputs, inputsRow);
-          if (!updateArray.length)
-            return showWarning(t('你似乎并没有修改什么'));
-
-          const requestQueue = updateArray.map((item) => {
-            const value =
-              typeof inputs[item.key] === 'boolean'
-                ? String(inputs[item.key])
-                : inputs[item.key];
-            return API.put('/api/option/', { key: item.key, value });
-          });
-
-          setLoading(true);
-          Promise.all(requestQueue)
-            .then((res) => {
-              if (res.includes(undefined)) {
-                return showError(
-                  requestQueue.length > 1
-                    ? t('部分保存失败，请重试')
-                    : t('保存失败'),
-                );
-              }
-
-              for (let i = 0; i < res.length; i++) {
-                if (!res[i].data.success) {
-                  return showError(res[i].data.message);
-                }
-              }
-
-              showSuccess(t('保存成功'));
-              props.refresh();
-            })
-            .catch((error) => {
-              console.error('Unexpected error:', error);
-              showError(t('保存失败，请重试'));
-            })
-            .finally(() => {
-              setLoading(false);
-            });
-        })
-        .catch(() => {
-          showError(t('请检查输入'));
-        });
-    } catch (error) {
+      await refForm.current.validate();
+      const values = structuredClone(inputs);
+      const updates = compareObjects(values, inputsRow);
+      confirmPriceChanges(inputsRow, values, async () => {
+        setLoading(true);
+        try {
+          const results = await Promise.all(updates.map(({ key }) =>
+            API.put('/api/option/', { key, value: typeof values[key] === 'boolean' ? String(values[key]) : values[key] }),
+          ));
+          for (const result of results) {
+            if (!result?.data?.success) throw new Error(result?.data?.message || t('保存失败，请重试'));
+          }
+          showSuccess(t('保存成功'));
+          await props.refresh();
+        } catch (error) {
+          showError(error.message || t('保存失败，请重试'));
+          throw error;
+        } finally {
+          setLoading(false);
+        }
+      }, t);
+    } catch {
       showError(t('请检查输入'));
-      console.error(error);
     }
   }
 

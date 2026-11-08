@@ -3885,6 +3885,7 @@
     "Regenerate": "重新生成",
     "Regenerate Backup Codes": "重新生成備用代碼",
     "Regex": "正則",
+    "Regex Match": "Regex Match",
     "Regex Pattern": "正則表達式",
     "Regex Replace": "正則替換",
     "Register each URL into the matching Test Mode / Production Mode webhook slot in the Pancake dashboard. Separate endpoints prevent test traffic from accidentally crediting production accounts.": "請在 Pancake 控制台中將每個 URL 註冊到對應的測試模式/生產模式 webhook 槽位。分離端點可以避免測試流量誤入生產用戶。",

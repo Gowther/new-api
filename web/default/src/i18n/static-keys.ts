@@ -332,6 +332,7 @@ export const STATIC_I18N_KEYS = [
   'Trim Space',
   'To Upper',
   'To Lower',
+  'Regex Match',
   'Regex Replace',
   'Return Error',
   'Param Override',

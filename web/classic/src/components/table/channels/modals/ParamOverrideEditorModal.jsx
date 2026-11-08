@@ -78,6 +78,7 @@ const CONDITION_MODE_OPTIONS = [
   { label: '前缀匹配', value: 'prefix' },
   { label: '后缀匹配', value: 'suffix' },
   { label: '包含', value: 'contains' },
+  { label: '正则匹配', value: 'regex' },
   { label: '大于', value: 'gt' },
   { label: '大于等于', value: 'gte' },
   { label: '小于', value: 'lt' },
@@ -738,7 +739,9 @@ const buildPruneObjectsValueText = (draft = {}) => {
         mode: CONDITION_MODE_VALUES.has(rule.mode) ? rule.mode : 'full',
       };
       const valueRaw = String(rule.value_text || '').trim();
-      if (valueRaw !== '') {
+      if (rule.mode === 'regex') {
+        conditionPayload.value = rule.value_text;
+      } else if (valueRaw !== '') {
         conditionPayload.value = parseLooseValue(valueRaw);
       }
       if (rule.invert) {
@@ -957,7 +960,10 @@ const buildConditionPayload = (condition) => {
   const payload = {
     path,
     mode: condition.mode || 'full',
-    value: parseLooseValue(condition.value_text),
+    value:
+      condition.mode === 'regex'
+        ? condition.value_text
+        : parseLooseValue(condition.value_text),
   };
   if (condition.invert) payload.invert = true;
   if (condition.pass_missing_key) payload.pass_missing_key = true;
@@ -1710,7 +1716,10 @@ const ParamOverrideEditorModal = ({ visible, value, onSave, onCancel }) => {
         conditions: (source.conditions || []).map((condition) => ({
           path: condition.path,
           mode: condition.mode,
-          value: parseLooseValue(condition.value_text),
+          value:
+      condition.mode === 'regex'
+        ? condition.value_text
+        : parseLooseValue(condition.value_text),
           invert: condition.invert,
           pass_missing_key: condition.pass_missing_key,
         })),

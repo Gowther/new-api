@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/types"
@@ -17,6 +18,21 @@ import (
 )
 
 var negativeIndexRegexp = regexp.MustCompile(`\.(-\d+)`)
+
+// Rules are parsed per request; share compiled expressions by pattern text.
+var paramOverrideRegexCache sync.Map
+
+func getParamOverrideRegex(pattern string) (*regexp.Regexp, error) {
+	if cached, ok := paramOverrideRegexCache.Load(pattern); ok {
+		return cached.(*regexp.Regexp), nil
+	}
+	compiled, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, err
+	}
+	actual, _ := paramOverrideRegexCache.LoadOrStore(pattern, compiled)
+	return actual.(*regexp.Regexp), nil
+}
 
 const (
 	paramOverrideContextRequestHeaders = "request_headers"
@@ -49,7 +65,7 @@ type paramOverrideAuditRecorder struct {
 
 type ConditionOperation struct {
 	Path           string      `json:"path"`             // JSON路径
-	Mode           string      `json:"mode"`             // full, prefix, suffix, contains, gt, gte, lt, lte
+	Mode           string      `json:"mode"`             // full, prefix, suffix, contains, regex, gt, gte, lt, lte
 	Value          interface{} `json:"value"`            // 匹配的值
 	Invert         bool        `json:"invert"`           // 反选功能，true表示取反结果
 	PassMissingKey bool        `json:"pass_missing_key"` // 未获取到json key时的行为
@@ -627,6 +643,15 @@ func compareGjsonValues(jsonValue, targetValue gjson.Result, mode string) (bool,
 		return strings.HasSuffix(jsonValue.String(), targetValue.String()), nil
 	case "contains":
 		return strings.Contains(jsonValue.String(), targetValue.String()), nil
+	case "regex":
+		if targetValue.Type != gjson.String {
+			return false, fmt.Errorf("regex pattern must be a string")
+		}
+		re, err := getParamOverrideRegex(targetValue.String())
+		if err != nil {
+			return false, fmt.Errorf("invalid regex pattern: %w", err)
+		}
+		return re.MatchString(jsonValue.String()), nil
 	case "gt":
 		return compareNumeric(jsonValue, targetValue, "gt")
 	case "gte":
@@ -1802,7 +1827,7 @@ func regexReplaceStringValue(data []byte, path, pattern, replacement string) ([]
 	if pattern == "" {
 		return data, fmt.Errorf("regex pattern is required")
 	}
-	re, err := regexp.Compile(pattern)
+	re, err := getParamOverrideRegex(pattern)
 	if err != nil {
 		return data, err
 	}

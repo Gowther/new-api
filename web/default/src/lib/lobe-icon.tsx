@@ -32,7 +32,10 @@ import { IconDots } from '@/assets/custom/icon-dots'
 import { IconSub2api } from '@/assets/custom/icon-sub2api'
 import { Logo } from '@/assets/logo'
 
-const CUSTOM_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
+const CUSTOM_ICONS: Record<
+  string,
+  React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number }>
+> = {
   Dots: IconDots,
   Sub2API: IconSub2api,
   NewAPI: Logo,
@@ -115,7 +118,7 @@ export function getLobeIcon(
   const baseKey = segments[0]
   const CustomIcon = CUSTOM_ICONS[baseKey]
   if (CustomIcon) {
-    return <CustomIcon size={size} />
+    return <CustomIcon size={size} width={size} height={size} />
   }
   const BaseIcon = (LobeIcons as Record<string, unknown>)[baseKey] as
     | Record<string, unknown>

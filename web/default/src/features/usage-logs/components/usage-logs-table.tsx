@@ -207,7 +207,6 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
         { cancelRefetch: false }
       ),
     ])
-    dbg('invalidated')
   }, [logCategory, navigate, queryClient, searchParams])
 
   useUsageLogsAutoRefresh(autoRefreshSeconds, refreshLogs, autoRefreshingRef)

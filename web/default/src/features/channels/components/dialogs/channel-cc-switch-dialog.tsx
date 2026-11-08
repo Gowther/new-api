@@ -241,7 +241,7 @@ export function ChannelCCSwitchDialog({ open, onOpenChange, channel }: Props) {
               <Label>
                 {t(field.labelKey)}
                 {field.required && (
-                  <span className='ml-0.5 text-destructive'>*</span>
+                  <span className='text-destructive ml-0.5'>*</span>
                 )}
               </Label>
               <ComboboxInput
@@ -266,7 +266,9 @@ export function ChannelCCSwitchDialog({ open, onOpenChange, channel }: Props) {
         }}
         methods={verification.methods}
         state={verification.state}
-        onVerify={verification.executeVerification}
+        onVerify={async (method, code) => {
+          await verification.executeVerification(method, code)
+        }}
         onCancel={verification.cancel}
         onCodeChange={verification.setCode}
         onMethodChange={verification.switchMethod}

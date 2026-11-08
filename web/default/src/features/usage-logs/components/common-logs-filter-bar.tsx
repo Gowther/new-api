@@ -47,9 +47,11 @@ import {
 } from '../constants'
 import { buildSearchParams } from '../lib/filter'
 import { resolveLogTimeRange, type LogTimeRange } from '../lib/time-range'
+import { buildApiParams } from '../lib/utils'
 import type { CommonLogFilters } from '../types'
 import { CommonLogsStats } from './common-logs-stats'
 import { CompactDateTimeRangePicker } from './compact-date-time-range-picker'
+import { ExportLogsDialog } from './dialogs/export-logs-dialog'
 import {
   LogsFilterField,
   LogsFilterInput,
@@ -367,6 +369,18 @@ export function CommonLogsFilterBar<TData>(
   )
   const actionControls = (
     <div className='flex items-center gap-1'>
+      <ExportLogsDialog
+        isAdmin={isAdmin}
+        getParams={() =>
+          buildApiParams({
+            page: 1,
+            pageSize: 20,
+            searchParams,
+            columnFilters: props.table.getState().columnFilters,
+            isAdmin,
+          })
+        }
+      />
       <UsageLogsAutoRefreshControl />
       <Tooltip>
         <TooltipTrigger

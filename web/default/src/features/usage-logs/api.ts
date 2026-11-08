@@ -171,3 +171,28 @@ export const getUserTaskLogs = (
   suppressErrorToast = false,
   signal?: AbortSignal
 ) => fetchLogs('/api/task', params, false, suppressErrorToast, signal)
+
+// Keep the authenticated API client and cancellation handling used by the list.
+export async function exportLogs(
+  params: GetLogsParams,
+  isAdmin: boolean,
+  signal: AbortSignal
+): Promise<string> {
+  const filters = { ...params }
+  delete filters.p
+  delete filters.page_size
+  const path = isAdmin ? '/api/log/export' : '/api/log/self/export'
+  const response = await api.get<string>(
+    `${path}?${buildQueryParams(filters)}`,
+    {
+      responseType: 'text',
+      timeout: 0,
+      signal,
+      disableDuplicate: true,
+      skipErrorHandler: true,
+      skipBusinessError: true,
+      headers: { Accept: 'application/x-ndjson' },
+    }
+  )
+  return response.data
+}

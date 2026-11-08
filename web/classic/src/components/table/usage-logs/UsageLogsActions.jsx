@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
+import ExportLogsModal from './modals/ExportLogsModal';
 import { Tag, Space, Skeleton, Select, Typography } from '@douyinfe/semi-ui';
 import { IconRefresh } from '@douyinfe/semi-icons';
 import { renderQuota } from '../../../helpers';
@@ -32,6 +33,8 @@ const compactNumberFormatter = new Intl.NumberFormat('en', {
 const LogsActions = ({
   stat,
   loadingStat,
+  getExportParams,
+  isAdminUser,
   showStat,
   compactMode,
   setCompactMode,
@@ -125,7 +128,8 @@ const LogsActions = ({
         </Space>
       </Skeleton>
 
-      <Space>
+      <Space wrap>
+        <ExportLogsModal getExportParams={getExportParams} isAdminUser={isAdminUser} />
         <Space spacing={4}>
           <IconRefresh
             aria-label={t('刷新中')}

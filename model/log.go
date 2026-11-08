@@ -560,41 +560,14 @@ func recordTokenUsageDataAsync(userId int, username string, params RecordConsume
 }
 
 func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string, upstreamRequestId string, result string) (logs []*Log, total int64, err error) {
-	var tx *gorm.DB
-	if logType == LogTypeUnknown {
-		tx = LOG_DB
-	} else {
-		tx = LOG_DB.Where("logs.type = ?", logType)
-	}
-
-	if tx, err = applyLogModelNameFilter(tx, "logs.model_name", modelName); err != nil {
+	tx, err := buildLogSearchQuery(LOG_DB, LogStatQuery{
+		LogType: logType, StartTimestamp: startTimestamp, EndTimestamp: endTimestamp,
+		ModelName: modelName, Username: username, TokenName: tokenName, Channel: channel,
+		Group: group, RequestId: requestId, UpstreamRequestId: upstreamRequestId, Result: result,
+	})
+	if err != nil {
 		return nil, 0, err
 	}
-	if tx, err = applyExplicitLogTextFilter(tx, "logs.username", username); err != nil {
-		return nil, 0, err
-	}
-	if tokenName != "" {
-		tx = tx.Where("logs.token_name = ?", tokenName)
-	}
-	if requestId != "" {
-		tx = tx.Where("logs.request_id = ?", requestId)
-	}
-	if upstreamRequestId != "" {
-		tx = tx.Where("logs.upstream_request_id = ?", upstreamRequestId)
-	}
-	if startTimestamp != 0 {
-		tx = tx.Where("logs.created_at >= ?", startTimestamp)
-	}
-	if endTimestamp != 0 {
-		tx = tx.Where("logs.created_at <= ?", endTimestamp)
-	}
-	if channel != 0 {
-		tx = tx.Where("logs.channel_id = ?", channel)
-	}
-	if group != "" {
-		tx = tx.Where("logs."+logGroupCol+" = ?", group)
-	}
-	tx = applyLogResultFilter(tx, "logs.", result)
 	err = tx.Model(&Log{}).Count(&total).Error
 	if err != nil {
 		return nil, 0, err
@@ -1429,35 +1402,14 @@ func buildErrorFingerprint(errorType, errorCode string, statusCode int, content 
 const logSearchCountLimit = 10000
 
 func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, upstreamRequestId string, result string) (logs []*Log, total int64, err error) {
-	var tx *gorm.DB
-	if logType == LogTypeUnknown {
-		tx = LOG_DB.Where("logs.user_id = ?", userId)
-	} else {
-		tx = LOG_DB.Where("logs.user_id = ? and logs.type = ?", userId, logType)
-	}
-
-	if tx, err = applyLogModelNameFilter(tx, "logs.model_name", modelName); err != nil {
+	tx, err := buildLogSearchQuery(LOG_DB.Where("logs.user_id = ?", userId), LogStatQuery{
+		LogType: logType, StartTimestamp: startTimestamp, EndTimestamp: endTimestamp,
+		ModelName: modelName, TokenName: tokenName, Group: group, RequestId: requestId,
+		UpstreamRequestId: upstreamRequestId, Result: result,
+	})
+	if err != nil {
 		return nil, 0, err
 	}
-	if tokenName != "" {
-		tx = tx.Where("logs.token_name = ?", tokenName)
-	}
-	if requestId != "" {
-		tx = tx.Where("logs.request_id = ?", requestId)
-	}
-	if upstreamRequestId != "" {
-		tx = tx.Where("logs.upstream_request_id = ?", upstreamRequestId)
-	}
-	if startTimestamp != 0 {
-		tx = tx.Where("logs.created_at >= ?", startTimestamp)
-	}
-	if endTimestamp != 0 {
-		tx = tx.Where("logs.created_at <= ?", endTimestamp)
-	}
-	if group != "" {
-		tx = tx.Where("logs."+logGroupCol+" = ?", group)
-	}
-	tx = applyLogResultFilter(tx, "logs.", result)
 	// COUNT 走 LIMIT 子查询：LIMIT 直接挂在 COUNT 上对聚合行无效（各方言一致），
 	// 这里的 logSearchCountLimit 上限需要真实生效。
 	countSub := tx.Session(&gorm.Session{}).Model(&Log{}).Select("logs.id").Limit(logSearchCountLimit)

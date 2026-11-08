@@ -1082,6 +1082,20 @@ export const useLogsData = () => {
     }
   };
 
+  const getExportParams = () => {
+    const filters = getFormValues(appliedFiltersRef.current);
+    const {
+      logType: type,
+      timeMode: _timeMode,
+      recentMinutes: _recentMinutes,
+      dateRange: _dateRange,
+      username,
+      channel,
+      ...params
+    } = filters;
+    return { ...params, type, ...(isAdminUser ? { username, channel } : {}) };
+  };
+
   // Page handlers
   const handlePageChange = (page) => {
     setActivePage(page);
@@ -1358,6 +1372,7 @@ export const useLogsData = () => {
     paramOverrideTarget,
 
     // Functions
+    getExportParams,
     loadLogs,
     handlePageChange,
     handlePageSizeChange,

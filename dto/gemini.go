@@ -44,9 +44,9 @@ func (r *GeminiChatRequest) UnmarshalJSON(data []byte) error {
 }
 
 type ToolConfig struct {
-	FunctionCallingConfig *FunctionCallingConfig `json:"functionCallingConfig,omitempty"`
-	RetrievalConfig       *RetrievalConfig       `json:"retrievalConfig,omitempty"`
-	IncludeServerSideToolInvocations *bool       `json:"includeServerSideToolInvocations,omitempty"`
+	FunctionCallingConfig            *FunctionCallingConfig `json:"functionCallingConfig,omitempty"`
+	RetrievalConfig                  *RetrievalConfig       `json:"retrievalConfig,omitempty"`
+	IncludeServerSideToolInvocations *bool                  `json:"includeServerSideToolInvocations,omitempty"`
 }
 
 type FunctionCallingConfig struct {
@@ -570,11 +570,29 @@ func (r *GeminiBatchEmbeddingRequest) SetModelName(modelName string) {
 }
 
 type GeminiEmbeddingResponse struct {
-	Embedding ContentEmbedding `json:"embedding"`
+	Embedding     ContentEmbedding              `json:"embedding"`
+	UsageMetadata *GeminiEmbeddingUsageMetadata `json:"usageMetadata,omitempty"`
 }
 
 type GeminiBatchEmbeddingResponse struct {
-	Embeddings []*ContentEmbedding `json:"embeddings"`
+	Embeddings    []*ContentEmbedding           `json:"embeddings"`
+	UsageMetadata *GeminiEmbeddingUsageMetadata `json:"usageMetadata,omitempty"`
+}
+
+type GeminiEmbeddingUsageMetadata struct {
+	PromptTokenCount   int                         `json:"promptTokenCount"`
+	PromptTokenDetails []GeminiPromptTokensDetails `json:"promptTokenDetails,omitempty"`
+}
+
+func (m *GeminiEmbeddingUsageMetadata) GeminiUsageMetadata() *GeminiUsageMetadata {
+	if m == nil || m.PromptTokenCount <= 0 {
+		return nil
+	}
+	return &GeminiUsageMetadata{
+		PromptTokenCount:    m.PromptTokenCount,
+		TotalTokenCount:     m.PromptTokenCount,
+		PromptTokensDetails: m.PromptTokenDetails,
+	}
 }
 
 type ContentEmbedding struct {
